@@ -8,6 +8,59 @@ The goal of this log is not to explain every line of code. It records what chang
 
 ---
 
+## 2026-06-27 — Neon Database Connected and ComicIssue Model Created
+
+Connected Django to Neon PostgreSQL and created the first database-backed model.
+
+Files changed:
+
+```text
+comics/models.py
+comics/migrations/0001_initial.py
+config/settings.py
+requirements.txt
+.env.example
+docs/07-initial-data-shape.md
+docs/08-neon-database-and-comicissue-model.md
+```
+
+What was added:
+
+* `ComicIssue` model
+* initial migration file for the `comics` app
+* Neon database configuration through `DATABASE_URL`
+* `.env.example` file documenting required environment variables
+* PostgreSQL/environment packages in `requirements.txt`
+* documentation explaining models, migrations, database tables, and Neon setup
+
+Commands used:
+
+```bash
+python -m pip install psycopg2-binary python-dotenv dj-database-url
+python -m pip freeze > requirements.txt
+python manage.py makemigrations comics
+python manage.py migrate --plan
+python manage.py migrate
+python manage.py check
+```
+
+Purpose:
+
+* store the first simple comic issue structure in the database
+* use Neon PostgreSQL as the real development database
+* avoid silently falling back to SQLite
+* keep the data model intentionally simple
+
+Current state:
+
+* Django connects to Neon
+* Neon contains Django's built-in tables
+* Neon contains the initial `ComicIssue` table
+* no comic issue records have been added yet
+* no connection logic has been added
+
+---
+
 ## 2026-06-27 — Initial Data Shape Planned
 
 Planned the first simple data shape for the project.
@@ -49,7 +102,7 @@ Purpose:
 * avoid rebuilding the old project’s complexity too early
 * create a simple foundation that can evolve later
 
-Current state:
+Current state at this step:
 
 * simple comic issue shape is planned
 * no database code has been written yet

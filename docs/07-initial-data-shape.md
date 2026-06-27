@@ -8,7 +8,7 @@ The goal is to start with the smallest useful comic issue structure and only add
 
 ## Current Data Decision
 
-The first data structure should represent a single Marvel comic issue.
+The first data structure should represent a single comic issue.
 
 For now, the project will not model:
 
@@ -150,17 +150,38 @@ Purpose:
 The company that published the issue.
 ```
 
-For this project, the value will usually be:
+Examples:
 
 ```text
 Marvel
+DC
+Image
+Dark Horse
 ```
 
 Reason for including it:
 
-The current project focus is Marvel, but keeping publisher as a field makes the data clearer.
+The current early focus is Marvel, but the project should not assume every issue will always be Marvel.
 
-For now, this should stay simple and default to Marvel.
+The publisher field should be optional at first.
+
+A blank publisher means:
+
+```text
+The publisher is unknown or has not been stored yet.
+```
+
+The field should not default to `Marvel`.
+
+Reason:
+
+If the project later imports comics from a larger data source, it may include multiple publishers. In that case, Marvel-specific filtering can happen by selecting records where:
+
+```text
+publisher = "Marvel"
+```
+
+This keeps the data flexible without adding a more complex publisher structure too early.
 
 ---
 
@@ -261,6 +282,7 @@ This allows the project to first answer simple questions like:
 What issues are in the system?
 What series do they belong to?
 What issue number are they?
+Who published them?
 When were they released?
 ```
 
@@ -287,7 +309,8 @@ At this point:
 * the homepage exists
 * the project uses Bootstrap dark mode
 * the first simple data shape has been planned
-* no database code has been written yet
+* the publisher field is intentionally optional
+* no connection logic has been added
 * no comic issue data has been stored yet
 
 The next step will be turning this simple `ComicIssue` idea into Django code.
