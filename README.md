@@ -33,6 +33,10 @@ Current stage:
 * Neon PostgreSQL connected
 * initial `ComicIssue` model created
 * `ComicIssue` model revised to better match Comic Vine issue data
+* `ComicVolume` model added
+* `ComicIssue` now links to `ComicVolume`
+* Comic Vine API test commands created
+* Marvel issue test command created
 * Comic Vine API import not started yet
 * comic issue records not imported yet
 
@@ -55,14 +59,15 @@ Not part of the current stage:
 
 ## Core Data Idea
 
-The project currently stores comic issues.
+The project currently stores comic volumes and comic issues.
 
 At a high level:
 
 ```text
-ComicIssue stores one comic issue record.
-ComicIssue is designed to work with Comic Vine issue data.
-Imported issues will be stored in Neon PostgreSQL.
+ComicVolume stores one comic series/book from Comic Vine.
+ComicIssue stores one comic issue from Comic Vine.
+ComicIssue points to ComicVolume.
+Imported records will be stored in Neon PostgreSQL.
 Simple Django pages will display the stored issues.
 ```
 
@@ -81,6 +86,24 @@ Current page:
 ```text
 A Bootstrap-styled dark mode homepage using a shared base template.
 ```
+
+## Comic Vine API Testing
+
+The project has test commands for checking Comic Vine API responses before saving data.
+
+General issue test:
+
+```bash
+python manage.py test_comicvine_issues
+```
+
+Marvel issue test:
+
+```bash
+python manage.py test_comicvine_marvel_issues
+```
+
+These commands print issue data but do not save records to the database.
 
 ## Tech Stack
 

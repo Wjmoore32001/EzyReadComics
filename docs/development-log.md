@@ -8,6 +8,99 @@ The goal of this log is not to explain every line of code. It records what chang
 
 ---
 
+## 2026-06-27 — ComicVolume Model Added
+
+Added a separate `ComicVolume` model and connected `ComicIssue` to it.
+
+Files changed:
+
+```text
+comics/models.py
+comics/migrations/0003_...
+docs/11-comicvolume-and-comicissue-relationship.md
+```
+
+What changed:
+
+* added `ComicVolume`
+* moved volume-level data out of `ComicIssue`
+* stored publisher on `ComicVolume`
+* connected `ComicIssue` to `ComicVolume` with a `ForeignKey`
+* protected volumes from deletion while issues still point to them
+* documented the relationship between volumes and issues
+
+Purpose:
+
+* better match the Comic Vine API structure
+* avoid repeating publisher data on every issue
+* prepare for a smarter importer
+* make Marvel filtering possible through `volume.publisher`
+* keep the data model simple while making it more correct
+
+Current state:
+
+* `ComicVolume` exists in Neon
+* `ComicIssue` can link to `ComicVolume`
+* no issue records have been imported yet
+* no real import command has been created yet
+* no issue display page has been created yet
+
+---
+
+## 2026-06-27 — Comic Vine API Test Commands Added
+
+Added test commands for checking Comic Vine issue data before importing records.
+
+Files changed:
+
+```text
+.env.example
+requirements.txt
+comics/management/__init__.py
+comics/management/commands/__init__.py
+comics/management/commands/test_comicvine_issues.py
+comics/management/commands/test_comicvine_marvel_issues.py
+docs/10-comicvine-api-test-commands.md
+```
+
+What was added:
+
+* `COMICVINE_API_KEY` environment variable support
+* `requests` package for API calls
+* a general Comic Vine issue test command
+* a Marvel-only Comic Vine issue test command
+* rolling date-range logic based on the current date
+* publisher lookup through issue volume data
+* documentation explaining the API test approach
+
+Commands used:
+
+```bash
+python -m pip install requests
+python -m pip freeze > requirements.txt
+python manage.py check
+python manage.py test_comicvine_issues
+python manage.py test_comicvine_marvel_issues
+```
+
+Purpose:
+
+* confirm Comic Vine API access works
+* inspect recent issue data before importing
+* confirm publisher lookup works
+* confirm Marvel-only filtering is possible
+* avoid saving data before understanding the API response shape
+
+Current state at this step:
+
+* Comic Vine API test commands work
+* publisher lookup works
+* Marvel-only issue testing works
+* no issue records have been imported yet
+* no issue list page has been created yet
+
+---
+
 ## 2026-06-27 — ComicIssue Model Revised for Comic Vine
 
 Revised the `ComicIssue` model so it better matches the Comic Vine API.
@@ -37,7 +130,7 @@ Purpose:
 * match Comic Vine's terminology without copying the entire Comic Vine data model
 * keep the project focused on importing and displaying issues first
 
-Current state:
+Current state at this step:
 
 * ComicIssue table exists in Neon
 * ComicIssue table has been updated for Comic Vine-style issue data
@@ -138,7 +231,7 @@ What is intentionally not included yet:
 Purpose:
 
 * keep the first data structure easy to understand
-* avoid rebuilding the old project’s complexity too early
+* avoid rebuilding the old project's complexity too early
 * create a simple foundation that can evolve later
 
 Current state at this step:
