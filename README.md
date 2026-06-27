@@ -1,8 +1,10 @@
 # EzyReadComics
 
-EzyReadComics is a Django-based web application for organizing and exploring current Marvel comic reading paths.
+EzyReadComics is a Django-based web application for organizing and exploring comic issue data.
 
-The long-term goal is to help readers understand the current Marvel reading era by showing:
+The near-term goal is to import recent comic issues using the Comic Vine API, store them in a Neon PostgreSQL database, and display them on simple pages.
+
+The long-term goal is to help readers understand comic reading paths by eventually showing:
 
 * which current series and issues exist
 * where good starting points are
@@ -28,22 +30,43 @@ Current stage:
 * Bootstrap added through CDN links
 * dark mode chosen as the default visual direction
 * shared base template created
-* comic-specific data models not started yet
+* Neon PostgreSQL connected
+* initial `ComicIssue` model created
+* `ComicIssue` model revised to better match Comic Vine issue data
+* Comic Vine API import not started yet
+* comic issue records not imported yet
 
-## Core Idea
+## Current Near-Term Goal
 
-The project will eventually model comic issues as connected reading nodes.
+The current goal is intentionally simple:
+
+```text
+Use Comic Vine API → populate the database with recent comic issues → display them simply
+```
+
+Not part of the current stage:
+
+* sorting
+* filtering
+* reading algorithms
+* issue-to-issue connections
+* reading paths
+* character/team/event modeling
+
+## Core Data Idea
+
+The project currently stores comic issues.
 
 At a high level:
 
 ```text
-Series contain Issues.
-Issues can connect to other Issues.
-Connections have importance levels.
-The app uses those connections to build reading paths.
+ComicIssue stores one comic issue record.
+ComicIssue is designed to work with Comic Vine issue data.
+Imported issues will be stored in Neon PostgreSQL.
+Simple Django pages will display the stored issues.
 ```
 
-The current focus is not all Marvel history. The first target is the **current Marvel reading era**.
+The current focus is getting issue data into the database and showing it.
 
 ## Current Local Page
 
@@ -59,8 +82,6 @@ Current page:
 A Bootstrap-styled dark mode homepage using a shared base template.
 ```
 
-This confirms that the Django project can serve an HTML page and reuse a shared layout.
-
 ## Tech Stack
 
 Planned stack:
@@ -70,6 +91,7 @@ Planned stack:
 * Bootstrap
 * PostgreSQL
 * Neon database hosting
+* Comic Vine API
 * Git / GitHub
 * Markdown documentation
 

@@ -8,6 +8,45 @@ The goal of this log is not to explain every line of code. It records what chang
 
 ---
 
+## 2026-06-27 — ComicIssue Model Revised for Comic Vine
+
+Revised the `ComicIssue` model so it better matches the Comic Vine API.
+
+Files changed:
+
+```text
+comics/models.py
+comics/migrations/0002_...
+docs/09-comicvine-aware-comicissue-model.md
+```
+
+What changed:
+
+* added `comicvine_id`
+* renamed the series concept to `volume_name`
+* replaced one generic `release_date` with `cover_date` and `store_date`
+* added `comicvine_url`
+* added `image_url`
+* kept `publisher` optional
+* kept the model simple and issue-focused
+
+Purpose:
+
+* prepare for Comic Vine API imports
+* avoid duplicate imported issues by storing Comic Vine's issue ID
+* match Comic Vine's terminology without copying the entire Comic Vine data model
+* keep the project focused on importing and displaying issues first
+
+Current state:
+
+* ComicIssue table exists in Neon
+* ComicIssue table has been updated for Comic Vine-style issue data
+* no issue records have been imported yet
+* no API import command has been created yet
+* no sorting, filtering, connection logic, or algorithm work has been added
+
+---
+
 ## 2026-06-27 — Neon Database Connected and ComicIssue Model Created
 
 Connected Django to Neon PostgreSQL and created the first database-backed model.
@@ -51,7 +90,7 @@ Purpose:
 * avoid silently falling back to SQLite
 * keep the data model intentionally simple
 
-Current state:
+Current state at this step:
 
 * Django connects to Neon
 * Neon contains Django's built-in tables
@@ -448,4 +487,4 @@ Current decision:
 
 Initial project goal:
 
-Build a Django application for exploring the current Marvel reading era through series, issues, and meaningful reading connections.
+Build a Django application for exploring current comic issue data and eventually supporting comic reading paths.
