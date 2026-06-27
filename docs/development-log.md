@@ -1,84 +1,140 @@
 # Development Log
 
-This file tracks major development steps and decisions for EzyReadComics.
+This file tracks major development steps for EzyReadComics.
 
 Newest entries are listed first.
 
-The goal of this log is not to explain every line of code. It records what changed, why it changed, and what milestone was reached.
-
 ---
 
-## 2026-06-27 — ComicVolume Model Added
+## 2026-06-27 — Day-Based Comic Vine Issue Importer Added
 
-Added a separate `ComicVolume` model and connected `ComicIssue` to it.
+Added the current Comic Vine import system.
 
-Files changed:
+Current importer behavior:
 
-```text
-comics/models.py
-comics/migrations/0003_...
-docs/11-comicvolume-and-comicissue-relationship.md
+* scans by Comic Vine `date_added`
+* does not scan today
+* starts with yesterday
+* works backward one day at a time
+* tracks one import row per `date_added` day
+* uses `next_offset` to continue through a date
+* uses `total_results` to know how many issue candidates exist for a date
+* marks dates complete when all issue candidates for that date have been checked
+* imports all issue candidates, not only Marvel issues
+* saves volume data and publisher data
+* skips already-imported issues using Comic Vine issue IDs
+
+Current importer command:
+
+```bash
+python manage.py import_comicvine_marvel_issues
 ```
 
-What changed:
-
-* added `ComicVolume`
-* moved volume-level data out of `ComicIssue`
-* stored publisher on `ComicVolume`
-* connected `ComicIssue` to `ComicVolume` with a `ForeignKey`
-* protected volumes from deletion while issues still point to them
-* documented the relationship between volumes and issues
+The command filename still contains `marvel`, but the current importer now imports all issue candidates.
 
 Purpose:
 
-* better match the Comic Vine API structure
-* avoid repeating publisher data on every issue
-* prepare for a smarter importer
-* make Marvel filtering possible through `volume.publisher`
-* keep the data model simple while making it more correct
+* build a robust Comic Vine issue database over time
+* avoid same-day moving-target problems
+* allow missed days to be filled later
+* allow publisher filtering later through `ComicVolume.publisher`
 
 Current state:
 
-* `ComicVolume` exists in Neon
-* `ComicIssue` can link to `ComicVolume`
-* no issue records have been imported yet
-* no real import command has been created yet
-* no issue display page has been created yet
+* importer scans completed dates only
+* importer can resume a partially scanned date
+* imported issues are linked to volumes
+* publishers are stored on volumes
+* no issue display page has been built yet
+
+---
+
+## 2026-06-27 — ComicVineDateScan Model Added
+
+Added a model for tracking Comic Vine import progress by date.
+
+Current model:
+
+```text
+ComicVineDateScan
+    scan_date
+    next_offset
+    total_results
+    completed
+    last_scanned_at
+    completed_at
+    notes
+```
+
+Purpose:
+
+* track one Comic Vine `date_added` day per row
+* remember how many candidates have already been scanned for that date
+* know when a date has been fully scanned
+* allow the importer to resume cleanly after stopping
+* allow the database to fill backward over time
+
+This replaced the older import-state approach.
+
+---
+
+## 2026-06-27 — ComicVolume and ComicIssue Models Added
+
+Added the core comic data models.
+
+Current models:
+
+```text
+ComicVolume
+ComicIssue
+```
+
+`ComicVolume` stores series/book-level data:
+
+```text
+Comic Vine volume ID
+name
+publisher
+Comic Vine URL
+```
+
+`ComicIssue` stores issue-level data:
+
+```text
+Comic Vine issue ID
+volume relationship
+issue number
+issue title
+cover date
+store date
+Comic Vine URL
+image URL
+notes
+```
+
+Purpose:
+
+* store issues from Comic Vine
+* store volume information separately from issue information
+* store publisher on the volume
+* allow later filtering by publisher
+
+Example:
+
+```text
+ComicVolume: Captain America (Marvel)
+    └── ComicIssue: Captain America #12
+```
 
 ---
 
 ## 2026-06-27 — Comic Vine API Test Commands Added
 
-Added test commands for checking Comic Vine issue data before importing records.
+Added test commands for checking Comic Vine API access before importing real records.
 
-Files changed:
-
-```text
-.env.example
-requirements.txt
-comics/management/__init__.py
-comics/management/commands/__init__.py
-comics/management/commands/test_comicvine_issues.py
-comics/management/commands/test_comicvine_marvel_issues.py
-docs/10-comicvine-api-test-commands.md
-```
-
-What was added:
-
-* `COMICVINE_API_KEY` environment variable support
-* `requests` package for API calls
-* a general Comic Vine issue test command
-* a Marvel-only Comic Vine issue test command
-* rolling date-range logic based on the current date
-* publisher lookup through issue volume data
-* documentation explaining the API test approach
-
-Commands used:
+Test commands:
 
 ```bash
-python -m pip install requests
-python -m pip freeze > requirements.txt
-python manage.py check
 python manage.py test_comicvine_issues
 python manage.py test_comicvine_marvel_issues
 ```
@@ -86,498 +142,112 @@ python manage.py test_comicvine_marvel_issues
 Purpose:
 
 * confirm Comic Vine API access works
-* inspect recent issue data before importing
-* confirm publisher lookup works
-* confirm Marvel-only filtering is possible
-* avoid saving data before understanding the API response shape
+* inspect issue response data
+* inspect volume/publisher lookup behavior
+* test API key loading through `.env`
 
-Current state at this step:
-
-* Comic Vine API test commands work
-* publisher lookup works
-* Marvel-only issue testing works
-* no issue records have been imported yet
-* no issue list page has been created yet
+These commands are test-only and are not the main importer.
 
 ---
 
-## 2026-06-27 — ComicIssue Model Revised for Comic Vine
+## 2026-06-27 — Neon PostgreSQL Connected
 
-Revised the `ComicIssue` model so it better matches the Comic Vine API.
+Connected Django to Neon PostgreSQL.
 
-Files changed:
-
-```text
-comics/models.py
-comics/migrations/0002_...
-docs/09-comicvine-aware-comicissue-model.md
-```
-
-What changed:
-
-* added `comicvine_id`
-* renamed the series concept to `volume_name`
-* replaced one generic `release_date` with `cover_date` and `store_date`
-* added `comicvine_url`
-* added `image_url`
-* kept `publisher` optional
-* kept the model simple and issue-focused
-
-Purpose:
-
-* prepare for Comic Vine API imports
-* avoid duplicate imported issues by storing Comic Vine's issue ID
-* match Comic Vine's terminology without copying the entire Comic Vine data model
-* keep the project focused on importing and displaying issues first
-
-Current state at this step:
-
-* ComicIssue table exists in Neon
-* ComicIssue table has been updated for Comic Vine-style issue data
-* no issue records have been imported yet
-* no API import command has been created yet
-* no sorting, filtering, connection logic, or algorithm work has been added
-
----
-
-## 2026-06-27 — Neon Database Connected and ComicIssue Model Created
-
-Connected Django to Neon PostgreSQL and created the first database-backed model.
-
-Files changed:
+Added environment-based database configuration through:
 
 ```text
-comics/models.py
-comics/migrations/0001_initial.py
-config/settings.py
-requirements.txt
-.env.example
-docs/07-initial-data-shape.md
-docs/08-neon-database-and-comicissue-model.md
-```
-
-What was added:
-
-* `ComicIssue` model
-* initial migration file for the `comics` app
-* Neon database configuration through `DATABASE_URL`
-* `.env.example` file documenting required environment variables
-* PostgreSQL/environment packages in `requirements.txt`
-* documentation explaining models, migrations, database tables, and Neon setup
-
-Commands used:
-
-```bash
-python -m pip install psycopg2-binary python-dotenv dj-database-url
-python -m pip freeze > requirements.txt
-python manage.py makemigrations comics
-python manage.py migrate --plan
-python manage.py migrate
-python manage.py check
+DATABASE_URL
 ```
 
 Purpose:
 
-* store the first simple comic issue structure in the database
-* use Neon PostgreSQL as the real development database
-* avoid silently falling back to SQLite
-* keep the data model intentionally simple
-
-Current state at this step:
-
-* Django connects to Neon
-* Neon contains Django's built-in tables
-* Neon contains the initial `ComicIssue` table
-* no comic issue records have been added yet
-* no connection logic has been added
+* use a real PostgreSQL database instead of SQLite
+* keep local secrets out of GitHub
+* prepare the project for realistic deployment-style development
 
 ---
 
-## 2026-06-27 — Initial Data Shape Planned
-
-Planned the first simple data shape for the project.
-
-Created:
-
-```text
-docs/07-initial-data-shape.md
-```
-
-Decision:
-
-Start with one simple comic issue structure.
-
-Initial fields:
-
-```text
-series_title
-issue_number
-issue_title
-publisher
-release_date
-notes
-```
-
-What is intentionally not included yet:
-
-* issue-to-issue connections
-* reading order logic
-* characters
-* creators
-* events
-* arcs
-* external import logic
-
-Purpose:
-
-* keep the first data structure easy to understand
-* avoid rebuilding the old project's complexity too early
-* create a simple foundation that can evolve later
-
-Current state at this step:
-
-* simple comic issue shape is planned
-* no database code has been written yet
-
----
-
-## 2026-06-27 — Shared Base Template Added
+## 2026-06-27 — Shared Bootstrap Base Template Added
 
 Created a shared Bootstrap dark-mode base template.
 
-Files changed:
+Current template structure:
 
 ```text
 comics/templates/comics/base.html
 comics/templates/comics/home.html
-docs/06-shared-base-template.md
 ```
-
-What was added:
-
-* a reusable `base.html` template
-* shared Bootstrap CSS and JavaScript links
-* shared dark-mode page setup
-* a basic navbar
-* template blocks for page title and page content
-* documentation explaining base templates, blocks, and template inheritance
 
 Purpose:
 
-* avoid repeating the full HTML document in every future page
-* make Bootstrap and dark mode apply consistently across the site
-* prepare the project for additional pages
-
-Current state at this step:
-
-* homepage works at `http://127.0.0.1:8000/`
-* homepage extends `base.html`
-* shared layout exists for future pages
-* no database models have been created yet
+* avoid repeating full HTML structure on every page
+* keep Bootstrap setup shared
+* keep dark mode consistent
+* prepare for future issue list/detail pages
 
 ---
 
-## 2026-06-27 — HTML Homepage Added
+## 2026-06-27 — First Homepage Added
 
-Changed the homepage from a plain-text response to an HTML template.
+Created the first working Django homepage.
 
-Files changed:
-
-```text
-comics/views.py
-comics/templates/comics/home.html
-docs/05-html-homepage-bootstrap.md
-```
-
-What was added:
-
-* a `home.html` template for the homepage
-* Bootstrap loaded through CDN links
-* Bootstrap dark mode enabled
-* updated `home` function to render the template instead of returning plain text
-* documentation explaining templates, rendering, Bootstrap, and the dark mode decision
-
-Purpose:
-
-* move from plain text to a real HTML page
-* keep the first template simple
-* use Bootstrap for styling and layout
-* establish dark mode as the default design direction
-
-Current state at this step:
-
-* homepage works at `http://127.0.0.1:8000/`
-* homepage uses an HTML template
-* homepage uses Bootstrap
-* homepage uses dark mode
-* no database models have been created yet
-
----
-
-## 2026-06-27 — First Homepage Created
-
-Created the first working browser page.
-
-Files changed:
+Current local URL:
 
 ```text
-comics/views.py
-comics/urls.py
-config/urls.py
-docs/04-first-homepage.md
-```
-
-What was added:
-
-* a simple `home` function in `comics/views.py`
-* a `comics/urls.py` file for app-level URL rules
-* a connection from `config/urls.py` to `comics.urls`
-* documentation explaining the request → route → function → response flow
-
-The homepage initially returned plain text:
-
-```text
-EzyReadComics is running.
-```
-
-Commands used:
-
-```bash
-python manage.py check
-python manage.py runserver
+http://127.0.0.1:8000/
 ```
 
 Purpose:
 
-* prove that the Django project can serve a browser page
-* keep the first page simple before adding HTML or database code
-* document the basic Django request/response flow
-
-Current state at this step:
-
-* homepage works at `http://127.0.0.1:8000/`
-* homepage returns plain text
-* no HTML templates have been created yet
-* no comic-specific data models have been created yet
+* confirm Django routing works
+* confirm templates render
+* establish the first browser-visible page
 
 ---
 
 ## 2026-06-27 — Comics App Created
 
-Created the first custom Django app for comic-specific code.
-
-Command used:
-
-```bash
-python manage.py startapp comics
-```
-
-Created:
+Created the custom Django app:
 
 ```text
-comics/
-    __init__.py
-    admin.py
-    apps.py
-    models.py
-    tests.py
-    views.py
-    migrations/
-        __init__.py
-```
-
-Registered the app in:
-
-```text
-config/settings.py
-```
-
-Added to `INSTALLED_APPS`:
-
-```python
-"comics",
+comics
 ```
 
 Purpose:
 
-* create a dedicated place for comic-specific project code
-* separate project-level configuration from application-specific logic
-* prepare for future models, views, pages, and comic reading data
-
-Current state at this step:
-
-* `comics` app exists
-* `comics` app is registered
-* no comic-specific data objects have been created yet
-* no custom pages have been created yet
+* store comic-specific models
+* store comic-specific views
+* store comic-specific templates
+* separate application code from project configuration
 
 ---
 
-## 2026-06-27 — Django Project Structure Documented
+## 2026-06-27 — Django Project Created
 
-Added documentation explaining the default Django project structure.
+Created the base Django project structure.
 
-Created:
+Main project folder:
 
 ```text
-docs/02-django-project-structure.md
-```
-
-Covered files:
-
-```text
-manage.py
-config/
-config/__init__.py
-config/settings.py
-config/urls.py
-config/asgi.py
-config/wsgi.py
+config
 ```
 
 Purpose:
 
-* understand what Django created before adding custom code
-* separate Django project configuration from future app-specific code
-* document the current project state while it is still simple
-
-Current state at this step:
-
-* Django project skeleton exists
-* project structure is documented
-* no custom Django app has been created yet
+* provide Django settings
+* provide root URL configuration
+* provide project startup structure
 
 ---
 
-## 2026-06-27 — Django Project Skeleton Created
+## 2026-06-27 — Project Restarted Cleanly
 
-Created the default Django project skeleton.
+Restarted EzyReadComics with a clean GitHub-backed workflow.
 
-Commands used:
+Current development approach:
 
-```bash
-python -m django startproject config .
-python manage.py check
-```
-
-Created:
-
-```text
-manage.py
-config/
-    __init__.py
-    settings.py
-    urls.py
-    asgi.py
-    wsgi.py
-```
-
-Purpose:
-
-* create the starting Django project structure
-* confirm the project starts in a valid default state
-* avoid adding custom app code before understanding the base project layout
-
-Current state at this step:
-
-* Django project skeleton exists
-* no custom Django app has been created yet
-* no application-specific database tables have been created yet
-
----
-
-## 2026-06-27 — Django Installed
-
-Installed Django into the project virtual environment.
-
-Commands used:
-
-```bash
-python -m pip install --upgrade pip
-python -m pip install django
-python -m django --version
-python -m pip freeze > requirements.txt
-```
-
-Purpose:
-
-* add Django as the project's web framework
-* confirm Django is installed correctly
-* record dependencies in `requirements.txt`
-
-Current state at this step:
-
-* Django is installed
-* dependencies are recorded
-* the Django project has not been created yet
-
----
-
-## 2026-06-27 — Python Virtual Environment
-
-Created a local Python virtual environment for the project.
-
-Commands used:
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python --version
-which python
-```
-
-Purpose:
-
-* isolate this project's Python dependencies
-* avoid installing Django/packages globally
-* make the development environment easier to rebuild later
-
-Important note:
-
-The `.venv/` folder is local development environment data and should not be committed to Git.
-
----
-
-## 2026-06-27 — Documentation Baseline
-
-Added initial project documentation.
-
-Created:
-
-```text
-README.md
-docs/development-log.md
-docs/01-project-setup.md
-```
-
-Purpose:
-
-* explain the project publicly in the README
-* track major development decisions in the development log
-* record setup commands in the setup documentation
-
-This creates a documentation-first workflow before adding Django or application code.
-
----
-
-## 2026-06-27 — Clean Restart
-
-Started a clean GitHub-backed version of EzyReadComics.
-
-Reason for restart:
-
-* the previous version moved too quickly
-* too much code was added before the project structure was fully understood
-* the project needs to be understandable, documented, and suitable for a public portfolio
-* Git/GitHub should be part of the workflow from the beginning
-
-Current decision:
-
-* rebuild slowly
-* document setup steps
-* keep each development step small and understandable
-* prioritize a working project, but avoid adding complexity before it is needed
-
-Initial project goal:
-
-Build a Django application for exploring current comic issue data and eventually supporting comic reading paths.
+* build slowly
+* document the current system clearly
+* keep each step understandable
+* avoid adding reading-path complexity before the import/display foundation works

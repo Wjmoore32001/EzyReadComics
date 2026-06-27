@@ -34,3 +34,20 @@ class ComicIssue(models.Model):
     def __str__(self):
         volume_name = self.volume.name if self.volume else "Unknown Volume"
         return f"{volume_name} #{self.issue_number}"
+
+
+class ComicVineDateScan(models.Model):
+    scan_date = models.DateField(unique=True)
+    next_offset = models.PositiveIntegerField(default=0)
+    total_results = models.PositiveIntegerField(default=0)
+    completed = models.BooleanField(default=False)
+    last_scanned_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-scan_date"]
+
+    def __str__(self):
+        status = "complete" if self.completed else "incomplete"
+        return f"{self.scan_date} ({status})"
