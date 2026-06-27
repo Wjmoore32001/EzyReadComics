@@ -160,6 +160,50 @@ The important part is that `which python` points inside the project’s `.venv` 
 
 ---
 
+## 8. Install Django
+
+Django was installed into the project virtual environment.
+
+Commands:
+
+```bash
+python -m pip install --upgrade pip
+python -m pip install django
+python -m django --version
+```
+
+Purpose:
+
+* install Django as the main web framework for the project
+* confirm Django is available inside the virtual environment
+* avoid installing Django globally on the system
+
+---
+
+## 9. Record Python Dependencies
+
+The installed Python packages were recorded in `requirements.txt`.
+
+Command:
+
+```bash
+python -m pip freeze > requirements.txt
+```
+
+Purpose:
+
+* track the project’s Python dependencies
+* make the environment easier to recreate later
+* allow another machine/developer to install dependencies with one command
+
+Reinstall command for the future:
+
+```bash
+python -m pip install -r requirements.txt
+```
+
+---
+
 ## Current Setup Status
 
 At this point, the project has:
@@ -168,6 +212,8 @@ At this point, the project has:
 * a local cloned project folder
 * a documentation folder
 * a Python virtual environment
+* Django installed
+* dependencies recorded in `requirements.txt`
 * no Django project created yet
 * no database configured yet
 * no application code written yet

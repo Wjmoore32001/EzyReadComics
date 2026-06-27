@@ -74,3 +74,30 @@ Purpose:
 Important note:
 
 The `.venv/` folder is local development environment data and should not be committed to Git.
+
+---
+
+## 2026-06-27 — Django Installed
+
+Installed Django into the project virtual environment.
+
+Commands used:
+
+```bash
+python -m pip install --upgrade pip
+python -m pip install django
+python -m django --version
+python -m pip freeze > requirements.txt
+```
+
+Purpose:
+
+* add Django as the project’s web framework
+* confirm Django is installed correctly
+* record dependencies in `requirements.txt`
+
+Current state:
+
+* Django is installed
+* dependencies are recorded
+* the Django project has not been created yet
