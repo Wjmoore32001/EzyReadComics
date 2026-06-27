@@ -8,6 +8,54 @@ The goal of this log is not to explain every line of code. It records what chang
 
 ---
 
+## 2026-06-27 — Initial Data Shape Planned
+
+Planned the first simple data shape for the project.
+
+Created:
+
+```text
+docs/07-initial-data-shape.md
+```
+
+Decision:
+
+Start with one simple comic issue structure.
+
+Initial fields:
+
+```text
+series_title
+issue_number
+issue_title
+publisher
+release_date
+notes
+```
+
+What is intentionally not included yet:
+
+* issue-to-issue connections
+* reading order logic
+* characters
+* creators
+* events
+* arcs
+* external import logic
+
+Purpose:
+
+* keep the first data structure easy to understand
+* avoid rebuilding the old project’s complexity too early
+* create a simple foundation that can evolve later
+
+Current state:
+
+* simple comic issue shape is planned
+* no database code has been written yet
+
+---
+
 ## 2026-06-27 — Shared Base Template Added
 
 Created a shared Bootstrap dark-mode base template.
@@ -35,7 +83,7 @@ Purpose:
 * make Bootstrap and dark mode apply consistently across the site
 * prepare the project for additional pages
 
-Current state:
+Current state at this step:
 
 * homepage works at `http://127.0.0.1:8000/`
 * homepage extends `base.html`
