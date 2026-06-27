@@ -23,7 +23,10 @@ Current stage:
 * Django project skeleton created
 * custom `comics` app created
 * custom app registered in Django settings
-* first plain-text homepage created
+* first homepage route created
+* first HTML homepage created
+* Bootstrap added through CDN links
+* dark mode chosen as the default visual direction
 * comic-specific data models not started yet
 
 ## Core Idea
@@ -49,13 +52,13 @@ The first local homepage runs at:
 http://127.0.0.1:8000/
 ```
 
-Current response:
+Current page:
 
 ```text
-EzyReadComics is running.
+A Bootstrap-styled dark mode homepage.
 ```
 
-This confirms that the Django project can serve a browser page.
+This confirms that the Django project can serve an HTML page.
 
 ## Tech Stack
 
@@ -63,6 +66,7 @@ Planned stack:
 
 * Python
 * Django
+* Bootstrap
 * PostgreSQL
 * Neon database hosting
 * Git / GitHub

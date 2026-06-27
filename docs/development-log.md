@@ -8,6 +8,43 @@ The goal of this log is not to explain every line of code. It records what chang
 
 ---
 
+## 2026-06-27 — HTML Homepage Added
+
+Changed the homepage from a plain-text response to an HTML template.
+
+Files changed:
+
+```text
+comics/views.py
+comics/templates/comics/home.html
+docs/05-html-homepage-bootstrap.md
+```
+
+What was added:
+
+* a `home.html` template for the homepage
+* Bootstrap loaded through CDN links
+* Bootstrap dark mode enabled
+* updated `home` function to render the template instead of returning plain text
+* documentation explaining templates, rendering, Bootstrap, and the dark mode decision
+
+Purpose:
+
+* move from plain text to a real HTML page
+* keep the first template simple
+* use Bootstrap for styling and layout
+* establish dark mode as the default design direction
+
+Current state:
+
+* homepage works at `http://127.0.0.1:8000/`
+* homepage uses an HTML template
+* homepage uses Bootstrap
+* homepage uses dark mode
+* no database models have been created yet
+
+---
+
 ## 2026-06-27 — First Homepage Created
 
 Created the first working browser page.
@@ -28,7 +65,7 @@ What was added:
 * a connection from `config/urls.py` to `comics.urls`
 * documentation explaining the request → route → function → response flow
 
-The homepage currently returns plain text:
+The homepage initially returned plain text:
 
 ```text
 EzyReadComics is running.
@@ -47,7 +84,7 @@ Purpose:
 * keep the first page simple before adding HTML or database code
 * document the basic Django request/response flow
 
-Current state:
+Current state at this step:
 
 * homepage works at `http://127.0.0.1:8000/`
 * homepage returns plain text
