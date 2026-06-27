@@ -8,6 +8,54 @@ The goal of this log is not to explain every line of code. It records what chang
 
 ---
 
+## 2026-06-27 — First Homepage Created
+
+Created the first working browser page.
+
+Files changed:
+
+```text
+comics/views.py
+comics/urls.py
+config/urls.py
+docs/04-first-homepage.md
+```
+
+What was added:
+
+* a simple `home` function in `comics/views.py`
+* a `comics/urls.py` file for app-level URL rules
+* a connection from `config/urls.py` to `comics.urls`
+* documentation explaining the request → route → function → response flow
+
+The homepage currently returns plain text:
+
+```text
+EzyReadComics is running.
+```
+
+Commands used:
+
+```bash
+python manage.py check
+python manage.py runserver
+```
+
+Purpose:
+
+* prove that the Django project can serve a browser page
+* keep the first page simple before adding HTML or database code
+* document the basic Django request/response flow
+
+Current state:
+
+* homepage works at `http://127.0.0.1:8000/`
+* homepage returns plain text
+* no HTML templates have been created yet
+* no comic-specific data models have been created yet
+
+---
+
 ## 2026-06-27 — Comics App Created
 
 Created the first custom Django app for comic-specific code.
@@ -50,7 +98,7 @@ Purpose:
 * separate project-level configuration from application-specific logic
 * prepare for future models, views, pages, and comic reading data
 
-Current state:
+Current state at this step:
 
 * `comics` app exists
 * `comics` app is registered
@@ -147,7 +195,7 @@ python -m pip freeze > requirements.txt
 
 Purpose:
 
-* add Django as the project’s web framework
+* add Django as the project's web framework
 * confirm Django is installed correctly
 * record dependencies in `requirements.txt`
 
@@ -174,7 +222,7 @@ which python
 
 Purpose:
 
-* isolate this project’s Python dependencies
+* isolate this project's Python dependencies
 * avoid installing Django/packages globally
 * make the development environment easier to rebuild later
 

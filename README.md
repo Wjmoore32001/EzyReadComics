@@ -23,6 +23,7 @@ Current stage:
 * Django project skeleton created
 * custom `comics` app created
 * custom app registered in Django settings
+* first plain-text homepage created
 * comic-specific data models not started yet
 
 ## Core Idea
@@ -39,6 +40,22 @@ The app uses those connections to build reading paths.
 ```
 
 The current focus is not all Marvel history. The first target is the **current Marvel reading era**.
+
+## Current Local Page
+
+The first local homepage runs at:
+
+```text
+http://127.0.0.1:8000/
+```
+
+Current response:
+
+```text
+EzyReadComics is running.
+```
+
+This confirms that the Django project can serve a browser page.
 
 ## Tech Stack
 
