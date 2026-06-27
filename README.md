@@ -27,6 +27,7 @@ Current stage:
 * first HTML homepage created
 * Bootstrap added through CDN links
 * dark mode chosen as the default visual direction
+* shared base template created
 * comic-specific data models not started yet
 
 ## Core Idea
@@ -55,10 +56,10 @@ http://127.0.0.1:8000/
 Current page:
 
 ```text
-A Bootstrap-styled dark mode homepage.
+A Bootstrap-styled dark mode homepage using a shared base template.
 ```
 
-This confirms that the Django project can serve an HTML page.
+This confirms that the Django project can serve an HTML page and reuse a shared layout.
 
 ## Tech Stack
 

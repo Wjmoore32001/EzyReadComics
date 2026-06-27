@@ -8,6 +8,42 @@ The goal of this log is not to explain every line of code. It records what chang
 
 ---
 
+## 2026-06-27 — Shared Base Template Added
+
+Created a shared Bootstrap dark-mode base template.
+
+Files changed:
+
+```text
+comics/templates/comics/base.html
+comics/templates/comics/home.html
+docs/06-shared-base-template.md
+```
+
+What was added:
+
+* a reusable `base.html` template
+* shared Bootstrap CSS and JavaScript links
+* shared dark-mode page setup
+* a basic navbar
+* template blocks for page title and page content
+* documentation explaining base templates, blocks, and template inheritance
+
+Purpose:
+
+* avoid repeating the full HTML document in every future page
+* make Bootstrap and dark mode apply consistently across the site
+* prepare the project for additional pages
+
+Current state:
+
+* homepage works at `http://127.0.0.1:8000/`
+* homepage extends `base.html`
+* shared layout exists for future pages
+* no database models have been created yet
+
+---
+
 ## 2026-06-27 — HTML Homepage Added
 
 Changed the homepage from a plain-text response to an HTML template.
@@ -35,7 +71,7 @@ Purpose:
 * use Bootstrap for styling and layout
 * establish dark mode as the default design direction
 
-Current state:
+Current state at this step:
 
 * homepage works at `http://127.0.0.1:8000/`
 * homepage uses an HTML template
