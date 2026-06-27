@@ -21,7 +21,9 @@ Current stage:
 * Python virtual environment created
 * Django installed
 * Django project skeleton created
-* custom app code not started yet
+* custom `comics` app created
+* custom app registered in Django settings
+* comic-specific data models not started yet
 
 ## Core Idea
 

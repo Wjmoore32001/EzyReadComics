@@ -8,6 +8,57 @@ The goal of this log is not to explain every line of code. It records what chang
 
 ---
 
+## 2026-06-27 — Comics App Created
+
+Created the first custom Django app for comic-specific code.
+
+Command used:
+
+```bash
+python manage.py startapp comics
+```
+
+Created:
+
+```text
+comics/
+    __init__.py
+    admin.py
+    apps.py
+    models.py
+    tests.py
+    views.py
+    migrations/
+        __init__.py
+```
+
+Registered the app in:
+
+```text
+config/settings.py
+```
+
+Added to `INSTALLED_APPS`:
+
+```python
+"comics",
+```
+
+Purpose:
+
+* create a dedicated place for comic-specific project code
+* separate project-level configuration from application-specific logic
+* prepare for future models, views, pages, and comic reading data
+
+Current state:
+
+* `comics` app exists
+* `comics` app is registered
+* no comic-specific data objects have been created yet
+* no custom pages have been created yet
+
+---
+
 ## 2026-06-27 — Django Project Structure Documented
 
 Added documentation explaining the default Django project structure.
@@ -36,7 +87,7 @@ Purpose:
 * separate Django project configuration from future app-specific code
 * document the current project state while it is still simple
 
-Current state:
+Current state at this step:
 
 * Django project skeleton exists
 * project structure is documented
