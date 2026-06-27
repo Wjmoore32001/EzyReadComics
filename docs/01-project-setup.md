@@ -204,6 +204,58 @@ python -m pip install -r requirements.txt
 
 ---
 
+## 10. Create Django Project Skeleton
+
+The default Django project files were created.
+
+Command:
+
+```bash
+python -m django startproject config .
+```
+
+The `.` at the end means Django should create the starter files inside the current repository folder instead of creating an extra nested folder.
+
+This created:
+
+```text
+manage.py
+config/
+    __init__.py
+    settings.py
+    urls.py
+    asgi.py
+    wsgi.py
+```
+
+Purpose:
+
+* create the basic Django project structure
+* add the main Django command file, `manage.py`
+* add the main project configuration folder, `config/`
+
+---
+
+## 11. Confirm Django Project Check
+
+The new Django starter project was checked.
+
+Command:
+
+```bash
+python manage.py check
+```
+
+Expected result:
+
+```text
+System check identified no issues (0 silenced).
+```
+
+This confirms that the default Django project files are valid.
+
+---
+
 ## Current Setup Status
 
 At this point, the project has:
@@ -214,6 +266,7 @@ At this point, the project has:
 * a Python virtual environment
 * Django installed
 * dependencies recorded in `requirements.txt`
-* no Django project created yet
+* Django project skeleton created
+* no custom app created yet
 * no database configured yet
-* no application code written yet
+* no application-specific code written yet

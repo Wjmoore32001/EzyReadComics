@@ -18,7 +18,10 @@ Current stage:
 
 * repository created
 * documentation structure started
-* Django project setup not started yet
+* Python virtual environment created
+* Django installed
+* Django project skeleton created
+* custom app code not started yet
 
 ## Core Idea
 

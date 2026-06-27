@@ -101,3 +101,40 @@ Current state:
 * Django is installed
 * dependencies are recorded
 * the Django project has not been created yet
+
+---
+
+## 2026-06-27 — Django Project Skeleton Created
+
+Created the default Django project skeleton.
+
+Commands used:
+
+```bash
+python -m django startproject config .
+python manage.py check
+```
+
+Created:
+
+```text
+manage.py
+config/
+    __init__.py
+    settings.py
+    urls.py
+    asgi.py
+    wsgi.py
+```
+
+Purpose:
+
+* create the starting Django project structure
+* confirm the project starts in a valid default state
+* avoid adding custom app code before understanding the base project layout
+
+Current state:
+
+* Django project skeleton exists
+* no custom Django app has been created yet
+* no application-specific database tables have been created yet
