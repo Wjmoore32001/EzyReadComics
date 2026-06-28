@@ -32,7 +32,7 @@ class Command(BaseCommand):
             "--volume-limit",
             type=int,
             default=100,
-            help="Maximum number of incomplete local volumes to check in one run. Defaults to 25.",
+            help="Maximum number of incomplete local volumes to check in one run. Defaults to 100.",
         )
 
         parser.add_argument(
@@ -164,7 +164,6 @@ def get_incomplete_volumes_queryset():
     return (
         ComicVolume.objects.filter(
             Q(name="")
-            | Q(publisher="")
             | Q(date_added__isnull=True)
             | Q(date_last_updated__isnull=True)
             | Q(comicvine_url="")
