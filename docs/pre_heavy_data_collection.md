@@ -1,0 +1,2 @@
+- Update volume and view models to collect all data thats already being requested
+- 

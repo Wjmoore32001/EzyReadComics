@@ -1,0 +1,80 @@
+{
+  "error": "OK",
+  "limit": 1,
+  "offset": 0,
+  "number_of_page_results": 1,
+  "number_of_total_results": 1,
+  "status_code": 1,
+  "results": {
+    "aliases": null,
+    "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-1175003/",
+    "associated_images": [],
+    "character_credits": [],
+    "character_died_in": [],
+    "concept_credits": [],
+    "cover_date": "2026-03-01",
+    "date_added": "2026-06-28 12:15:46",
+    "date_last_updated": "2026-06-28 12:17:57",
+    "deck": null,
+    "description": null,
+    "first_appearance_characters": null,
+    "first_appearance_concepts": null,
+    "first_appearance_locations": null,
+    "first_appearance_objects": null,
+    "first_appearance_storyarcs": null,
+    "first_appearance_teams": null,
+    "has_staff_review": false,
+    "id": 1175003,
+    "image": {
+      "icon_url": "https://comicvine.gamespot.com/a/uploads/square_avatar/11/110017/10110234-www.jpg",
+      "medium_url": "https://comicvine.gamespot.com/a/uploads/scale_medium/11/110017/10110234-www.jpg",
+      "screen_url": "https://comicvine.gamespot.com/a/uploads/screen_medium/11/110017/10110234-www.jpg",
+      "screen_large_url": "https://comicvine.gamespot.com/a/uploads/screen_kubrick/11/110017/10110234-www.jpg",
+      "small_url": "https://comicvine.gamespot.com/a/uploads/scale_small/11/110017/10110234-www.jpg",
+      "super_url": "https://comicvine.gamespot.com/a/uploads/scale_large/11/110017/10110234-www.jpg",
+      "thumb_url": "https://comicvine.gamespot.com/a/uploads/scale_avatar/11/110017/10110234-www.jpg",
+      "tiny_url": "https://comicvine.gamespot.com/a/uploads/square_mini/11/110017/10110234-www.jpg",
+      "original_url": "https://comicvine.gamespot.com/a/uploads/original/11/110017/10110234-www.jpg",
+      "image_tags": "All Images"
+    },
+    "issue_number": "2",
+    "location_credits": [],
+    "name": null,
+    "object_credits": [],
+    "person_credits": [
+      {
+        "api_detail_url": "https://comicvine.gamespot.com/api/person/4040-141692/",
+        "id": 141692,
+        "name": "Atoha",
+        "site_detail_url": "https://comicvine.gamespot.com/atoha/4040-141692/",
+        "role": "writer"
+      },
+      {
+        "api_detail_url": "https://comicvine.gamespot.com/api/person/4040-109792/",
+        "id": 109792,
+        "name": "Kusano Neo",
+        "site_detail_url": "https://comicvine.gamespot.com/kusano-neo/4040-109792/",
+        "role": "artist, cover"
+      },
+      {
+        "api_detail_url": "https://comicvine.gamespot.com/api/person/4040-131583/",
+        "id": 131583,
+        "name": "Pupps",
+        "site_detail_url": "https://comicvine.gamespot.com/pupps/4040-131583/",
+        "role": "designer"
+      }
+    ],
+    "site_detail_url": "https://comicvine.gamespot.com/hihou-seisokei-de-utteita-teihen-haishinsha-ukkari/4000-1175003/",
+    "store_date": "2026-03-09",
+    "story_arc_credits": [],
+    "team_credits": [],
+    "team_disbanded_in": [],
+    "volume": {
+      "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-173613/",
+      "id": 173613,
+      "name": "[Hihou] Seisokei de Utteita Teihen Haishinsha, Ukkari Haishin o Kiriwasureta mama SS-kyuu Monster o Kobushi de Naguritobashiteshimau",
+      "site_detail_url": "https://comicvine.gamespot.com/hihou-seisokei-de-utteita-teihen-haishinsha-ukkari/4050-173613/"
+    }
+  },
+  "version": "1.0"
+}

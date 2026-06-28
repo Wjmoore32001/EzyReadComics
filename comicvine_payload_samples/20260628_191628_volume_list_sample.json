@@ -1,0 +1,53 @@
+{
+  "error": "OK",
+  "limit": 1,
+  "offset": 0,
+  "number_of_page_results": 1,
+  "number_of_total_results": 157119,
+  "status_code": 1,
+  "results": [
+    {
+      "aliases": null,
+      "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-173613/",
+      "count_of_issues": 0,
+      "date_added": "2026-06-28 12:14:57",
+      "date_last_updated": "2026-06-28 12:15:27",
+      "deck": null,
+      "description": "<p><strong>Proper Japanese Title</strong>: 【悲報】清楚系で売っていた底辺配信者、うっかり配信を切り忘れたままＳＳ級モンスターを拳で殴り飛ばしてしまう</p>",
+      "first_issue": {
+        "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-1175002/",
+        "id": 1175002,
+        "name": null,
+        "issue_number": "1"
+      },
+      "id": 173613,
+      "image": {
+        "icon_url": "https://comicvine.gamespot.com/a/uploads/original/11/110017/10110232-wwww.jpg",
+        "medium_url": "https://comicvine.gamespot.com/a/uploads/scale_medium/11/110017/10110232-wwww.jpg",
+        "screen_url": "https://comicvine.gamespot.com/a/uploads/original/11/110017/10110232-wwww.jpg",
+        "screen_large_url": "https://comicvine.gamespot.com/a/uploads/original/11/110017/10110232-wwww.jpg",
+        "small_url": "https://comicvine.gamespot.com/a/uploads/original/11/110017/10110232-wwww.jpg",
+        "super_url": "https://comicvine.gamespot.com/a/uploads/original/11/110017/10110232-wwww.jpg",
+        "thumb_url": "https://comicvine.gamespot.com/a/uploads/original/11/110017/10110232-wwww.jpg",
+        "tiny_url": "https://comicvine.gamespot.com/a/uploads/square_mini/11/110017/10110232-wwww.jpg",
+        "original_url": "https://comicvine.gamespot.com/a/uploads/original/11/110017/10110232-wwww.jpg",
+        "image_tags": "All Images"
+      },
+      "last_issue": {
+        "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-1175003/",
+        "id": 1175003,
+        "name": null,
+        "issue_number": "2"
+      },
+      "name": "[Hihou] Seisokei de Utteita Teihen Haishinsha, Ukkari Haishin o Kiriwasureta mama SS-kyuu Monster o Kobushi de Naguritobashiteshimau",
+      "publisher": {
+        "api_detail_url": "https://comicvine.gamespot.com/api/publisher/4010-2259/",
+        "id": 2259,
+        "name": "Kodansha"
+      },
+      "site_detail_url": "https://comicvine.gamespot.com/hihou-seisokei-de-utteita-teihen-haishinsha-ukkari/4050-173613/",
+      "start_year": "2025"
+    }
+  ],
+  "version": "1.0"
+}
