@@ -290,6 +290,14 @@ def process_one_issue_update_batch(
     total_results = to_int(data.get("number_of_total_results"))
     candidates = data.get("results") or []
 
+    print_scan_progress(
+        command=command,
+        total_results=total_results,
+        starting_offset=starting_offset,
+        candidates=candidates,
+        candidate_limit=candidate_limit,
+    )
+
     scan.total_results = total_results
     scan.last_scanned_at = timezone.now()
 
@@ -606,6 +614,21 @@ def save_scan(scan, dry_run):
         return
 
     scan.save()
+
+
+def print_scan_progress(command, total_results, starting_offset, candidates, candidate_limit):
+    candidates_returned = len(candidates)
+    expected_checked_after_batch = starting_offset + candidates_returned
+    expected_remaining_after_batch = max(total_results - expected_checked_after_batch, 0)
+
+    command.stdout.write("")
+    command.stdout.write("Scan progress for this date:")
+    command.stdout.write(f"Total candidates for this date: {total_results}")
+    command.stdout.write(f"Already checked before this batch: {starting_offset}")
+    command.stdout.write(f"Requested batch size: {candidate_limit}")
+    command.stdout.write(f"Candidates returned in this batch: {candidates_returned}")
+    command.stdout.write(f"Expected checked after this batch: {expected_checked_after_batch}")
+    command.stdout.write(f"Expected remaining after this batch: {expected_remaining_after_batch}")
 
 
 def print_issue_preview(command, issue, volume_data, issue_already_exists):
