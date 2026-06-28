@@ -13,7 +13,7 @@ concurrency:
 jobs:
   sync-comics:
     runs-on: ubuntu-latest
-    timeout-minutes: 80
+    timeout-minutes: 70
 
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
