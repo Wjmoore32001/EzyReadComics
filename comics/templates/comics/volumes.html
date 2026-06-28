@@ -14,16 +14,64 @@
 
     <form method="get" class="d-flex align-items-end gap-2">
         <div>
-            <label for="publisher" class="form-label text-secondary">Publisher</label>
-            <select id="publisher" name="publisher" class="form-select" onchange="this.form.submit()">
-                <option value="">All publishers</option>
+            <label for="publisher-search-volumes" class="form-label text-secondary">Publisher</label>
 
-                {% for publisher in publishers %}
-                    <option value="{{ publisher }}" {% if selected_publisher == publisher %}selected{% endif %}>
-                        {{ publisher }}
-                    </option>
-                {% endfor %}
-            </select>
+            <div class="dropdown">
+                <button
+                    class="btn btn-outline-secondary dropdown-toggle text-start"
+                    type="button"
+                    id="publisher-dropdown-volumes"
+                    data-bs-toggle="dropdown"
+                    data-bs-auto-close="outside"
+                    aria-expanded="false"
+                    style="min-width: 16rem;"
+                >
+                    {% if selected_publisher %}
+                        {{ selected_publisher }}
+                    {% else %}
+                        All publishers
+                    {% endif %}
+                </button>
+
+                <div class="dropdown-menu p-2" aria-labelledby="publisher-dropdown-volumes" style="min-width: 16rem;">
+                    <input
+                        type="search"
+                        id="publisher-search-volumes"
+                        class="form-control mb-2"
+                        placeholder="Search publishers..."
+                        autocomplete="off"
+                    >
+
+                    <button
+                        type="submit"
+                        name="publisher"
+                        value=""
+                        class="dropdown-item rounded {% if not selected_publisher %}active{% endif %}"
+                    >
+                        All publishers
+                    </button>
+
+                    <div class="dropdown-divider"></div>
+
+                    <div data-publisher-options style="max-height: 16rem; overflow-y: auto;">
+                        {% for publisher in publishers %}
+                            <button
+                                type="submit"
+                                name="publisher"
+                                value="{{ publisher }}"
+                                class="dropdown-item rounded {% if selected_publisher == publisher %}active{% endif %}"
+                                data-publisher-option
+                            >
+                                {{ publisher }}
+                            </button>
+                        {% endfor %}
+                    </div>
+
+                    <p class="dropdown-item-text text-secondary mb-0 d-none" data-no-publisher-results>
+                        No matching publishers.
+                    </p>
+                </div>
+            </div>
         </div>
 
         {% if selected_publisher %}
@@ -92,4 +140,50 @@
         </div>
     </div>
 </div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const searchInput = document.getElementById("publisher-search-volumes");
+    const dropdownButton = document.getElementById("publisher-dropdown-volumes");
+
+    if (!searchInput || !dropdownButton) {
+        return;
+    }
+
+    const dropdownMenu = searchInput.closest(".dropdown-menu");
+    const publisherOptions = Array.from(dropdownMenu.querySelectorAll("[data-publisher-option]"));
+    const noResultsMessage = dropdownMenu.querySelector("[data-no-publisher-results]");
+
+    function filterPublisherOptions() {
+        const searchValue = searchInput.value.trim().toLowerCase();
+        let visibleCount = 0;
+
+        publisherOptions.forEach(function (option) {
+            const publisherName = option.textContent.trim().toLowerCase();
+            const shouldShow = publisherName.includes(searchValue);
+
+            option.classList.toggle("d-none", !shouldShow);
+
+            if (shouldShow) {
+                visibleCount += 1;
+            }
+        });
+
+        if (noResultsMessage) {
+            noResultsMessage.classList.toggle("d-none", visibleCount !== 0);
+        }
+    }
+
+    searchInput.addEventListener("input", filterPublisherOptions);
+
+    searchInput.addEventListener("click", function (event) {
+        event.stopPropagation();
+    });
+
+    dropdownButton.addEventListener("shown.bs.dropdown", function () {
+        searchInput.focus();
+        searchInput.select();
+    });
+});
+</script>
 {% endblock %}
