@@ -6,6 +6,52 @@ Newest entries are listed first.
 
 ---
 
+## 2026-06-27 — Basic Issue and Volume List Pages Added
+
+Added two simple front-end data pages.
+
+New pages:
+
+```text
+/issues/
+/volumes/
+```
+
+Navbar links added:
+
+```text
+Issues
+Volumes
+```
+
+The issues page currently:
+
+* lists stored issue records
+* orders issues by most recent `store_date` first
+* shows publisher
+* shows volume
+* shows issue number
+* shows title
+* shows cover date
+* links to Comic Vine when available
+* includes a publisher dropdown filter
+
+The volumes page currently:
+
+* lists stored volume records
+* orders volumes by latest related issue `store_date`
+* shows publisher
+* shows volume name
+* shows stored issue count
+* links to Comic Vine when available
+* includes a publisher dropdown filter
+
+The publisher dropdown is generated automatically from unique publisher values stored in `ComicVolume.publisher`.
+
+No new models or migrations were needed for this step.
+
+---
+
 ## 2026-06-27 — Day-Based Comic Vine Issue Importer Added
 
 Added the current Comic Vine import system.
@@ -45,7 +91,7 @@ Current state:
 * importer can resume a partially scanned date
 * imported issues are linked to volumes
 * publishers are stored on volumes
-* no issue display page has been built yet
+* basic issue and volume display pages now exist
 
 ---
 

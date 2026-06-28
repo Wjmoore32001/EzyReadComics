@@ -31,7 +31,10 @@ Current state:
 * importer does not scan today
 * importer imports all issue candidates, not only Marvel
 * publisher is stored on `ComicVolume`
-* Marvel, DC, manga publishers, and other publishers can be filtered later by volume publisher
+* basic issue list page added
+* basic volume list page added
+* issue and volume pages include publisher dropdown filtering
+* publisher dropdowns are built automatically from publishers stored in the database
 
 ## Current Data Model
 
@@ -141,6 +144,69 @@ This means the database can be filled over time by repeatedly running the import
 
 If the importer is not run for several days, it will work backward from yesterday and fill the missing days.
 
+## Current Front End
+
+The project currently has three user-facing pages.
+
+Homepage:
+
+```text
+/
+```
+
+Issues page:
+
+```text
+/issues/
+```
+
+Volumes page:
+
+```text
+/volumes/
+```
+
+The navbar currently includes:
+
+```text
+Issues
+Volumes
+```
+
+### Issues Page
+
+The issues page lists stored issue records.
+
+Current behavior:
+
+* lists issues in a Bootstrap table
+* orders issues by most recent `store_date` first
+* shows publisher
+* shows volume name
+* shows issue number
+* shows issue title
+* shows cover date
+* links to the Comic Vine issue page when available
+* includes a publisher dropdown filter
+
+The publisher dropdown is built automatically from unique publisher names stored in `ComicVolume.publisher`.
+
+### Volumes Page
+
+The volumes page lists stored volume records.
+
+Current behavior:
+
+* lists volumes in a Bootstrap table
+* shows publisher
+* shows volume name
+* shows stored issue count
+* shows latest known issue `store_date`
+* links to the Comic Vine volume page when available
+* includes a publisher dropdown filter
+
+`ComicVolume` does not have its own `store_date`, so the volumes page orders volumes by the most recent `store_date` from their related issues.
+
 ## Why Today Is Not Scanned
 
 Today is intentionally skipped.
@@ -163,26 +229,18 @@ That is acceptable for the current project.
 
 A separate same-day/live-check command can be added later if needed.
 
-## Current Local Page
-
-The first local homepage runs at:
-
-```text
-http://127.0.0.1:8000/
-```
-
-Current page:
-
-```text
-A Bootstrap-styled dark mode homepage using a shared base template.
-```
-
 ## Important Commands
 
 Run Django checks:
 
 ```bash
 python manage.py check
+```
+
+Run the development server:
+
+```bash
+python manage.py runserver
 ```
 
 Run the Comic Vine importer dry-run:
@@ -201,6 +259,12 @@ Run multiple issue batches in one command:
 
 ```bash
 python manage.py import_comicvine_marvel_issues --max-issue-batches 5
+```
+
+Run the importer with a slower volume lookup delay:
+
+```bash
+python manage.py import_comicvine_marvel_issues --volume-request-delay 1.0
 ```
 
 ## Environment Variables
@@ -236,8 +300,14 @@ Current stack:
 The current goal is:
 
 ```text
-Import Comic Vine issue data reliably, store it in Neon, then build pages to display it.
+Import Comic Vine issue data reliably, store it in Neon, then build simple pages to display and filter it.
 ```
+
+Partially started:
+
+* issue list page
+* volume list page
+* publisher filtering
 
 Not part of the current stage yet:
 

@@ -1,0 +1,119 @@
+{% extends "comics/base.html" %}
+
+{% block title %}Issues | EzyReadComics{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-column flex-md-row justify-content-between align-items-md-end gap-3 mb-4">
+    <div>
+        <p class="text-uppercase text-secondary fw-semibold mb-2">Comic Vine Data</p>
+        <h1 class="display-6 fw-bold mb-0">Issues</h1>
+        <p class="text-secondary mb-0">
+            Issue records ordered by most recent store date first.
+        </p>
+    </div>
+
+    <form method="get" class="d-flex align-items-end gap-2">
+        <div>
+            <label for="publisher" class="form-label text-secondary">Publisher</label>
+            <select id="publisher" name="publisher" class="form-select" onchange="this.form.submit()">
+                <option value="">All publishers</option>
+
+                {% for publisher in publishers %}
+                    <option value="{{ publisher }}" {% if selected_publisher == publisher %}selected{% endif %}>
+                        {{ publisher }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        {% if selected_publisher %}
+            <div class="mb-0">
+                <a href="{% url 'issues' %}" class="btn btn-outline-secondary">Clear</a>
+            </div>
+        {% endif %}
+    </form>
+</div>
+
+<div class="card border-secondary bg-body-tertiary">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-dark table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th scope="col">Store Date</th>
+                        <th scope="col">Publisher</th>
+                        <th scope="col">Volume</th>
+                        <th scope="col">Issue</th>
+                        <th scope="col">Title</th>
+                        <th scope="col">Cover Date</th>
+                        <th scope="col">Comic Vine</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for issue in issues %}
+                        <tr>
+                            <td>
+                                {% if issue.store_date %}
+                                    {{ issue.store_date }}
+                                {% else %}
+                                    <span class="text-secondary">Unknown</span>
+                                {% endif %}
+                            </td>
+
+                            <td>
+                                {% if issue.volume.publisher %}
+                                    {{ issue.volume.publisher }}
+                                {% else %}
+                                    <span class="text-secondary">Unknown</span>
+                                {% endif %}
+                            </td>
+
+                            <td>
+                                {% if issue.volume %}
+                                    {{ issue.volume.name }}
+                                {% else %}
+                                    <span class="text-secondary">Unknown Volume</span>
+                                {% endif %}
+                            </td>
+
+                            <td>#{{ issue.issue_number }}</td>
+
+                            <td>
+                                {% if issue.issue_title %}
+                                    {{ issue.issue_title }}
+                                {% else %}
+                                    <span class="text-secondary">Untitled</span>
+                                {% endif %}
+                            </td>
+
+                            <td>
+                                {% if issue.cover_date %}
+                                    {{ issue.cover_date }}
+                                {% else %}
+                                    <span class="text-secondary">Unknown</span>
+                                {% endif %}
+                            </td>
+
+                            <td>
+                                {% if issue.comicvine_url %}
+                                    <a href="{{ issue.comicvine_url }}" target="_blank" rel="noopener noreferrer">
+                                        Open
+                                    </a>
+                                {% else %}
+                                    <span class="text-secondary">None</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="7" class="text-center text-secondary py-4">
+                                No issues found.
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
