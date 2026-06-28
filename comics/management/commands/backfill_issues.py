@@ -1,6 +1,5 @@
 import os
 import re
-import time
 from dataclasses import dataclass
 from datetime import datetime, time as datetime_time, timedelta
 
@@ -8,11 +7,16 @@ import requests
 from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
-from comics.models import ComicIssue, ComicVineDateScan, ComicVolume
+from comics.models import (
+    ComicIssue,
+    ComicVineDateScan,
+    ComicVineSyncState,
+    ComicVolume,
+)
 
 
 ISSUES_URL = "https://comicvine.gamespot.com/api/issues/"
-USER_AGENT = "EzyReadComics date-added issue importer"
+USER_AGENT = "EzyReadComics issue backfill importer"
 
 
 @dataclass
@@ -36,25 +40,25 @@ class BatchResult:
     issues_created: int = 0
     existing_issues_skipped: int = 0
     missing_data_skipped: int = 0
-    volume_lookups: int = 0
+    minimal_volumes_needed: int = 0
     date_completed: bool = False
 
 
 @dataclass
 class ImportSummary:
-    issue_batches_fetched: int = 0
+    issue_backfill_batches_fetched: int = 0
     candidates_checked: int = 0
     issues_created: int = 0
     existing_issues_skipped: int = 0
     missing_data_skipped: int = 0
-    volume_lookups: int = 0
+    minimal_volumes_needed: int = 0
     dates_completed: int = 0
 
 
 class Command(BaseCommand):
     help = (
-        "Import all Comic Vine issues one completed date_added day at a time. "
-        "This command does not scan today."
+        "Backfill older Comic Vine issues before the update tracking start date. "
+        "This command scans issues by date_added and works backward."
     )
 
     def add_arguments(self, parser):
@@ -66,23 +70,16 @@ class Command(BaseCommand):
         )
 
         parser.add_argument(
-            "--max-issue-batches",
+            "--max-backfill-batches",
             type=int,
             default=1,
-            help="Maximum number of issue batches to fetch in one run. Defaults to 1.",
-        )
-
-        parser.add_argument(
-            "--volume-request-delay",
-            type=float,
-            default=0.25,
-            help="Seconds to pause after each Comic Vine volume lookup. Defaults to 0.25.",
+            help="Maximum number of issue backfill batches to fetch in one run. Defaults to 1.",
         )
 
         parser.add_argument(
             "--dry-run",
             action="store_true",
-            help="Print what would be imported without saving anything.",
+            help="Print what would be changed without saving anything.",
         )
 
     def handle(self, *args, **options):
@@ -94,56 +91,59 @@ class Command(BaseCommand):
             )
 
         candidate_limit = options["candidate_limit"]
-        max_issue_batches = options["max_issue_batches"]
-        volume_request_delay = options["volume_request_delay"]
+        max_backfill_batches = options["max_backfill_batches"]
         dry_run = options["dry_run"]
 
         validate_options(
             candidate_limit=candidate_limit,
-            max_issue_batches=max_issue_batches,
-            volume_request_delay=volume_request_delay,
+            max_backfill_batches=max_backfill_batches,
         )
+
+        sync_state = get_sync_state()
+        update_tracking_start_date = sync_state.update_tracking_start_date
+        newest_backfill_scan_date = update_tracking_start_date - timedelta(days=1)
 
         if dry_run:
             self.stdout.write(self.style.WARNING("Dry run enabled. Nothing will be saved."))
 
         self.stdout.write("")
-        self.stdout.write(self.style.SUCCESS("Comic Vine new issue importer"))
+        self.stdout.write(self.style.SUCCESS("Comic Vine issue backfill importer"))
         self.stdout.write("Scanning Comic Vine issues by date_added.")
-        self.stdout.write("Using scan_kind: issue_date_added.")
-        self.stdout.write("Today is intentionally not scanned.")
         self.stdout.write("Existing issues are skipped by Comic Vine issue ID.")
-        self.stdout.write(f"Newest possible scan date: {get_newest_allowed_scan_date().isoformat()}")
+        self.stdout.write(f"Update tracking start date: {update_tracking_start_date.isoformat()}")
+        self.stdout.write(f"Newest backfill scan date: {newest_backfill_scan_date.isoformat()}")
         self.stdout.write(f"Candidate batch size: {candidate_limit}")
-        self.stdout.write(f"Maximum issue batches this run: {max_issue_batches}")
+        self.stdout.write(f"Maximum issue backfill batches this run: {max_backfill_batches}")
 
         summary = ImportSummary()
         volume_cache = {}
 
-        for batch_number in range(1, max_issue_batches + 1):
-            scan = get_next_incomplete_date_scan(dry_run=dry_run)
+        for batch_number in range(1, max_backfill_batches + 1):
+            scan = get_next_incomplete_backfill_date_scan(
+                newest_backfill_scan_date=newest_backfill_scan_date,
+                dry_run=dry_run,
+            )
 
             self.stdout.write("")
-            self.stdout.write(self.style.SUCCESS(f"Issue batch {batch_number}"))
+            self.stdout.write(self.style.SUCCESS(f"Issue backfill batch {batch_number}"))
             self.stdout.write(f"Scan date_added day: {scan.scan_date}")
             self.stdout.write(f"Starting offset for this date_added day: {scan.next_offset}")
 
-            result = process_one_issue_batch(
+            result = process_one_issue_backfill_batch(
                 command=self,
                 api_key=api_key,
                 scan=scan,
                 candidate_limit=candidate_limit,
                 volume_cache=volume_cache,
-                volume_request_delay=volume_request_delay,
                 dry_run=dry_run,
             )
 
-            summary.issue_batches_fetched += 1
+            summary.issue_backfill_batches_fetched += 1
             summary.candidates_checked += result.candidates_checked
             summary.issues_created += result.issues_created
             summary.existing_issues_skipped += result.existing_issues_skipped
             summary.missing_data_skipped += result.missing_data_skipped
-            summary.volume_lookups += result.volume_lookups
+            summary.minimal_volumes_needed += result.minimal_volumes_needed
 
             if result.date_completed:
                 summary.dates_completed += 1
@@ -157,30 +157,34 @@ class Command(BaseCommand):
             self.stdout.write("No database changes were saved because this was a dry run.")
 
 
-def validate_options(candidate_limit, max_issue_batches, volume_request_delay):
+def validate_options(candidate_limit, max_backfill_batches):
     if candidate_limit < 1:
         raise CommandError("candidate-limit must be at least 1.")
 
     if candidate_limit > 100:
         raise CommandError("Comic Vine issue requests cannot use a limit above 100.")
 
-    if max_issue_batches < 1:
-        raise CommandError("max-issue-batches must be at least 1.")
+    if max_backfill_batches < 1:
+        raise CommandError("max-backfill-batches must be at least 1.")
 
-    if max_issue_batches > 5:
-        raise CommandError("This importer only allows max-issue-batches up to 5 for now.")
-
-    if volume_request_delay < 0:
-        raise CommandError("volume-request-delay cannot be negative.")
+    if max_backfill_batches > 5:
+        raise CommandError("This importer only allows max-backfill-batches up to 5 for now.")
 
 
-def get_newest_allowed_scan_date():
-    return timezone.localdate() - timedelta(days=1)
+def get_sync_state():
+    sync_state = ComicVineSyncState.objects.filter(name="default").first()
+
+    if not sync_state or not sync_state.update_tracking_start_date:
+        raise CommandError(
+            "ComicVineSyncState is not initialized. Run update_issues first."
+        )
+
+    return sync_state
 
 
-def get_next_incomplete_date_scan(dry_run):
+def get_next_incomplete_backfill_date_scan(newest_backfill_scan_date, dry_run):
     scan_kind = ComicVineDateScan.ISSUE_DATE_ADDED
-    scan_date = get_newest_allowed_scan_date()
+    scan_date = newest_backfill_scan_date
 
     while True:
         existing_scan = ComicVineDateScan.objects.filter(
@@ -218,18 +222,17 @@ def get_next_incomplete_date_scan(dry_run):
         )
 
 
-def process_one_issue_batch(
+def process_one_issue_backfill_batch(
     command,
     api_key,
     scan,
     candidate_limit,
     volume_cache,
-    volume_request_delay,
     dry_run,
 ):
     starting_offset = scan.next_offset
 
-    data = fetch_issue_candidates(
+    data = fetch_issue_backfill_candidates(
         api_key=api_key,
         scan_date=scan.scan_date,
         limit=candidate_limit,
@@ -281,22 +284,23 @@ def process_one_issue_batch(
             result.existing_issues_skipped += 1
             continue
 
-        volume_data = get_volume_data(
-            api_key=api_key,
+        volume_data = get_volume_data_from_issue_response(
             volume=issue.get("volume") or {},
             volume_cache=volume_cache,
-            volume_request_delay=volume_request_delay,
-            dry_run=dry_run,
         )
 
         if not volume_data:
             result.missing_data_skipped += 1
             continue
 
-        if volume_data["was_fetched_from_api"]:
-            result.volume_lookups += 1
+        if not volume_data["exists_locally"]:
+            result.minimal_volumes_needed += 1
 
-        print_issue_preview(command, issue, volume_data)
+        print_issue_preview(
+            command=command,
+            issue=issue,
+            volume_data=volume_data,
+        )
 
         if not dry_run:
             save_issue(issue=issue, volume_data=volume_data)
@@ -321,7 +325,7 @@ def process_one_issue_batch(
     return result
 
 
-def fetch_issue_candidates(api_key, scan_date, limit, offset):
+def fetch_issue_backfill_candidates(api_key, scan_date, limit, offset):
     start_datetime = datetime.combine(scan_date, datetime_time.min)
     end_datetime = datetime.combine(scan_date, datetime_time.max).replace(microsecond=0)
 
@@ -365,31 +369,18 @@ def get_existing_issue_ids(candidates):
     )
 
 
-def get_volume_data(
-    api_key,
-    volume,
-    volume_cache,
-    volume_request_delay,
-    dry_run,
-):
+def get_volume_data_from_issue_response(volume, volume_cache):
     volume_id = get_volume_id(volume)
 
     if not volume_id:
         return None
 
     if volume_id in volume_cache:
-        cached_volume_data = volume_cache[volume_id].copy()
-        cached_volume_data["was_fetched_from_api"] = False
-        return cached_volume_data
+        return volume_cache[volume_id].copy()
 
     existing_volume = ComicVolume.objects.filter(comicvine_id=volume_id).first()
 
-    if (
-        existing_volume
-        and existing_volume.publisher
-        and existing_volume.date_added
-        and existing_volume.date_last_updated
-    ):
+    if existing_volume:
         volume_data = {
             "comicvine_id": existing_volume.comicvine_id,
             "name": existing_volume.name,
@@ -397,67 +388,27 @@ def get_volume_data(
             "date_added": existing_volume.date_added,
             "date_last_updated": existing_volume.date_last_updated,
             "comicvine_url": existing_volume.comicvine_url,
-            "was_fetched_from_api": False,
+            "exists_locally": True,
         }
         volume_cache[volume_id] = volume_data.copy()
         return volume_data
 
-    volume_api_url = volume.get("api_detail_url")
-
-    if not volume_api_url:
-        return None
-
-    params = {
-        "api_key": api_key,
-        "format": "json",
-        "field_list": "id,name,publisher,date_added,date_last_updated,site_detail_url",
-    }
-
-    data = fetch_comicvine_json(volume_api_url, params)
-    fetched_volume = data.get("results") or {}
-    publisher = fetched_volume.get("publisher") or {}
-
     volume_data = {
         "comicvine_id": volume_id,
-        "name": fetched_volume.get("name") or volume.get("name") or "",
-        "publisher": publisher.get("name") or "",
-        "date_added": parse_comicvine_datetime(fetched_volume.get("date_added")),
-        "date_last_updated": parse_comicvine_datetime(fetched_volume.get("date_last_updated")),
-        "comicvine_url": fetched_volume.get("site_detail_url") or volume.get("site_detail_url") or "",
-        "was_fetched_from_api": True,
+        "name": volume.get("name") or "",
+        "publisher": "",
+        "date_added": None,
+        "date_last_updated": None,
+        "comicvine_url": volume.get("site_detail_url") or "",
+        "exists_locally": False,
     }
 
     volume_cache[volume_id] = volume_data.copy()
-
-    if not dry_run:
-        ComicVolume.objects.update_or_create(
-            comicvine_id=volume_data["comicvine_id"],
-            defaults={
-                "name": volume_data["name"],
-                "publisher": volume_data["publisher"],
-                "date_added": volume_data["date_added"],
-                "date_last_updated": volume_data["date_last_updated"],
-                "comicvine_url": volume_data["comicvine_url"],
-            },
-        )
-
-    time.sleep(volume_request_delay)
-
     return volume_data
 
 
 def save_issue(issue, volume_data):
-    volume_object, _ = ComicVolume.objects.update_or_create(
-        comicvine_id=volume_data["comicvine_id"],
-        defaults={
-            "name": volume_data["name"],
-            "publisher": volume_data["publisher"],
-            "date_added": volume_data["date_added"],
-            "date_last_updated": volume_data["date_last_updated"],
-            "comicvine_url": volume_data["comicvine_url"],
-        },
-    )
-
+    volume_object = get_or_create_volume_object(volume_data)
     image = issue.get("image") or {}
 
     ComicIssue.objects.update_or_create(
@@ -474,6 +425,49 @@ def save_issue(issue, volume_data):
             "image_url": image.get("small_url") or "",
         },
     )
+
+
+def get_or_create_volume_object(volume_data):
+    volume_object, created = ComicVolume.objects.get_or_create(
+        comicvine_id=volume_data["comicvine_id"],
+        defaults={
+            "name": volume_data["name"],
+            "publisher": volume_data["publisher"],
+            "date_added": volume_data["date_added"],
+            "date_last_updated": volume_data["date_last_updated"],
+            "comicvine_url": volume_data["comicvine_url"],
+        },
+    )
+
+    if created:
+        return volume_object
+
+    fields_to_update = []
+
+    if not volume_object.name and volume_data["name"]:
+        volume_object.name = volume_data["name"]
+        fields_to_update.append("name")
+
+    if not volume_object.publisher and volume_data["publisher"]:
+        volume_object.publisher = volume_data["publisher"]
+        fields_to_update.append("publisher")
+
+    if not volume_object.date_added and volume_data["date_added"]:
+        volume_object.date_added = volume_data["date_added"]
+        fields_to_update.append("date_added")
+
+    if not volume_object.date_last_updated and volume_data["date_last_updated"]:
+        volume_object.date_last_updated = volume_data["date_last_updated"]
+        fields_to_update.append("date_last_updated")
+
+    if not volume_object.comicvine_url and volume_data["comicvine_url"]:
+        volume_object.comicvine_url = volume_data["comicvine_url"]
+        fields_to_update.append("comicvine_url")
+
+    if fields_to_update:
+        volume_object.save(update_fields=fields_to_update)
+
+    return volume_object
 
 
 def get_volume_id(volume):
@@ -500,6 +494,12 @@ def fetch_comicvine_json(url, params):
     }
 
     response = requests.get(url, params=params, headers=headers, timeout=30)
+
+    if response.status_code == 420:
+        raise CommandError(
+            "Comic Vine returned HTTP 420. This is probably a temporary rate or velocity limit. "
+            "Wait before running the command again."
+        )
 
     if response.status_code != 200:
         raise CommandError(
@@ -574,22 +574,14 @@ def print_scan_progress(command, total_results, starting_offset, candidates, can
 
 
 def print_issue_preview(command, issue, volume_data):
-    image = issue.get("image") or {}
-
     command.stdout.write("")
     command.stdout.write(
-        f"Issue imported: {volume_data['name']} #{issue.get('issue_number') or ''}"
+        f"Issue create: {volume_data['name']} #{issue.get('issue_number') or ''}"
     )
     command.stdout.write(f"Comic Vine Issue ID: {issue.get('id')}")
     command.stdout.write(f"Comic Vine Volume ID: {volume_data['comicvine_id']}")
-    command.stdout.write(f"Publisher: {volume_data['publisher']}")
     command.stdout.write(f"Issue Title: {issue.get('name') or ''}")
     command.stdout.write(f"Date Added to Comic Vine: {issue.get('date_added') or ''}")
-    command.stdout.write(f"Date Last Updated on Comic Vine: {issue.get('date_last_updated') or ''}")
-    command.stdout.write(f"Cover Date: {parse_comicvine_date(issue.get('cover_date')) or ''}")
-    command.stdout.write(f"Store Date: {parse_comicvine_date(issue.get('store_date')) or ''}")
-    command.stdout.write(f"Comic Vine URL: {issue.get('site_detail_url') or ''}")
-    command.stdout.write(f"Image URL: {image.get('small_url') or ''}")
 
 
 def print_batch_summary(command, result):
@@ -603,17 +595,17 @@ def print_batch_summary(command, result):
     command.stdout.write(f"Issues created in this batch: {result.issues_created}")
     command.stdout.write(f"Existing issues skipped: {result.existing_issues_skipped}")
     command.stdout.write(f"Missing-data candidates skipped: {result.missing_data_skipped}")
-    command.stdout.write(f"Volume API lookups: {result.volume_lookups}")
+    command.stdout.write(f"Minimal local volumes needed: {result.minimal_volumes_needed}")
     command.stdout.write(f"Date completed: {result.date_completed}")
 
 
 def print_import_summary(command, summary):
     command.stdout.write("")
-    command.stdout.write(command.style.SUCCESS("New issue import summary:"))
-    command.stdout.write(f"Issue batches fetched: {summary.issue_batches_fetched}")
+    command.stdout.write(command.style.SUCCESS("Issue backfill summary:"))
+    command.stdout.write(f"Issue backfill batches fetched: {summary.issue_backfill_batches_fetched}")
     command.stdout.write(f"Candidates checked: {summary.candidates_checked}")
     command.stdout.write(f"Issues created: {summary.issues_created}")
     command.stdout.write(f"Existing issues skipped: {summary.existing_issues_skipped}")
     command.stdout.write(f"Missing-data candidates skipped: {summary.missing_data_skipped}")
-    command.stdout.write(f"Volume API lookups: {summary.volume_lookups}")
+    command.stdout.write(f"Minimal local volumes needed: {summary.minimal_volumes_needed}")
     command.stdout.write(f"Dates completed: {summary.dates_completed}")

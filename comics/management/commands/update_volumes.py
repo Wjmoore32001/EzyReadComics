@@ -10,7 +10,7 @@ from comics.models import ComicVineDateScan, ComicVineSyncState, ComicVolume
 
 
 VOLUMES_URL = "https://comicvine.gamespot.com/api/volumes/"
-USER_AGENT = "EzyReadComics volume update importer"
+USER_AGENT = "EzyReadComics volume updater"
 
 
 @dataclass
@@ -37,6 +37,7 @@ class BatchResult:
     total_results: int
     candidates_checked: int = 0
     volumes_updated: int = 0
+    volumes_skipped_not_newer: int = 0
     unknown_volumes_skipped: int = 0
     missing_data_skipped: int = 0
     date_completed: bool = False
@@ -47,6 +48,7 @@ class ImportSummary:
     volume_update_batches_fetched: int = 0
     candidates_checked: int = 0
     volumes_updated: int = 0
+    volumes_skipped_not_newer: int = 0
     unknown_volumes_skipped: int = 0
     missing_data_skipped: int = 0
     dates_completed: int = 0
@@ -63,7 +65,7 @@ class Command(BaseCommand):
             "--candidate-limit",
             type=int,
             default=100,
-            help="Number of Comic Vine volume update candidates to fetch per batch. Defaults to 100.",
+            help="Number of Comic Vine volume candidates to fetch per batch. Defaults to 100.",
         )
 
         parser.add_argument(
@@ -76,7 +78,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "--dry-run",
             action="store_true",
-            help="Print what would be updated without saving anything.",
+            help="Print what would be changed without saving anything.",
         )
 
     def handle(self, *args, **options):
@@ -103,10 +105,10 @@ class Command(BaseCommand):
             self.stdout.write(self.style.WARNING("Dry run enabled. Nothing will be saved."))
 
         self.stdout.write("")
-        self.stdout.write(self.style.SUCCESS("Comic Vine volume update importer"))
+        self.stdout.write(self.style.SUCCESS("Comic Vine volume updater"))
         self.stdout.write("Scanning Comic Vine volumes by date_last_updated.")
         self.stdout.write("Today is intentionally not scanned.")
-        self.stdout.write("Only volumes already stored locally will be updated.")
+        self.stdout.write("Existing volumes are updated only when Comic Vine has a newer date_last_updated.")
         self.stdout.write(f"Newest possible scan date: {get_newest_allowed_scan_date().isoformat()}")
         self.stdout.write(f"Update tracking start date: {update_tracking_start_date.isoformat()}")
         self.stdout.write(f"Candidate batch size: {candidate_limit}")
@@ -127,6 +129,7 @@ class Command(BaseCommand):
                         "No incomplete volume update dates remain at or after the update tracking start date."
                     )
                 )
+                self.stdout.write("No Comic Vine API request was needed.")
                 break
 
             self.stdout.write("")
@@ -145,6 +148,7 @@ class Command(BaseCommand):
             summary.volume_update_batches_fetched += 1
             summary.candidates_checked += result.candidates_checked
             summary.volumes_updated += result.volumes_updated
+            summary.volumes_skipped_not_newer += result.volumes_skipped_not_newer
             summary.unknown_volumes_skipped += result.unknown_volumes_skipped
             summary.missing_data_skipped += result.missing_data_skipped
 
@@ -291,7 +295,7 @@ def process_one_volume_update_batch(
         result.ending_offset = scan.next_offset
         return result
 
-    existing_volume_ids = get_existing_volume_ids(candidates)
+    existing_volumes_by_id = get_existing_volumes_by_id(candidates)
 
     for volume in candidates:
         result.candidates_checked += 1
@@ -302,20 +306,37 @@ def process_one_volume_update_batch(
             result.missing_data_skipped += 1
             continue
 
-        if comicvine_volume_id not in existing_volume_ids:
+        local_volume = existing_volumes_by_id.get(comicvine_volume_id)
+
+        if not local_volume:
             result.unknown_volumes_skipped += 1
             continue
 
-        volume_data = build_volume_data(volume)
+        remote_date_last_updated = parse_comicvine_datetime(volume.get("date_last_updated"))
+
+        if not should_save_volume_update(
+            local_volume=local_volume,
+            remote_date_last_updated=remote_date_last_updated,
+        ):
+            result.volumes_skipped_not_newer += 1
+            continue
+
+        volume_data = build_volume_data(
+            volume=volume,
+            local_volume=local_volume,
+            remote_date_last_updated=remote_date_last_updated,
+        )
 
         print_volume_preview(
             command=command,
             volume_data=volume_data,
-            dry_run=dry_run,
         )
 
         if not dry_run:
-            update_existing_volume(volume_data)
+            update_existing_volume(
+                local_volume=local_volume,
+                volume_data=volume_data,
+            )
 
         result.volumes_updated += 1
 
@@ -363,42 +384,62 @@ def fetch_volume_update_candidates(api_key, scan_date, limit, offset):
     return fetch_comicvine_json(VOLUMES_URL, params)
 
 
-def get_existing_volume_ids(candidates):
+def get_existing_volumes_by_id(candidates):
     candidate_volume_ids = [
         volume.get("id")
         for volume in candidates
         if volume.get("id")
     ]
 
-    return set(
-        ComicVolume.objects.filter(
-            comicvine_id__in=candidate_volume_ids
-        ).values_list("comicvine_id", flat=True)
+    existing_volumes = ComicVolume.objects.filter(
+        comicvine_id__in=candidate_volume_ids
     )
 
-
-def build_volume_data(volume):
-    publisher = volume.get("publisher") or {}
-
     return {
-        "comicvine_id": volume["id"],
-        "name": volume.get("name") or "",
-        "publisher": publisher.get("name") or "",
-        "date_added": parse_comicvine_datetime(volume.get("date_added")),
-        "date_last_updated": parse_comicvine_datetime(volume.get("date_last_updated")),
-        "comicvine_url": volume.get("site_detail_url") or "",
+        volume.comicvine_id: volume
+        for volume in existing_volumes
     }
 
 
-def update_existing_volume(volume_data):
-    ComicVolume.objects.filter(
-        comicvine_id=volume_data["comicvine_id"],
-    ).update(
-        name=volume_data["name"],
-        publisher=volume_data["publisher"],
-        date_added=volume_data["date_added"],
-        date_last_updated=volume_data["date_last_updated"],
-        comicvine_url=volume_data["comicvine_url"],
+def should_save_volume_update(local_volume, remote_date_last_updated):
+    if not remote_date_last_updated:
+        return False
+
+    if not local_volume.date_last_updated:
+        return True
+
+    return remote_date_last_updated > local_volume.date_last_updated
+
+
+def build_volume_data(volume, local_volume, remote_date_last_updated):
+    publisher = volume.get("publisher") or {}
+    publisher_name = publisher.get("name") or local_volume.publisher
+
+    return {
+        "comicvine_id": volume["id"],
+        "name": volume.get("name") or local_volume.name,
+        "publisher": publisher_name,
+        "date_added": parse_comicvine_datetime(volume.get("date_added")) or local_volume.date_added,
+        "date_last_updated": remote_date_last_updated,
+        "comicvine_url": volume.get("site_detail_url") or local_volume.comicvine_url,
+    }
+
+
+def update_existing_volume(local_volume, volume_data):
+    local_volume.name = volume_data["name"]
+    local_volume.publisher = volume_data["publisher"]
+    local_volume.date_added = volume_data["date_added"]
+    local_volume.date_last_updated = volume_data["date_last_updated"]
+    local_volume.comicvine_url = volume_data["comicvine_url"]
+
+    local_volume.save(
+        update_fields=[
+            "name",
+            "publisher",
+            "date_added",
+            "date_last_updated",
+            "comicvine_url",
+        ]
     )
 
 
@@ -477,18 +518,12 @@ def print_scan_progress(command, total_results, starting_offset, candidates, can
     command.stdout.write(f"Expected remaining after this batch: {expected_remaining_after_batch}")
 
 
-def print_volume_preview(command, volume_data, dry_run):
-    action = "would update" if dry_run else "will update"
-
+def print_volume_preview(command, volume_data):
     command.stdout.write("")
-    command.stdout.write(
-        f"Volume update candidate ({action}): {volume_data['name']}"
-    )
+    command.stdout.write(f"Volume update: {volume_data['name']}")
     command.stdout.write(f"Comic Vine Volume ID: {volume_data['comicvine_id']}")
     command.stdout.write(f"Publisher: {volume_data['publisher']}")
-    command.stdout.write(f"Date Added to Comic Vine: {volume_data['date_added'] or ''}")
     command.stdout.write(f"Date Last Updated on Comic Vine: {volume_data['date_last_updated'] or ''}")
-    command.stdout.write(f"Comic Vine URL: {volume_data['comicvine_url']}")
 
 
 def print_batch_summary(command, result):
@@ -500,6 +535,7 @@ def print_batch_summary(command, result):
     command.stdout.write(f"Total volume records updated on Comic Vine on this date: {result.total_results}")
     command.stdout.write(f"Candidates checked in this batch: {result.candidates_checked}")
     command.stdout.write(f"Volumes updated in this batch: {result.volumes_updated}")
+    command.stdout.write(f"Volumes skipped because local copy was already current: {result.volumes_skipped_not_newer}")
     command.stdout.write(f"Unknown local volumes skipped: {result.unknown_volumes_skipped}")
     command.stdout.write(f"Missing-data candidates skipped: {result.missing_data_skipped}")
     command.stdout.write(f"Date completed: {result.date_completed}")
@@ -511,6 +547,7 @@ def print_import_summary(command, summary):
     command.stdout.write(f"Volume update batches fetched: {summary.volume_update_batches_fetched}")
     command.stdout.write(f"Candidates checked: {summary.candidates_checked}")
     command.stdout.write(f"Volumes updated: {summary.volumes_updated}")
+    command.stdout.write(f"Volumes skipped because local copy was already current: {summary.volumes_skipped_not_newer}")
     command.stdout.write(f"Unknown local volumes skipped: {summary.unknown_volumes_skipped}")
     command.stdout.write(f"Missing-data candidates skipped: {summary.missing_data_skipped}")
     command.stdout.write(f"Dates completed: {summary.dates_completed}")

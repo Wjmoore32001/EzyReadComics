@@ -1,216 +1,85 @@
-# 12 — Comic Vine Sync System
+# Comic Vine Sync System
 
-This document explains the current Comic Vine sync system for EzyReadComics.
+This document explains the current Comic Vine sync/import system for EzyReadComics.
 
-The sync system is designed to:
+The goal of this system is to safely import comic issue and volume data from Comic Vine into the local database while avoiding unnecessary API calls and avoiding accidental overwrites.
 
-```text
-Import new Comic Vine issue records.
-Refresh issue records that Comic Vine later updates.
-Refresh volume records that Comic Vine later updates.
-Track progress safely across multiple command runs.
-```
+The system is intentionally simple, explicit, and split into multiple Django management commands.
 
----
+## Current Sync Philosophy
 
-## Current Sync Commands
+The Comic Vine import system is based on a few rules:
 
-The project currently has three main Comic Vine sync commands.
+1. New issue discovery and issue updates are separate jobs.
+2. Issue importing should not make one extra volume detail request per issue.
+3. Commands should avoid making API calls when local scan tracking already shows the work is complete.
+4. Existing local records should not be overwritten by discovery commands.
+5. Update commands should only overwrite local records when Comic Vine has a newer `date_last_updated`.
+6. Today should not be scanned because Comic Vine data can still be changing throughout the day.
 
-```text
-import_comics_comicvine
-update_comicvine_issues
-update_comicvine_volumes
-```
+## Why the System Is Split
 
-Each command has its own job.
+Originally, the project considered using a single issue importer.
 
-Each command tracks its own progress through `ComicVineDateScan`.
+That importer would scan Comic Vine issues and add records to the database.
 
----
+As the system developed, it became clear that one importer would mix too many responsibilities:
 
-## New Issue Importer
+* discovering newly added issues
+* updating existing issue records
+* discovering old historical issues
+* creating volume records
+* updating volume records
+* filling missing volume publisher/date fields
 
-Command:
+That would make the importer harder to reason about and more likely to waste Comic Vine API calls.
 
-```bash
-python manage.py import_comics_comicvine
-```
+The current system splits those jobs into separate commands.
 
-Purpose:
-
-```text
-Import newly added Comic Vine issue records.
-```
-
-Comic Vine query:
+Current commands:
 
 ```text
-/issues filtered by date_added
+update_issues.py
+    Updates issue records by date_last_updated.
+
+add_issues.py
+    Adds new issue records by date_added inside the current sync window.
+
+update_volumes.py
+    Updates known volume records by date_last_updated.
+
+add_volumes.py
+    Fills missing details for local volumes.
+
+backfill_issues.py
+    Adds older issue records by date_added before the current sync window.
 ```
 
-Scan kind:
+## Important Rule: Do Not Scan Today
+
+All date-based sync commands intentionally skip today.
+
+The newest date they scan is:
 
 ```text
-issue_date_added
+local today - 1 day
 ```
 
-Current behavior:
+Reason:
 
-* does not scan today
-* starts with yesterday
-* works backward one date at a time
-* imports all issue candidates, not only Marvel
-* saves issue data
-* saves related volume data
-* saves publisher on the volume
-* saves Comic Vine `date_added`
-* saves Comic Vine `date_last_updated`
-* skips issues that already exist locally by Comic Vine issue ID
-* tracks progress with date, offset, total result count, and completion status
+Comic Vine records can still be added or edited during the current day. If the app scans today too early, it may mark the day as complete before Comic Vine has finished receiving changes for that date.
 
-This command is for discovering new issue records.
+So the system waits until the next day before scanning a date.
 
-It is not responsible for refreshing existing issue records. That is handled by the issue update importer.
+## Main Tracking Models
 
----
+## `ComicVineDateScan`
 
-## Issue Update Importer
+`ComicVineDateScan` tracks progress for date-based Comic Vine scans.
 
-Command:
+It is used by commands that scan a Comic Vine endpoint by a specific calendar date.
 
-```bash
-python manage.py update_comicvine_issues
-```
-
-Purpose:
-
-```text
-Refresh issue records that Comic Vine edited after they were originally added.
-```
-
-Comic Vine query:
-
-```text
-/issues filtered by date_last_updated
-```
-
-Scan kind:
-
-```text
-issue_date_last_updated
-```
-
-Current behavior:
-
-* does not scan today
-* respects the update-tracking start date
-* scans updated issue records
-* updates existing local issues
-* creates missing local issues if an updated issue is not already stored
-* saves or updates related volume data
-* saves Comic Vine `date_added`
-* saves Comic Vine `date_last_updated`
-* tracks progress with date, offset, total result count, and completion status
-
-This command catches cases where Comic Vine later adds or changes issue metadata.
-
-Examples:
-
-```text
-store_date added later
-cover_date added later
-issue title corrected
-image URL changed
-Comic Vine URL changed
-```
-
----
-
-## Volume Update Importer
-
-Command:
-
-```bash
-python manage.py update_comicvine_volumes
-```
-
-Purpose:
-
-```text
-Refresh volume records that Comic Vine edited after they were originally added.
-```
-
-Comic Vine query:
-
-```text
-/volumes filtered by date_last_updated
-```
-
-Scan kind:
-
-```text
-volume_date_last_updated
-```
-
-Current behavior:
-
-* does not scan today
-* respects the update-tracking start date
-* scans updated volume records
-* updates volumes that already exist locally
-* skips volumes that do not exist locally
-* saves Comic Vine `date_added`
-* saves Comic Vine `date_last_updated`
-* tracks progress with date, offset, total result count, and completion status
-
-Unknown volumes are skipped to avoid filling the local database with unrelated orphan volumes.
-
-A volume becomes relevant when an imported issue points to it.
-
----
-
-## Why There Are Separate Commands
-
-The commands are intentionally separate.
-
-This makes testing easier.
-
-You can run only new issue imports:
-
-```bash
-python manage.py import_comics_comicvine
-```
-
-You can run only issue updates:
-
-```bash
-python manage.py update_comicvine_issues
-```
-
-You can run only volume updates:
-
-```bash
-python manage.py update_comicvine_volumes
-```
-
-Because progress is stored by scan kind, the commands can be run independently without corrupting each other's progress.
-
-A future wrapper command can run all three commands in order.
-
----
-
-## ComicVineDateScan
-
-`ComicVineDateScan` tracks sync progress.
-
-Plain English:
-
-```text
-One row = progress for one scan type on one date.
-```
-
-Current fields:
+Important fields:
 
 ```text
 scan_kind
@@ -223,9 +92,21 @@ completed_at
 notes
 ```
 
----
+### `scan_kind`
 
-## Scan Kinds
+The same calendar date can be scanned for different reasons.
+
+For example, the app may need to scan:
+
+```text
+/issues by date_added
+/issues by date_last_updated
+/volumes by date_last_updated
+```
+
+Those are different jobs even if they scan the same calendar date.
+
+That is why `scan_kind` exists.
 
 Current scan kinds:
 
@@ -235,325 +116,665 @@ issue_date_last_updated
 volume_date_last_updated
 ```
 
-Each scan kind represents a different Comic Vine query.
-
-### `issue_date_added`
-
-Used by:
-
-```bash
-python manage.py import_comics_comicvine
-```
-
-Meaning:
+The model uses a uniqueness rule on:
 
 ```text
-Issue records added to Comic Vine on this date.
+scan_kind + scan_date
 ```
 
-### `issue_date_last_updated`
+This lets multiple commands track the same date independently without interfering with each other.
 
-Used by:
+### `next_offset`
 
-```bash
-python manage.py update_comicvine_issues
-```
+Comic Vine API list requests are paginated.
 
-Meaning:
-
-```text
-Issue records last updated on Comic Vine on this date.
-```
-
-### `volume_date_last_updated`
-
-Used by:
-
-```bash
-python manage.py update_comicvine_volumes
-```
-
-Meaning:
-
-```text
-Volume records last updated on Comic Vine on this date.
-```
-
----
-
-## Why `scan_kind` Exists
-
-Before update importers existed, tracking only needed a date.
-
-Example:
-
-```text
-scan_date = 2026-06-26
-next_offset = 300
-```
-
-After adding issue updates and volume updates, that is not enough.
-
-The same date can have separate progress for different jobs.
-
-Example:
-
-```text
-scan_kind                  scan_date      next_offset    completed
-
-issue_date_added           2026-06-26     300            False
-issue_date_last_updated    2026-06-26     100            False
-volume_date_last_updated   2026-06-26     0              True
-```
-
-Plain English:
-
-```text
-New issue importing is partway through June 26.
-Issue update importing is partway through June 26.
-Volume update importing is finished for June 26.
-```
-
-These are separate jobs, so they need separate progress.
-
----
-
-## Unique Progress Rule
-
-The database allows the same date to appear more than once as long as the scan kind is different.
-
-Allowed:
-
-```text
-issue_date_added           2026-06-26
-issue_date_last_updated    2026-06-26
-volume_date_last_updated   2026-06-26
-```
-
-Not allowed:
-
-```text
-issue_date_added           2026-06-26
-issue_date_added           2026-06-26
-```
-
-The unique rule is:
-
-```text
-scan_kind + scan_date must be unique together
-```
-
----
-
-## Offset Tracking
-
-Comic Vine list requests use offset-based pagination.
-
-The local field is:
-
-```text
-next_offset
-```
-
-Plain English:
-
-```text
-How many candidates have already been checked for this scan kind and date.
-```
+`next_offset` tracks how far the command has gotten through the results for a specific scan date.
 
 Example:
 
 ```text
 scan_kind = issue_date_added
-scan_date = 2026-06-26
-next_offset = 300
-total_results = 527
-completed = False
+scan_date = 2026-06-27
+next_offset = 200
 ```
 
-Meaning:
+This means the app has already processed the first 200 issue records for that scan kind/date combination.
 
-```text
-For issues added to Comic Vine on 2026-06-26,
-the importer already checked the first 300 candidates.
-The next run should continue at offset 300.
-```
+The next run should continue from offset `200`.
 
----
+### `completed`
 
-## Completion Tracking
+`completed` tells the command that a scan date is finished.
 
-The local field is:
+If a scan row is marked completed, the command skips that date and looks for the next incomplete date.
 
-```text
-completed
-```
+This is what prevents repeated API calls for work that has already been done.
 
-When `completed` is true, that scan kind/date is done.
+## `ComicVineSyncState`
 
-Example:
+`ComicVineSyncState` tracks global Comic Vine sync state.
 
-```text
-scan_kind = volume_date_last_updated
-scan_date = 2026-06-26
-completed = True
-```
-
-Meaning:
-
-```text
-All volume update candidates for 2026-06-26 have been checked.
-```
-
-When a scan date is complete, that importer moves to the next eligible date.
-
----
-
-## Date Direction
-
-The new issue importer works backward through history.
-
-Example:
-
-```text
-2026-06-27
-2026-06-26
-2026-06-25
-2026-06-24
-...
-```
-
-Reason:
-
-```text
-The project is building a historical issue database over time.
-```
-
-The update importers also start from yesterday and work backward, but they stop at the update-tracking start date.
-
-Reason:
-
-```text
-Updates only need to be tracked from the point where the local database starts being kept for real.
-```
-
----
-
-## ComicVineSyncState
-
-`ComicVineSyncState` stores global Comic Vine sync configuration.
-
-Current important field:
+The most important current field is:
 
 ```text
 update_tracking_start_date
 ```
 
-Plain English:
+This date marks when the current/future sync window began.
+
+Current sync commands scan from yesterday backward to this date.
+
+Historical backfill starts before this date and works backward.
+
+## Current Sync Window
+
+The current sync window is:
 
 ```text
-Do not scan issue updates or volume updates earlier than this date.
+yesterday back to update_tracking_start_date
 ```
 
-This prevents update importers from scanning years of old Comic Vine updates that are not needed for the current local database.
-
----
-
-## Why Update Scans Have a Start Date
-
-When an old issue is imported today, Comic Vine returns the issue as it exists today.
-
-So the local database does not need to replay every historical update that happened before the issue was imported.
-
-Example:
+Commands that use the current sync window:
 
 ```text
-An issue was added to Comic Vine in 2015.
-It was updated in 2020.
-The local database imports it in 2026.
+update_issues.py
+add_issues.py
+update_volumes.py
 ```
 
-When imported in 2026, the local database receives the current 2026 version.
+These commands are meant to keep the local database current from the project’s official start date forward.
 
-So update scans only need to track changes from the local database's real starting point forward.
+## Historical Backfill Window
 
----
-
-## Comic Vine Timestamp Fields
-
-`ComicIssue` stores:
+The historical backfill window starts at:
 
 ```text
-date_added
+update_tracking_start_date - 1 day
+```
+
+Then it moves backward into older Comic Vine records.
+
+Command that uses this window:
+
+```text
+backfill_issues.py
+```
+
+This lets the project fill older issues over time without overlapping the current sync commands.
+
+## Current Commands
+
+## `update_issues.py`
+
+Purpose:
+
+```text
+Refresh issue records that Comic Vine says were updated.
+```
+
+Comic Vine endpoint:
+
+```text
+/issues
+```
+
+Filter used:
+
+```text
 date_last_updated
 ```
 
-`ComicVolume` stores:
+Scan range:
+
+```text
+yesterday back to update_tracking_start_date
+```
+
+Scan kind:
+
+```text
+ComicVineDateScan.ISSUE_DATE_LAST_UPDATED
+```
+
+Behavior:
+
+* Skips today
+* Fetches issues by `date_last_updated`
+* Checks whether each issue already exists locally
+* Creates the issue if Comic Vine returns an updated issue that does not exist locally
+* Updates an existing local issue only if Comic Vine’s `date_last_updated` is newer than the local value
+* Skips the issue if the local copy is already current
+* Creates or links a minimal local volume row from the issue response volume data
+* Does not make separate volume detail API calls
+
+This command is for issue edits/updates.
+
+It should not be relied on as the only way to discover newly added Comic Vine issues. That job belongs to `add_issues.py`.
+
+### Why it can still create missing issues
+
+Even though this is primarily an update command, it can still create a missing issue.
+
+Reason:
+
+If Comic Vine returns an issue in the `date_last_updated` scan and the local database does not have that issue yet, creating it is safer than ignoring it.
+
+So the rule is:
+
+```text
+If returned by update scan and missing locally:
+    create it.
+
+If returned by update scan and exists locally:
+    update only if remote date_last_updated is newer.
+```
+
+## `add_issues.py`
+
+Purpose:
+
+```text
+Discover newly added Comic Vine issues inside the current sync window.
+```
+
+Comic Vine endpoint:
+
+```text
+/issues
+```
+
+Filter used:
 
 ```text
 date_added
+```
+
+Scan range:
+
+```text
+yesterday back to update_tracking_start_date
+```
+
+Scan kind:
+
+```text
+ComicVineDateScan.ISSUE_DATE_ADDED
+```
+
+Behavior:
+
+* Skips today
+* Fetches issues by `date_added`
+* Creates missing local issues
+* Skips existing issues completely
+* Creates or links a minimal local volume row from the issue response volume data
+* Does not overwrite existing issue rows
+* Does not make separate volume detail API calls
+
+This command exists because new issue discovery should use `date_added`.
+
+The system does not assume that newly added Comic Vine issues will always appear in `date_last_updated` scans.
+
+## `update_volumes.py`
+
+Purpose:
+
+```text
+Refresh known local volumes that Comic Vine says were updated.
+```
+
+Comic Vine endpoint:
+
+```text
+/volumes
+```
+
+Filter used:
+
+```text
 date_last_updated
 ```
 
-These are Comic Vine timestamps.
-
-They are not progress-tracking fields.
-
-They describe the Comic Vine record itself.
-
-Example:
+Scan range:
 
 ```text
-ComicIssue.date_added = when Comic Vine first added the issue record
-ComicIssue.date_last_updated = when Comic Vine last changed the issue record
+yesterday back to update_tracking_start_date
 ```
 
-Progress tracking belongs to `ComicVineDateScan`.
-
----
-
-## Duplicate Protection
-
-Comic Vine IDs are used as stable unique identifiers.
-
-For issues:
+Scan kind:
 
 ```text
-ComicIssue.comicvine_id
+ComicVineDateScan.VOLUME_DATE_LAST_UPDATED
 ```
 
-For volumes:
+Behavior:
+
+* Skips today
+* Fetches volumes by `date_last_updated`
+* Updates only volumes that already exist locally
+* Skips unknown volumes
+* Updates a local volume only if Comic Vine’s `date_last_updated` is newer than the local value
+
+This command keeps known local volumes current.
+
+It does not create every updated Comic Vine volume.
+
+That is intentional. The database only needs volume rows that are connected to locally stored issues.
+
+## `add_volumes.py`
+
+Purpose:
 
 ```text
-ComicVolume.comicvine_id
+Fill missing details for local volume rows.
 ```
 
-The new issue importer skips existing issues by Comic Vine issue ID.
+This command is database-driven.
 
-The issue update importer updates existing issues by Comic Vine issue ID.
+It does not use `ComicVineDateScan`.
 
-The volume update importer updates existing local volumes by Comic Vine volume ID.
+Instead, it checks the local database for `ComicVolume` rows missing useful data.
 
----
+Incomplete volume examples:
+
+```text
+blank name
+blank publisher
+missing date_added
+missing date_last_updated
+blank Comic Vine URL
+```
+
+Behavior:
+
+* Finds incomplete local volumes
+* Fetches Comic Vine volume detail records only for those local volumes
+* Fills missing publisher, dates, name, and URL data
+* Does not scan by date
+* Does not use offset tracking
+* Avoids repeated work because completed volumes stop matching the incomplete-volume query
+
+This command is the volume detail filler/hydrator.
+
+## `backfill_issues.py`
+
+Purpose:
+
+```text
+Discover older Comic Vine issues before the current sync window.
+```
+
+Comic Vine endpoint:
+
+```text
+/issues
+```
+
+Filter used:
+
+```text
+date_added
+```
+
+Scan range:
+
+```text
+update_tracking_start_date - 1 day backward
+```
+
+Scan kind:
+
+```text
+ComicVineDateScan.ISSUE_DATE_ADDED
+```
+
+Behavior:
+
+* Fetches issues by `date_added`
+* Creates missing local issues
+* Skips existing issues completely
+* Creates or links a minimal local volume row from the issue response volume data
+* Does not overwrite existing issue rows
+* Does not make separate volume detail API calls
+
+This command is for historical filling only.
+
+It uses the same scan kind as `add_issues.py`, but it does not overlap with `add_issues.py`.
+
+`add_issues.py` scans:
+
+```text
+yesterday back to update_tracking_start_date
+```
+
+`backfill_issues.py` scans:
+
+```text
+update_tracking_start_date - 1 day backward
+```
+
+So both can safely use `ComicVineDateScan.ISSUE_DATE_ADDED`.
+
+## Minimal Volume Rows
+
+Issue commands create or link local volumes using only the volume object included in Comic Vine issue responses.
+
+This usually gives the app enough information to connect issues to volumes immediately:
+
+```text
+Comic Vine volume ID
+volume name
+sometimes a Comic Vine volume URL
+```
+
+The issue commands do not fetch full volume detail records.
+
+That is intentional.
+
+Earlier versions of the importer performed volume detail lookups while importing issues. That was inefficient because many issues can belong to the same volume, and it created unnecessary API calls.
+
+Now the system works like this:
+
+```text
+Issue commands:
+    create/link minimal volume rows
+
+add_volumes.py:
+    fills missing volume details later
+```
+
+This reduces unnecessary Comic Vine API usage.
+
+## Why New Issue Adding and Issue Updating Are Separate
+
+The project briefly considered using only `date_last_updated` for the current issue sync.
+
+That would only be safe if newly created Comic Vine issues were guaranteed to appear in `date_last_updated` scans.
+
+That behavior is not guaranteed enough to rely on.
+
+So the system uses two current issue commands:
+
+```text
+add_issues.py
+    Finds newly added issues by date_added.
+
+update_issues.py
+    Refreshes edited issues by date_last_updated.
+```
+
+This costs more API calls than one command, but it is safer and easier to reason about.
+
+## Existing Issue Protection
+
+Discovery commands skip existing issues completely.
+
+Discovery commands:
+
+```text
+add_issues.py
+backfill_issues.py
+```
+
+Rule:
+
+```text
+If local issue exists:
+    skip it completely.
+```
+
+This prevents discovery/backfill commands from overwriting newer local data with older or redundant data.
+
+## Update Timestamp Protection
+
+Update commands use Comic Vine timestamps before overwriting local records.
+
+Update commands:
+
+```text
+update_issues.py
+update_volumes.py
+```
+
+Rule:
+
+```text
+If local row does not exist:
+    create it when appropriate.
+
+If local row exists and local date_last_updated is blank:
+    update it.
+
+If Comic Vine date_last_updated is newer than local date_last_updated:
+    update it.
+
+If Comic Vine date_last_updated is older or equal:
+    skip it.
+```
+
+This protects the local database from unnecessary rewrites and out-of-order scan behavior.
+
+## API Call Avoidance
+
+The system avoids unnecessary Comic Vine calls in several ways.
+
+### Completed date scans are skipped
+
+Before making an API call, date-based commands look for the next incomplete scan date.
+
+If every date in the command’s scan range is already completed, the command exits without making a Comic Vine request.
+
+Example output:
+
+```text
+No incomplete issue update dates remain at or after the update tracking start date.
+No Comic Vine API request was needed.
+```
+
+### Issue commands do not fetch volume details
+
+Issue commands only use the volume data already included in the issue response.
+
+They do not make one extra API call per issue.
+
+### Volume details are filled only when missing
+
+`add_volumes.py` queries the local database first.
+
+It only fetches Comic Vine volume details for local volumes missing useful data.
+
+Once a volume is filled, it no longer appears in the incomplete-volume query.
+
+## Recommended Manual Run Order
+
+Current recommended manual run order:
+
+```bash
+python manage.py update_issues
+python manage.py add_issues
+python manage.py update_volumes
+python manage.py add_volumes
+python manage.py backfill_issues
+```
+
+Reasoning:
+
+1. `update_issues.py` catches issue edits.
+2. `add_issues.py` catches newly added issues.
+3. `update_volumes.py` refreshes known volume edits.
+4. `add_volumes.py` fills missing details for local volumes.
+5. `backfill_issues.py` spends leftover API usage on older historical issues.
+
+## First-Time Initialization
+
+On a clean database, the expected initialization flow is:
+
+```bash
+python manage.py migrate
+python manage.py update_issues
+python manage.py add_issues
+python manage.py update_volumes
+python manage.py add_volumes
+python manage.py backfill_issues
+```
+
+`update_issues.py` initializes `ComicVineSyncState` if needed.
+
+After that, the other commands can use `update_tracking_start_date`.
+
+## Command Options
+
+Most date-based commands support a batch limit option.
+
+Examples:
+
+```bash
+python manage.py update_issues --dry-run
+python manage.py add_issues --dry-run
+python manage.py update_volumes --dry-run
+python manage.py backfill_issues --dry-run
+```
+
+Larger runs:
+
+```bash
+python manage.py update_issues --max-update-batches 5
+python manage.py add_issues --max-add-batches 5
+python manage.py update_volumes --max-update-batches 5
+python manage.py backfill_issues --max-backfill-batches 5
+```
+
+Volume hydration:
+
+```bash
+python manage.py add_volumes --volume-limit 100
+```
+
+## Scan Progress Output
+
+Date-based commands print scan progress for each batch.
+
+The output includes:
+
+```text
+Total candidates for this date
+Already checked before this batch
+Requested batch size
+Candidates returned in this batch
+Expected checked after this batch
+Expected remaining after this batch
+```
+
+This helps verify whether a scan date is partially complete or fully complete.
+
+## Current Data Flow
+
+A normal current sync works like this:
+
+```text
+update_issues.py
+    Refresh issue edits.
+
+add_issues.py
+    Add newly created issue records.
+
+update_volumes.py
+    Refresh known volume edits.
+
+add_volumes.py
+    Fill incomplete local volume details.
+
+backfill_issues.py
+    Add older historical issues when current data is already caught up.
+```
+
+## Current Models Involved
+
+### `ComicIssue`
+
+Represents a single comic issue.
+
+Important imported fields:
+
+```text
+comicvine_id
+volume
+issue_number
+issue_title
+date_added
+date_last_updated
+cover_date
+store_date
+comicvine_url
+image_url
+notes
+```
+
+### `ComicVolume`
+
+Represents a Comic Vine volume.
+
+Important imported fields:
+
+```text
+comicvine_id
+name
+publisher
+date_added
+date_last_updated
+comicvine_url
+```
+
+Volumes may start as minimal rows and be filled later.
+
+### `ComicVineDateScan`
+
+Tracks date/offset progress for date-based API scans.
+
+### `ComicVineSyncState`
+
+Tracks the start date for the current sync window.
 
 ## Current Limitations
 
-The current sync system does not yet have a wrapper command that runs all three sync commands together.
+The system still depends on Comic Vine API behavior and rate limits.
 
-Planned future wrapper command:
+The system does not yet have a wrapper command that runs all commands in sequence.
 
-```bash
-python manage.py full_import
-```
-
-Possible future behavior:
+The system does not yet model:
 
 ```text
-Run import_comics_comicvine.
-Run update_comicvine_issues.
-Run update_comicvine_volumes.
+reading orders
+issue-to-issue connections
+characters
+creators
+events
+story arcs
 ```
 
-The current system also does not scan today.
+These are intentionally postponed.
 
-A same-day/live sync command can be added later if needed.
+## Future Improvements
+
+Possible future improvements:
+
+```text
+Add wrapper sync command using call_command()
+Add safer retry/backoff behavior for Comic Vine rate limits
+Add command output modes such as quiet/verbose
+Add import statistics page in the Django UI
+Add issue search/filtering in the frontend
+Add publisher-specific views once enough data is imported
+```
+
+A future wrapper command should likely run:
+
+```bash
+python manage.py update_issues
+python manage.py add_issues
+python manage.py update_volumes
+python manage.py add_volumes
+python manage.py backfill_issues
+```
+
+The wrapper should use Django’s `call_command()` instead of trying to run Python files directly.
