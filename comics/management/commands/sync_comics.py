@@ -6,13 +6,13 @@ SYNC_COMMANDS = [
     "update_issues",
     "add_issues",
     "update_volumes",
-    "add_volumes",
-    "backfill_issues",
+    "hydrate_volumes",
+    "hydrate_issues",
 ]
 
 
 class Command(BaseCommand):
-    help = "Run the Comic Vine sync commands in the recommended order."
+    help = "Run the normal Comic Vine sync commands in the recommended order."
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -28,7 +28,7 @@ class Command(BaseCommand):
             self.stdout.write(self.style.WARNING("Dry run enabled. Nothing will be saved."))
 
         self.stdout.write("")
-        self.stdout.write(self.style.SUCCESS("Comic Vine full sync"))
+        self.stdout.write(self.style.SUCCESS("Comic Vine normal sync"))
         self.stdout.write("Command order:")
 
         for index, command_name in enumerate(SYNC_COMMANDS, start=1):
@@ -49,8 +49,8 @@ class Command(BaseCommand):
                 raise
             except Exception as error:
                 raise CommandError(
-                    f"Comic Vine full sync stopped during {command_name}: {error}"
+                    f"Comic Vine normal sync stopped during {command_name}: {error}"
                 ) from error
 
         self.stdout.write("")
-        self.stdout.write(self.style.SUCCESS("Comic Vine full sync finished."))
+        self.stdout.write(self.style.SUCCESS("Comic Vine normal sync finished."))

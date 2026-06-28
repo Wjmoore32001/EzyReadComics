@@ -86,6 +86,7 @@ class ComicVolume(models.Model):
     last_issue_name = models.CharField(max_length=255, blank=True)
     last_issue_api_url = models.URLField(max_length=500, blank=True)
 
+    detail_hydration_attempted_at = models.DateTimeField(null=True, blank=True)
     detail_hydrated_at = models.DateTimeField(null=True, blank=True)
     latest_local_issue_store_date = models.DateField(null=True, blank=True)
 

@@ -5,35 +5,35 @@ from datetime import datetime
 
 import requests
 from django.core.management.base import BaseCommand, CommandError
-from django.db.models import Q
+from django.db.models import F, Q
 from django.utils import timezone
 
 from comics.models import ComicPerson, ComicVolume, ComicVolumePersonCredit
 
 
 VOLUME_DETAIL_URL_TEMPLATE = "https://comicvine.gamespot.com/api/volume/4050-{volume_id}/"
-USER_AGENT = "EzyReadComics volume detail filler"
+USER_AGENT = "EzyReadComics volume detail hydrator"
 
 
 @dataclass
 class HydrationResult:
-    incomplete_volumes_found: int = 0
+    volumes_needing_hydration_found: int = 0
     volumes_checked: int = 0
-    volumes_updated: int = 0
-    volumes_skipped_missing_data: int = 0
+    volumes_hydrated: int = 0
+    volumes_marked_attempted_without_detail: int = 0
     volume_people_synced: int = 0
     api_requests_made: int = 0
 
 
 class Command(BaseCommand):
-    help = "Fill missing local ComicVolume details from Comic Vine volume records."
+    help = "Hydrate local ComicVolume rows from Comic Vine volume detail records."
 
     def add_arguments(self, parser):
         parser.add_argument(
             "--volume-limit",
             type=int,
             default=100,
-            help="Maximum number of incomplete local volumes to check in one run. Defaults to 100.",
+            help="Maximum number of local volumes to hydrate in one run. Defaults to 100.",
         )
 
         parser.add_argument(
@@ -70,13 +70,14 @@ class Command(BaseCommand):
             self.stdout.write(self.style.WARNING("Dry run enabled. Nothing will be saved."))
 
         self.stdout.write("")
-        self.stdout.write(self.style.SUCCESS("Comic Vine volume detail filler"))
+        self.stdout.write(self.style.SUCCESS("Comic Vine volume detail hydrator"))
         self.stdout.write("Hydrates local volumes using the Comic Vine volume detail endpoint.")
         self.stdout.write("Also syncs volume-level people credits when Comic Vine returns them.")
+        self.stdout.write("Volumes are selected by detail_hydration_attempted_at, not by empty optional fields.")
         self.stdout.write(f"Volume limit this run: {volume_limit}")
         self.stdout.write(f"Request delay: {request_delay}")
 
-        result = hydrate_missing_volumes(
+        result = hydrate_volumes(
             command=self,
             api_key=api_key,
             volume_limit=volume_limit,
@@ -102,25 +103,26 @@ def validate_options(volume_limit, request_delay):
         raise CommandError("request-delay cannot be negative.")
 
 
-def hydrate_missing_volumes(command, api_key, volume_limit, request_delay, dry_run):
-    incomplete_volumes_queryset = get_incomplete_volumes_queryset()
-    incomplete_volumes_found = incomplete_volumes_queryset.count()
-    volumes_to_check = list(incomplete_volumes_queryset[:volume_limit])
+def hydrate_volumes(command, api_key, volume_limit, request_delay, dry_run):
+    volumes_queryset = get_volumes_needing_hydration_queryset()
+    volumes_needing_hydration_found = volumes_queryset.count()
+    volumes_to_check = list(volumes_queryset[:volume_limit])
 
     result = HydrationResult(
-        incomplete_volumes_found=incomplete_volumes_found,
+        volumes_needing_hydration_found=volumes_needing_hydration_found,
     )
 
-    command.stdout.write(f"Incomplete or unhydrated local volumes found: {incomplete_volumes_found}")
+    command.stdout.write(f"Volumes needing hydration found: {volumes_needing_hydration_found}")
 
     if not volumes_to_check:
         command.stdout.write("")
-        command.stdout.write(command.style.SUCCESS("No incomplete or unhydrated local volumes found."))
+        command.stdout.write(command.style.SUCCESS("No volumes need hydration."))
         command.stdout.write("No Comic Vine API request was needed.")
         return result
 
     for local_volume in volumes_to_check:
         result.volumes_checked += 1
+        attempted_at = timezone.now()
 
         data = fetch_volume_detail(
             api_key=api_key,
@@ -130,17 +132,48 @@ def hydrate_missing_volumes(command, api_key, volume_limit, request_delay, dry_r
 
         remote_volume = data.get("results") or {}
 
-        if not remote_volume:
-            result.volumes_skipped_missing_data += 1
+        if not remote_volume or not remote_volume.get("id"):
+            print_missing_detail_preview(
+                command=command,
+                local_volume=local_volume,
+            )
+
+            if not dry_run:
+                mark_volume_hydration_attempted(
+                    local_volume=local_volume,
+                    attempted_at=attempted_at,
+                )
+
+            result.volumes_marked_attempted_without_detail += 1
+
+            if request_delay > 0:
+                time.sleep(request_delay)
+
             continue
 
         volume_data = build_volume_data(
             local_volume=local_volume,
             remote_volume=remote_volume,
+            attempted_at=attempted_at,
         )
 
         if not has_useful_volume_data(volume_data):
-            result.volumes_skipped_missing_data += 1
+            print_missing_detail_preview(
+                command=command,
+                local_volume=local_volume,
+            )
+
+            if not dry_run:
+                mark_volume_hydration_attempted(
+                    local_volume=local_volume,
+                    attempted_at=attempted_at,
+                )
+
+            result.volumes_marked_attempted_without_detail += 1
+
+            if request_delay > 0:
+                time.sleep(request_delay)
+
             continue
 
         remote_people = remote_volume.get("people") or []
@@ -162,7 +195,7 @@ def hydrate_missing_volumes(command, api_key, volume_limit, request_delay, dry_r
         else:
             result.volume_people_synced += count_valid_people(remote_people)
 
-        result.volumes_updated += 1
+        result.volumes_hydrated += 1
 
         if request_delay > 0:
             time.sleep(request_delay)
@@ -170,17 +203,17 @@ def hydrate_missing_volumes(command, api_key, volume_limit, request_delay, dry_r
     return result
 
 
-def get_incomplete_volumes_queryset():
+def get_volumes_needing_hydration_queryset():
     return (
-        ComicVolume.objects.filter(
-            Q(name="")
-            | Q(date_added__isnull=True)
-            | Q(date_last_updated__isnull=True)
-            | Q(comicvine_url="")
-            | Q(api_detail_url="")
-            | Q(detail_hydrated_at__isnull=True)
+        ComicVolume.objects.filter(comicvine_id__isnull=False)
+        .filter(
+            Q(detail_hydration_attempted_at__isnull=True)
+            | Q(date_last_updated__gt=F("detail_hydration_attempted_at"))
         )
-        .order_by("id")
+        .order_by(
+            F("detail_hydration_attempted_at").asc(nulls_first=True),
+            "id",
+        )
     )
 
 
@@ -215,7 +248,7 @@ def fetch_volume_detail(api_key, volume_id):
     return fetch_comicvine_json(url, params)
 
 
-def build_volume_data(local_volume, remote_volume):
+def build_volume_data(local_volume, remote_volume, attempted_at):
     publisher = remote_volume.get("publisher") or {}
     image = remote_volume.get("image") or {}
     first_issue = remote_volume.get("first_issue") or {}
@@ -269,7 +302,8 @@ def build_volume_data(local_volume, remote_volume):
         "last_issue_number": last_issue.get("issue_number") or "",
         "last_issue_name": last_issue.get("name") or "",
         "last_issue_api_url": last_issue.get("api_detail_url") or "",
-        "detail_hydrated_at": timezone.now(),
+        "detail_hydration_attempted_at": attempted_at,
+        "detail_hydrated_at": attempted_at,
     }
 
 
@@ -329,6 +363,7 @@ def update_volume(local_volume, volume_data, remote_people):
     local_volume.last_issue_name = volume_data["last_issue_name"]
     local_volume.last_issue_api_url = volume_data["last_issue_api_url"]
 
+    local_volume.detail_hydration_attempted_at = volume_data["detail_hydration_attempted_at"]
     local_volume.detail_hydrated_at = volume_data["detail_hydrated_at"]
 
     local_volume.save(
@@ -366,6 +401,7 @@ def update_volume(local_volume, volume_data, remote_people):
             "last_issue_number",
             "last_issue_name",
             "last_issue_api_url",
+            "detail_hydration_attempted_at",
             "detail_hydrated_at",
         ]
     )
@@ -374,6 +410,11 @@ def update_volume(local_volume, volume_data, remote_people):
         volume=local_volume,
         remote_people=remote_people,
     )
+
+
+def mark_volume_hydration_attempted(local_volume, attempted_at):
+    local_volume.detail_hydration_attempted_at = attempted_at
+    local_volume.save(update_fields=["detail_hydration_attempted_at"])
 
 
 def sync_volume_people(volume, remote_people):
@@ -522,19 +563,25 @@ def to_optional_int(value):
 
 def print_volume_preview(command, local_volume, volume_data, remote_people):
     command.stdout.write("")
-    command.stdout.write(f"Volume fill: {volume_data['name']}")
+    command.stdout.write(f"Volume hydrate: {volume_data['name']}")
     command.stdout.write(f"Comic Vine Volume ID: {local_volume.comicvine_id}")
     command.stdout.write(f"Publisher: {volume_data['publisher']}")
     command.stdout.write(f"Date Last Updated on Comic Vine: {volume_data['date_last_updated'] or ''}")
     command.stdout.write(f"Volume people returned: {count_valid_people(remote_people)}")
 
 
+def print_missing_detail_preview(command, local_volume):
+    command.stdout.write("")
+    command.stdout.write(f"Volume hydration attempted but no usable detail was returned: {local_volume}")
+    command.stdout.write(f"Comic Vine Volume ID: {local_volume.comicvine_id}")
+
+
 def print_summary(command, result):
     command.stdout.write("")
-    command.stdout.write(command.style.SUCCESS("Volume fill summary:"))
-    command.stdout.write(f"Incomplete or unhydrated local volumes found: {result.incomplete_volumes_found}")
+    command.stdout.write(command.style.SUCCESS("Volume hydration summary:"))
+    command.stdout.write(f"Volumes needing hydration found: {result.volumes_needing_hydration_found}")
     command.stdout.write(f"Volumes checked this run: {result.volumes_checked}")
-    command.stdout.write(f"Volumes updated this run: {result.volumes_updated}")
-    command.stdout.write(f"Volumes skipped because Comic Vine returned missing data: {result.volumes_skipped_missing_data}")
+    command.stdout.write(f"Volumes hydrated this run: {result.volumes_hydrated}")
+    command.stdout.write(f"Volumes marked attempted without usable detail: {result.volumes_marked_attempted_without_detail}")
     command.stdout.write(f"Volume people credits synced: {result.volume_people_synced}")
     command.stdout.write(f"Comic Vine API requests made: {result.api_requests_made}")

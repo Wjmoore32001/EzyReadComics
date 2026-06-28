@@ -339,6 +339,8 @@ def fetch_issue_backfill_candidates(api_key, scan_date, limit, offset):
         "field_list": ",".join(
             [
                 "id",
+                "aliases",
+                "api_detail_url",
                 "issue_number",
                 "name",
                 "date_added",
@@ -346,6 +348,9 @@ def fetch_issue_backfill_candidates(api_key, scan_date, limit, offset):
                 "cover_date",
                 "store_date",
                 "site_detail_url",
+                "deck",
+                "description",
+                "has_staff_review",
                 "image",
                 "volume",
             ]
@@ -388,6 +393,7 @@ def get_volume_data_from_issue_response(volume, volume_cache):
             "date_added": existing_volume.date_added,
             "date_last_updated": existing_volume.date_last_updated,
             "comicvine_url": existing_volume.comicvine_url,
+            "api_detail_url": existing_volume.api_detail_url,
             "exists_locally": True,
         }
         volume_cache[volume_id] = volume_data.copy()
@@ -400,6 +406,7 @@ def get_volume_data_from_issue_response(volume, volume_cache):
         "date_added": None,
         "date_last_updated": None,
         "comicvine_url": volume.get("site_detail_url") or "",
+        "api_detail_url": volume.get("api_detail_url") or "",
         "exists_locally": False,
     }
 
@@ -417,12 +424,26 @@ def save_issue(issue, volume_data):
             "volume": volume_object,
             "issue_number": issue.get("issue_number") or "",
             "issue_title": issue.get("name") or "",
-            "date_added": parse_comicvine_datetime(issue.get("date_added")),
-            "date_last_updated": parse_comicvine_datetime(issue.get("date_last_updated")),
             "cover_date": parse_comicvine_date(issue.get("cover_date")),
             "store_date": parse_comicvine_date(issue.get("store_date")),
+            "date_added": parse_comicvine_datetime(issue.get("date_added")),
+            "date_last_updated": parse_comicvine_datetime(issue.get("date_last_updated")),
             "comicvine_url": issue.get("site_detail_url") or "",
-            "image_url": image.get("small_url") or "",
+            "api_detail_url": issue.get("api_detail_url") or "",
+            "aliases": issue.get("aliases") or "",
+            "deck": issue.get("deck") or "",
+            "description": issue.get("description") or "",
+            "has_staff_review": bool(issue.get("has_staff_review")),
+            "comicvine_image_icon_url": image.get("icon_url") or "",
+            "comicvine_image_medium_url": image.get("medium_url") or "",
+            "comicvine_image_screen_url": image.get("screen_url") or "",
+            "comicvine_image_screen_large_url": image.get("screen_large_url") or "",
+            "comicvine_image_small_url": image.get("small_url") or "",
+            "comicvine_image_super_url": image.get("super_url") or "",
+            "comicvine_image_thumb_url": image.get("thumb_url") or "",
+            "comicvine_image_tiny_url": image.get("tiny_url") or "",
+            "comicvine_image_original_url": image.get("original_url") or "",
+            "comicvine_image_tags": image.get("image_tags") or "",
         },
     )
 
@@ -436,6 +457,7 @@ def get_or_create_volume_object(volume_data):
             "date_added": volume_data["date_added"],
             "date_last_updated": volume_data["date_last_updated"],
             "comicvine_url": volume_data["comicvine_url"],
+            "api_detail_url": volume_data["api_detail_url"],
         },
     )
 
@@ -463,6 +485,10 @@ def get_or_create_volume_object(volume_data):
     if not volume_object.comicvine_url and volume_data["comicvine_url"]:
         volume_object.comicvine_url = volume_data["comicvine_url"]
         fields_to_update.append("comicvine_url")
+
+    if not volume_object.api_detail_url and volume_data["api_detail_url"]:
+        volume_object.api_detail_url = volume_data["api_detail_url"]
+        fields_to_update.append("api_detail_url")
 
     if fields_to_update:
         volume_object.save(update_fields=fields_to_update)
