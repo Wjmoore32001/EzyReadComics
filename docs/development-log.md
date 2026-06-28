@@ -6,6 +6,132 @@ Newest entries are listed first.
 
 ---
 
+## 2026-06-28 — Comic Vine Update Importers Added
+
+Added two Comic Vine update importers.
+
+New commands:
+
+```bash
+python manage.py update_comicvine_issues
+python manage.py update_comicvine_volumes
+```
+
+The issue update importer:
+
+* scans Comic Vine `/issues`
+* filters by `date_last_updated`
+* uses `scan_kind = issue_date_last_updated`
+* does not scan today
+* respects the update-tracking start date
+* updates existing local issues
+* creates missing local issues if needed
+* saves or updates related volume data
+* tracks date/offset progress independently
+
+The volume update importer:
+
+* scans Comic Vine `/volumes`
+* filters by `date_last_updated`
+* uses `scan_kind = volume_date_last_updated`
+* does not scan today
+* respects the update-tracking start date
+* updates existing local volumes
+* skips unknown volumes
+* tracks date/offset progress independently
+
+Purpose:
+
+* catch Comic Vine corrections made after an issue or volume was originally imported
+* refresh missing issue data such as store dates, cover dates, titles, and image URLs
+* refresh volume data such as names, publishers, URLs, and Comic Vine timestamps
+* keep update progress separate from new issue import progress
+
+---
+
+## 2026-06-28 — Comic Vine Sync Tracking Updated
+
+Updated Comic Vine sync tracking.
+
+Added Comic Vine timestamp fields to `ComicIssue`:
+
+```text
+date_added
+date_last_updated
+```
+
+Added Comic Vine timestamp fields to `ComicVolume`:
+
+```text
+date_added
+date_last_updated
+```
+
+Updated `ComicVineDateScan` so it can track multiple scan types.
+
+Current scan kinds:
+
+```text
+issue_date_added
+issue_date_last_updated
+volume_date_last_updated
+```
+
+The old tracking idea was:
+
+```text
+one scan row per date
+```
+
+The new tracking idea is:
+
+```text
+one scan row per scan kind and date
+```
+
+This allows the same date to be tracked independently for:
+
+* new issue imports
+* issue updates
+* volume updates
+
+Added `ComicVineSyncState`.
+
+Current purpose:
+
+```text
+Store the update-tracking start date.
+```
+
+The update-tracking start date prevents update importers from scanning backward forever.
+
+---
+
+## 2026-06-28 — New Issue Importer Updated for Scan Kinds
+
+Updated the new issue importer command:
+
+```bash
+python manage.py import_comics_comicvine
+```
+
+Current behavior:
+
+* scans Comic Vine `/issues`
+* filters by `date_added`
+* uses `scan_kind = issue_date_added`
+* does not scan today
+* imports all issue candidates, not only Marvel issues
+* skips existing issues by Comic Vine issue ID
+* stores Comic Vine `date_added`
+* stores Comic Vine `date_last_updated`
+* saves related volume timestamp fields
+* tracks progress independently from issue updates and volume updates
+
+This keeps the new issue importer focused on discovery of newly added Comic Vine issue records.
+
+---
+
 ## 2026-06-27 — Basic Issue and Volume List Pages Added
 
 Added two simple front-end data pages.
@@ -54,15 +180,15 @@ No new models or migrations were needed for this step.
 
 ## 2026-06-27 — Day-Based Comic Vine Issue Importer Added
 
-Added the current Comic Vine import system.
+Added the initial Comic Vine issue import system.
 
-Current importer behavior:
+Current importer behavior after later updates:
 
 * scans by Comic Vine `date_added`
 * does not scan today
 * starts with yesterday
 * works backward one day at a time
-* tracks one import row per `date_added` day
+* tracks import progress with `scan_kind = issue_date_added`
 * uses `next_offset` to continue through a date
 * uses `total_results` to know how many issue candidates exist for a date
 * marks dates complete when all issue candidates for that date have been checked
@@ -73,10 +199,8 @@ Current importer behavior:
 Current importer command:
 
 ```bash
-python manage.py import_comicvine_marvel_issues
+python manage.py import_comics_comicvine
 ```
-
-The command filename still contains `marvel`, but the current importer now imports all issue candidates.
 
 Purpose:
 
@@ -85,24 +209,17 @@ Purpose:
 * allow missed days to be filled later
 * allow publisher filtering later through `ComicVolume.publisher`
 
-Current state:
-
-* importer scans completed dates only
-* importer can resume a partially scanned date
-* imported issues are linked to volumes
-* publishers are stored on volumes
-* basic issue and volume display pages now exist
-
 ---
 
 ## 2026-06-27 — ComicVineDateScan Model Added
 
 Added a model for tracking Comic Vine import progress by date.
 
-Current model:
+Current model after later updates:
 
 ```text
 ComicVineDateScan
+    scan_kind
     scan_date
     next_offset
     total_results
@@ -114,13 +231,12 @@ ComicVineDateScan
 
 Purpose:
 
-* track one Comic Vine `date_added` day per row
+* track one Comic Vine date-based scan per row
+* separate progress by scan type
 * remember how many candidates have already been scanned for that date
 * know when a date has been fully scanned
-* allow the importer to resume cleanly after stopping
-* allow the database to fill backward over time
-
-This replaced the older import-state approach.
+* allow importers to resume cleanly after stopping
+* allow each importer to run independently
 
 ---
 
@@ -128,7 +244,7 @@ This replaced the older import-state approach.
 
 Added the core comic data models.
 
-Current models:
+Current models after later updates:
 
 ```text
 ComicVolume
@@ -141,6 +257,8 @@ ComicIssue
 Comic Vine volume ID
 name
 publisher
+Comic Vine date added
+Comic Vine date last updated
 Comic Vine URL
 ```
 
@@ -151,6 +269,8 @@ Comic Vine issue ID
 volume relationship
 issue number
 issue title
+Comic Vine date added
+Comic Vine date last updated
 cover date
 store date
 Comic Vine URL
@@ -164,6 +284,7 @@ Purpose:
 * store volume information separately from issue information
 * store publisher on the volume
 * allow later filtering by publisher
+* preserve Comic Vine timestamps for debugging and refresh behavior
 
 Example:
 
