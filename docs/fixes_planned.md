@@ -1,2 +1,0 @@
-Right now add_volumes will just call volumes over and over again if on comic vines the volume just doesnt have a publisher set.
-If this number which is currently 2 hit 100 then it would be able to add an more volumes cause its buffer is essentially full by volume that are in the database but missing info on comicvine.
