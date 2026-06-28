@@ -39,4 +39,4 @@ jobs:
         run: python manage.py check
 
       - name: Run Comic Vine sync
-        run: python manage.py sync_comicvine
+        run: python manage.py sync_comics
