@@ -46,8 +46,5 @@ jobs:
       - name: Run Django checks
         run: python manage.py check
 
-      - name: Apply database migrations
-        run: python manage.py migrate --noinput
-
       - name: Run Comic Vine sync
         run: python manage.py sync_comics
