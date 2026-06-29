@@ -12,12 +12,14 @@
         <h1 class="display-5 fw-bold">EzyReadComics</h1>
 
         <p class="col-md-8 fs-4">
-            A Django project for exploring current Marvel comic reading paths.
+            Browse comic runs and issues using structured Comic Vine data.
         </p>
 
-        <p class="text-secondary mb-0">
-            The homepage is now using a shared Bootstrap dark-mode base template.
-        </p>
+        <div class="d-flex flex-wrap gap-2 mt-4">
+            <a href="{% url 'browse' %}" class="btn btn-primary btn-lg">
+                Browse comics
+            </a>
+        </div>
     </div>
 </div>
 {% endblock %}

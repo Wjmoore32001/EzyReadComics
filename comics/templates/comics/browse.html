@@ -1,0 +1,641 @@
+{% extends "comics/base.html" %}
+
+{% block title %}Browse | EzyReadComics{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-column gap-4">
+    <div>
+        <p class="text-uppercase text-secondary fw-semibold mb-2">Comic Library</p>
+        <h1 class="display-6 fw-bold mb-0">Browse</h1>
+        <p class="text-secondary mb-0">
+            Browse by publisher, run, and issue. Runs are displayed with their start year so repeated titles stay clear.
+        </p>
+    </div>
+
+    <section class="card border-secondary bg-body-tertiary">
+        <div class="card-body">
+            <div class="row g-3 align-items-end">
+                <div class="col-12 col-lg-4">
+                    <label class="form-label text-secondary" for="publisher-search-browse">
+                        Publisher
+                    </label>
+
+                    <div class="dropdown searchable-dropdown">
+                        <button
+                            class="btn btn-outline-secondary dropdown-toggle text-start w-100"
+                            type="button"
+                            id="publisher-dropdown-browse"
+                            data-bs-toggle="dropdown"
+                            data-bs-auto-close="outside"
+                            aria-expanded="false"
+                        >
+                            {% if selected_publisher %}
+                                {{ selected_publisher }}
+                            {% else %}
+                                All publishers
+                            {% endif %}
+                        </button>
+
+                        <div class="dropdown-menu p-2 w-100" aria-labelledby="publisher-dropdown-browse">
+                            <input
+                                type="search"
+                                id="publisher-search-browse"
+                                class="form-control mb-2"
+                                placeholder="Search publishers..."
+                                autocomplete="off"
+                                data-dropdown-search
+                            >
+
+                            <a
+                                href="{% url 'browse' %}"
+                                class="dropdown-item rounded {% if not selected_publisher %}active{% endif %}"
+                                data-dropdown-option
+                                data-search-label="All publishers"
+                            >
+                                All publishers
+                            </a>
+
+                            <div class="dropdown-divider"></div>
+
+                            <div data-dropdown-options style="max-height: 18rem; overflow-y: auto;">
+                                {% for publisher in publishers %}
+                                    <a
+                                        href="{% url 'browse' %}?publisher={{ publisher|urlencode }}"
+                                        class="dropdown-item rounded {% if selected_publisher == publisher %}active{% endif %}"
+                                        data-dropdown-option
+                                        data-search-label="{{ publisher }}"
+                                    >
+                                        {{ publisher }}
+                                    </a>
+                                {% endfor %}
+                            </div>
+
+                            <p class="dropdown-item-text text-secondary mb-0 d-none" data-no-results>
+                                No matching publishers.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-12 col-lg-4">
+                    <label class="form-label text-secondary" for="run-search-browse">
+                        Run
+                    </label>
+
+                    {% if selected_publisher %}
+                        <div class="dropdown searchable-dropdown" data-sort-runs="true">
+                            <button
+                                class="btn btn-outline-secondary dropdown-toggle text-start w-100"
+                                type="button"
+                                id="run-dropdown-browse"
+                                data-bs-toggle="dropdown"
+                                data-bs-auto-close="outside"
+                                aria-expanded="false"
+                            >
+                                {% if selected_run %}
+                                    {% if selected_run.start_year %}
+                                        {{ selected_run.start_year }} —
+                                    {% endif %}
+                                    {{ selected_run.name }}
+                                {% else %}
+                                    All {{ selected_publisher }} runs
+                                {% endif %}
+                            </button>
+
+                            <div class="dropdown-menu p-2 w-100" aria-labelledby="run-dropdown-browse">
+                                <input
+                                    type="search"
+                                    id="run-search-browse"
+                                    class="form-control mb-2"
+                                    placeholder="Search runs..."
+                                    autocomplete="off"
+                                    data-dropdown-search
+                                >
+
+                                <a
+                                    href="{% url 'browse' %}?publisher={{ selected_publisher|urlencode }}"
+                                    class="dropdown-item rounded {% if not selected_run %}active{% endif %}"
+                                    data-dropdown-option
+                                    data-search-label="All runs"
+                                >
+                                    All {{ selected_publisher }} runs
+                                </a>
+
+                                <div class="dropdown-divider"></div>
+
+                                <div data-dropdown-options style="max-height: 22rem; overflow-y: auto;">
+                                    {% for run in runs %}
+                                        <a
+                                            href="{% url 'browse' %}?publisher={{ selected_publisher|urlencode }}&run={{ run.id }}"
+                                            class="dropdown-item rounded {% if selected_run and selected_run.id == run.id %}active{% endif %}"
+                                            data-dropdown-option
+                                            data-search-label="{{ run.name }} {{ run.start_year }}"
+                                            data-run-name="{{ run.name }}"
+                                            data-run-year="{{ run.start_year }}"
+                                        >
+                                            <span class="fw-semibold">
+                                                {% if run.start_year %}
+                                                    {{ run.start_year }}
+                                                {% else %}
+                                                    Unknown year
+                                                {% endif %}
+                                            </span>
+                                            —
+                                            {{ run.name }}
+
+                                            <span class="text-secondary">
+                                                ({{ run.stored_issue_count }} issues)
+                                            </span>
+                                        </a>
+                                    {% endfor %}
+                                </div>
+
+                                <p class="dropdown-item-text text-secondary mb-0 d-none" data-no-results>
+                                    No matching runs.
+                                </p>
+                            </div>
+                        </div>
+                    {% else %}
+                        <button class="btn btn-outline-secondary text-start w-100" type="button" disabled>
+                            Select a publisher first
+                        </button>
+                    {% endif %}
+                </div>
+
+                <div class="col-12 col-lg-4">
+                    <label class="form-label text-secondary" for="issue-search-browse">
+                        Issue
+                    </label>
+
+                    {% if selected_run %}
+                        <div class="dropdown searchable-dropdown">
+                            <button
+                                class="btn btn-outline-secondary dropdown-toggle text-start w-100"
+                                type="button"
+                                id="issue-dropdown-browse"
+                                data-bs-toggle="dropdown"
+                                data-bs-auto-close="outside"
+                                aria-expanded="false"
+                            >
+                                {% if selected_issue %}
+                                    #{{ selected_issue.issue_number }}
+                                    {% if selected_issue.issue_title %}
+                                        — {{ selected_issue.issue_title }}
+                                    {% endif %}
+                                {% else %}
+                                    All issues in this run
+                                {% endif %}
+                            </button>
+
+                            <div class="dropdown-menu p-2 w-100" aria-labelledby="issue-dropdown-browse">
+                                <input
+                                    type="search"
+                                    id="issue-search-browse"
+                                    class="form-control mb-2"
+                                    placeholder="Search issue number or title..."
+                                    autocomplete="off"
+                                    data-dropdown-search
+                                >
+
+                                <a
+                                    href="{% url 'browse' %}?publisher={{ selected_publisher|urlencode }}&run={{ selected_run.id }}"
+                                    class="dropdown-item rounded {% if not selected_issue %}active{% endif %}"
+                                    data-dropdown-option
+                                    data-search-label="All issues"
+                                >
+                                    All issues in this run
+                                </a>
+
+                                <div class="dropdown-divider"></div>
+
+                                <div data-dropdown-options style="max-height: 22rem; overflow-y: auto;">
+                                    {% for issue in issue_options %}
+                                        <a
+                                            href="{% url 'browse' %}?publisher={{ selected_publisher|urlencode }}&run={{ selected_run.id }}&issue={{ issue.id }}"
+                                            class="dropdown-item rounded {% if selected_issue and selected_issue.id == issue.id %}active{% endif %}"
+                                            data-dropdown-option
+                                            data-search-label="{{ issue.issue_number }} {{ issue.issue_title }} #{{ issue.issue_number }}"
+                                        >
+                                            #{{ issue.issue_number }}
+                                            {% if issue.issue_title %}
+                                                — {{ issue.issue_title }}
+                                            {% endif %}
+                                        </a>
+                                    {% endfor %}
+                                </div>
+
+                                <p class="dropdown-item-text text-secondary mb-0 d-none" data-no-results>
+                                    No matching issues.
+                                </p>
+                            </div>
+                        </div>
+                    {% else %}
+                        <button class="btn btn-outline-secondary text-start w-100" type="button" disabled>
+                            Select a run first
+                        </button>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="d-flex flex-wrap gap-2 mt-3">
+                {% if selected_publisher or selected_run or selected_issue %}
+                    <a href="{% url 'browse' %}" class="btn btn-sm btn-outline-secondary">
+                        Clear all filters
+                    </a>
+                {% endif %}
+
+                {% if selected_run %}
+                    <a href="{% url 'browse' %}?publisher={{ selected_publisher|urlencode }}" class="btn btn-sm btn-outline-secondary">
+                        Clear run
+                    </a>
+                {% endif %}
+
+                {% if selected_issue %}
+                    <a href="{% url 'browse' %}?publisher={{ selected_publisher|urlencode }}&run={{ selected_run.id }}" class="btn btn-sm btn-outline-secondary">
+                        Clear issue
+                    </a>
+                {% endif %}
+            </div>
+        </div>
+    </section>
+
+    <section>
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-end gap-2 mb-3">
+            <div>
+                <h2 class="h4 fw-bold mb-1">{{ page_title }}</h2>
+
+                {% if page_obj.paginator.count == 1 %}
+                    <p class="text-secondary mb-0">1 result</p>
+                {% else %}
+                    <p class="text-secondary mb-0">{{ page_obj.paginator.count }} results</p>
+                {% endif %}
+            </div>
+
+            {% if page_obj.paginator.num_pages > 1 %}
+                <p class="text-secondary mb-0">
+                    Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+                </p>
+            {% endif %}
+        </div>
+
+        <div class="card border-secondary bg-body-tertiary">
+            <div class="card-body">
+                {% if result_mode == "runs" %}
+                    <div class="table-responsive">
+                        <table class="table table-dark table-hover align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th scope="col">Year</th>
+                                    <th scope="col">Run</th>
+                                    <th scope="col">Publisher</th>
+                                    <th scope="col">Stored Issues</th>
+                                    <th scope="col">Browse</th>
+                                    <th scope="col">Comic Vine</th>
+                                </tr>
+                            </thead>
+
+                            <tbody>
+                                {% for run in page_obj.object_list %}
+                                    <tr>
+                                        <td>
+                                            {% if run.start_year %}
+                                                {{ run.start_year }}
+                                            {% else %}
+                                                <span class="text-secondary">Unknown</span>
+                                            {% endif %}
+                                        </td>
+
+                                        <td class="fw-semibold">{{ run.name }}</td>
+
+                                        <td>
+                                            {% if run.publisher %}
+                                                {{ run.publisher }}
+                                            {% else %}
+                                                <span class="text-secondary">Unknown</span>
+                                            {% endif %}
+                                        </td>
+
+                                        <td>{{ run.stored_issue_count }}</td>
+
+                                        <td>
+                                            {% if run.publisher %}
+                                                <a
+                                                    href="{% url 'browse' %}?publisher={{ run.publisher|urlencode }}&run={{ run.id }}"
+                                                    class="btn btn-sm btn-outline-info"
+                                                >
+                                                    View issues
+                                                </a>
+                                            {% else %}
+                                                <a
+                                                    href="{% url 'browse' %}?run={{ run.id }}"
+                                                    class="btn btn-sm btn-outline-info"
+                                                >
+                                                    View issues
+                                                </a>
+                                            {% endif %}
+                                        </td>
+
+                                        <td>
+                                            {% if run.comicvine_url %}
+                                                <a href="{{ run.comicvine_url }}" target="_blank" rel="noopener noreferrer">
+                                                    Open
+                                                </a>
+                                            {% else %}
+                                                <span class="text-secondary">None</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                {% empty %}
+                                    <tr>
+                                        <td colspan="6" class="text-center text-secondary py-4">
+                                            No runs found.
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="table-responsive">
+                        <table class="table table-dark table-hover align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th scope="col">Year</th>
+                                    <th scope="col">Run</th>
+                                    <th scope="col">Issue</th>
+                                    <th scope="col">Title</th>
+                                    <th scope="col">Store Date</th>
+                                    <th scope="col">Cover Date</th>
+                                    <th scope="col">Comic Vine</th>
+                                </tr>
+                            </thead>
+
+                            <tbody>
+                                {% for issue in page_obj.object_list %}
+                                    <tr>
+                                        <td>
+                                            {% if issue.volume.start_year %}
+                                                {{ issue.volume.start_year }}
+                                            {% else %}
+                                                <span class="text-secondary">Unknown</span>
+                                            {% endif %}
+                                        </td>
+
+                                        <td class="fw-semibold">
+                                            {% if issue.volume %}
+                                                {{ issue.volume.name }}
+                                            {% else %}
+                                                <span class="text-secondary">Unknown Run</span>
+                                            {% endif %}
+                                        </td>
+
+                                        <td>#{{ issue.issue_number }}</td>
+
+                                        <td>
+                                            {% if issue.issue_title %}
+                                                {{ issue.issue_title }}
+                                            {% else %}
+                                                <span class="text-secondary">Untitled</span>
+                                            {% endif %}
+                                        </td>
+
+                                        <td>
+                                            {% if issue.store_date %}
+                                                {{ issue.store_date }}
+                                            {% else %}
+                                                <span class="text-secondary">Unknown</span>
+                                            {% endif %}
+                                        </td>
+
+                                        <td>
+                                            {% if issue.cover_date %}
+                                                {{ issue.cover_date }}
+                                            {% else %}
+                                                <span class="text-secondary">Unknown</span>
+                                            {% endif %}
+                                        </td>
+
+                                        <td>
+                                            {% if issue.comicvine_url %}
+                                                <a href="{{ issue.comicvine_url }}" target="_blank" rel="noopener noreferrer">
+                                                    Open
+                                                </a>
+                                            {% else %}
+                                                <span class="text-secondary">None</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                {% empty %}
+                                    <tr>
+                                        <td colspan="7" class="text-center text-secondary py-4">
+                                            No issues found.
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if page_obj.paginator.num_pages > 1 %}
+            <nav class="mt-4" aria-label="Browse pagination">
+                <ul class="pagination justify-content-center">
+                    <li class="page-item {% if not page_obj.has_previous %}disabled{% endif %}">
+                        {% if page_obj.has_previous %}
+                            <a
+                                class="page-link"
+                                href="{% if base_query_string %}?{{ base_query_string }}&page={{ page_obj.previous_page_number }}{% else %}?page={{ page_obj.previous_page_number }}{% endif %}"
+                            >
+                                Previous
+                            </a>
+                        {% else %}
+                            <span class="page-link">Previous</span>
+                        {% endif %}
+                    </li>
+
+                    <li class="page-item disabled">
+                        <span class="page-link">
+                            Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+                        </span>
+                    </li>
+
+                    <li class="page-item {% if not page_obj.has_next %}disabled{% endif %}">
+                        {% if page_obj.has_next %}
+                            <a
+                                class="page-link"
+                                href="{% if base_query_string %}?{{ base_query_string }}&page={{ page_obj.next_page_number }}{% else %}?page={{ page_obj.next_page_number }}{% endif %}"
+                            >
+                                Next
+                            </a>
+                        {% else %}
+                            <span class="page-link">Next</span>
+                        {% endif %}
+                    </li>
+                </ul>
+            </nav>
+        {% endif %}
+    </section>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const dropdowns = Array.from(document.querySelectorAll(".searchable-dropdown"));
+
+    function normalizeSearchValue(value) {
+        return value
+            .toLowerCase()
+            .replaceAll("&", "and")
+            .replaceAll("’", "'")
+            .replaceAll("‘", "'")
+            .replaceAll("–", "-")
+            .replaceAll("—", "-")
+            .replace(/[^a-z0-9]+/g, "");
+    }
+
+    function getOptionScore(option, rawSearchValue) {
+        const searchValue = normalizeSearchValue(rawSearchValue);
+        const runName = normalizeSearchValue(option.dataset.runName || "");
+        const label = normalizeSearchValue(option.dataset.searchLabel || option.textContent || "");
+        const year = parseInt(option.dataset.runYear || "0", 10) || 0;
+
+        if (!searchValue) {
+            return {
+                score: 0,
+                year: year,
+            };
+        }
+
+        if (runName === searchValue) {
+            return {
+                score: 1000,
+                year: year,
+            };
+        }
+
+        if (runName.startsWith(searchValue)) {
+            return {
+                score: 800,
+                year: year,
+            };
+        }
+
+        if (label.startsWith(searchValue)) {
+            return {
+                score: 700,
+                year: year,
+            };
+        }
+
+        if (runName.includes(searchValue)) {
+            return {
+                score: 500,
+                year: year,
+            };
+        }
+
+        if (label.includes(searchValue)) {
+            return {
+                score: 400,
+                year: year,
+            };
+        }
+
+        return {
+            score: 0,
+            year: year,
+        };
+    }
+
+    dropdowns.forEach(function (dropdown) {
+        const searchInput = dropdown.querySelector("[data-dropdown-search]");
+        const optionsContainer = dropdown.querySelector("[data-dropdown-options]");
+        const noResultsMessage = dropdown.querySelector("[data-no-results]");
+        const dropdownButton = dropdown.querySelector("[data-bs-toggle='dropdown']");
+
+        if (!searchInput || !optionsContainer || !dropdownButton) {
+            return;
+        }
+
+        const options = Array.from(optionsContainer.querySelectorAll("[data-dropdown-option]"));
+
+        options.forEach(function (option, index) {
+            option.dataset.originalIndex = String(index);
+        });
+
+        function restoreOriginalOrder() {
+            options
+                .slice()
+                .sort(function (left, right) {
+                    return Number(left.dataset.originalIndex) - Number(right.dataset.originalIndex);
+                })
+                .forEach(function (option) {
+                    optionsContainer.appendChild(option);
+                });
+        }
+
+        function sortRunOptions(visibleOptions, searchValue) {
+            visibleOptions
+                .slice()
+                .sort(function (left, right) {
+                    const leftScore = getOptionScore(left, searchValue);
+                    const rightScore = getOptionScore(right, searchValue);
+
+                    if (rightScore.score !== leftScore.score) {
+                        return rightScore.score - leftScore.score;
+                    }
+
+                    if (rightScore.year !== leftScore.year) {
+                        return rightScore.year - leftScore.year;
+                    }
+
+                    return Number(left.dataset.originalIndex) - Number(right.dataset.originalIndex);
+                })
+                .forEach(function (option) {
+                    optionsContainer.appendChild(option);
+                });
+        }
+
+        function filterOptions() {
+            const rawSearchValue = searchInput.value.trim();
+            const normalizedSearchValue = normalizeSearchValue(rawSearchValue);
+            let visibleOptions = [];
+
+            options.forEach(function (option) {
+                const rawLabel = option.dataset.searchLabel || option.textContent || "";
+                const normalizedLabel = normalizeSearchValue(rawLabel);
+                const shouldShow = !normalizedSearchValue || normalizedLabel.includes(normalizedSearchValue);
+
+                option.classList.toggle("d-none", !shouldShow);
+
+                if (shouldShow) {
+                    visibleOptions.push(option);
+                }
+            });
+
+            if (dropdown.dataset.sortRuns === "true" && rawSearchValue) {
+                sortRunOptions(visibleOptions, rawSearchValue);
+            } else {
+                restoreOriginalOrder();
+            }
+
+            if (noResultsMessage) {
+                noResultsMessage.classList.toggle("d-none", visibleOptions.length !== 0);
+            }
+        }
+
+        searchInput.addEventListener("input", filterOptions);
+
+        searchInput.addEventListener("click", function (event) {
+            event.stopPropagation();
+        });
+
+        dropdownButton.addEventListener("shown.bs.dropdown", function () {
+            searchInput.focus();
+            searchInput.select();
+        });
+    });
+});
+</script>
+{% endblock %}

@@ -9,7 +9,7 @@
 <body class="bg-dark text-light">
     <nav class="navbar navbar-expand-lg border-bottom border-secondary bg-body-tertiary">
         <div class="container">
-            <a class="navbar-brand fw-bold" href="/">EzyReadComics</a>
+            <a class="navbar-brand fw-bold" href="{% url 'home' %}">EzyReadComics</a>
 
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNavbar" aria-controls="mainNavbar" aria-expanded="false" aria-label="Toggle navigation">
                 <span class="navbar-toggler-icon"></span>
@@ -19,19 +19,10 @@
                 <ul class="navbar-nav ms-auto">
                     <li class="nav-item">
                         <a
-                            class="nav-link {% if request.resolver_match.url_name == 'issues' %}active{% endif %}"
-                            href="{% url 'issues' %}"
+                            class="nav-link {% if request.resolver_match.url_name == 'browse' or request.resolver_match.url_name == 'issues' or request.resolver_match.url_name == 'volumes' %}active{% endif %}"
+                            href="{% url 'browse' %}"
                         >
-                            Issues
-                        </a>
-                    </li>
-
-                    <li class="nav-item">
-                        <a
-                            class="nav-link {% if request.resolver_match.url_name == 'volumes' %}active{% endif %}"
-                            href="{% url 'volumes' %}"
-                        >
-                            Volumes
+                            Browse
                         </a>
                     </li>
                 </ul>
