@@ -3,8 +3,9 @@ name: Scheduled Comic Vine Sync
 on:
   workflow_dispatch:
   schedule:
-    - cron: "17 0-23/3 * * *"
-    - cron: "47 1-23/3 * * *"
+    # Runs once every hour at minute 17 UTC.
+    # GitHub Actions scheduled runs can be delayed, but the intended trigger interval is hourly.
+    - cron: "17 * * * *"
 
 concurrency:
   group: comicvine-sync
@@ -22,6 +23,13 @@ jobs:
       DEBUG: "False"
 
     steps:
+      - name: Show sync trigger
+        run: |
+          echo "Triggered by: ${{ github.event_name }}"
+          echo "Run number: ${{ github.run_number }}"
+          echo "UTC start time:"
+          date -u
+
       - name: Check out repository
         uses: actions/checkout@v4
 
