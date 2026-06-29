@@ -1,28 +1,41 @@
 # EzyReadComics
 
-EzyReadComics is a Django web app for importing, storing, syncing, and browsing comic issue and volume data from the Comic Vine API.
+EzyReadComics is a Django web app for importing, storing, syncing, and browsing comic issue and run data from the Comic Vine API.
 
-The project currently focuses on building a reliable comic data foundation: issues, volumes, publishers, dates, Comic Vine links, cover/image URLs, sync state, and detail hydration. It does not currently attempt to build reading-order algorithms, event logic, recommendations, character pages, team pages, story arc pages, or issue-to-issue reading links.
+The project currently focuses on building a reliable comic data foundation and a usable browsing interface before adding user-specific reading tools, reading-order algorithms, recommendation logic, or current-era reading guidance.
 
-## What the App Does
+## Current Focus
+
+The current project focus is:
+
+* Store comic runs and issues from Comic Vine.
+* Keep local comic data synced through dedicated management commands.
+* Hydrate issue and run records with richer Comic Vine detail data.
+* Browse stored runs and issues through a centralized Browse page.
+* Keep the project structure readable and expandable before adding accounts and reading tracking.
+
+The project does not currently attempt to build reading-order algorithms, event logic, recommendations, character pages, team pages, story arc pages, or issue-to-issue reading links.
+
+## What the App Currently Does
 
 EzyReadComics currently provides:
 
-* A simple homepage
-* An issue list page
-* A volume list page
-* Publisher filtering for issues and volumes
-* Searchable publisher dropdowns for easier filtering
-* Comic Vine issue importing from list endpoints
-* Comic Vine volume updating from list endpoints
-* Issue detail hydration from Comic Vine issue detail endpoints
-* Volume detail hydration from Comic Vine volume detail endpoints
-* Person/credit storage for issue and volume credits
-* Local scan tracking so imports can resume safely
-* A wrapper sync command for running the normal sync flow in order
-* A scheduled GitHub Actions workflow for automatic syncing
-
-The goal is to keep the data import and display system simple, understandable, and reliable before adding more advanced comic-reading features.
+* A simple homepage.
+* A centralized Browse page.
+* Publisher filtering.
+* Searchable dropdowns for publisher, run, and issue filters.
+* Run browsing with start years displayed clearly.
+* Issue browsing for a selected run.
+* Comic Vine links for stored runs and issues.
+* Paginated browse results to avoid loading too much data at once.
+* Comic Vine issue importing from list endpoints.
+* Comic Vine volume/run updating from list endpoints.
+* Issue detail hydration from Comic Vine issue detail endpoints.
+* Volume/run detail hydration from Comic Vine volume detail endpoints.
+* Person and credit-role storage for issue and volume credits.
+* Local scan tracking so imports can resume safely.
+* A wrapper sync command for running the normal sync flow in order.
+* A scheduled GitHub Actions workflow for automatic syncing.
 
 ## Tech Stack
 
@@ -45,18 +58,74 @@ The goal is to keep the data import and display system simple, understandable, a
 Homepage.
 
 ```text
+/browse/
+```
+
+Central comic browser.
+
+The Browse page supports:
+
+* publisher selection
+* run selection
+* issue selection
+* searchable dropdowns
+* automatic filter navigation
+* paginated run results
+* paginated issue results
+* Comic Vine links
+
+When no run is selected, the page shows runs. When a run is selected, the page shows issues for that run.
+
+```text
 /issues/
 ```
 
-Displays stored comic issues. The page includes issue metadata such as store date, publisher, volume, issue number, title, cover date, and Comic Vine link.
+Legacy route kept so older links do not break. It now uses the Browse behavior.
 
 ```text
 /volumes/
 ```
 
-Displays stored comic volumes. The page includes publisher, volume name, stored issue count, latest related issue store date, and Comic Vine link.
+Legacy route kept so older links do not break. It now uses the Browse behavior.
 
-Both the issue and volume pages support publisher filtering through a searchable dropdown.
+## Current UI Direction
+
+The project uses a Bootstrap dark-mode layout with a custom dark/blue accent style.
+
+The current UI direction favors:
+
+* dark background panels
+* blue/cyan highlights for active controls
+* searchable dropdown filters
+* clear run-year display
+* table-based browsing while the data model is still evolving
+
+## Current Project Structure Notes
+
+The comics app is being organized so future features do not all pile into one file.
+
+Current important structure:
+
+```text
+comics/
+    selectors.py
+    urls.py
+    views/
+        __init__.py
+        browse.py
+        home.py
+    templates/
+        comics/
+            base.html
+            browse.html
+            home.html
+```
+
+`selectors.py` contains reusable database query helpers.
+
+`comics/views/` contains page-level view logic split by feature area.
+
+This keeps browse logic, home page logic, and later feature logic easier to maintain.
 
 ## Data Model Overview
 
@@ -65,6 +134,8 @@ The app currently stores Comic Vine data in a relational shape instead of keepin
 ### ComicVolume
 
 Represents a Comic Vine volume.
+
+In the app UI, volumes are generally treated as comic runs.
 
 Stored data includes:
 
@@ -96,7 +167,7 @@ Represents a single Comic Vine issue.
 Stored data includes:
 
 * Comic Vine issue ID
-* Related volume
+* Related volume/run
 * Issue number
 * Issue title
 * Cover date
@@ -140,14 +211,14 @@ This person had this role on this issue.
 
 ### ComicVolumePersonCredit
 
-Connects a volume to a person.
+Connects a volume/run to a person.
 
 Comic Vine volume-level people data does not provide the same role-level detail as issue credits, so volume people are stored separately from issue-role credits.
 
 Plain English:
 
 ```text
-This person is connected to this volume.
+This person is connected to this volume/run.
 ```
 
 ### ComicVineDateScan
@@ -156,7 +227,7 @@ Tracks date-based Comic Vine scans so commands can resume instead of starting ov
 
 ### ComicVineSyncState
 
-Stores sync-wide state, including the update tracking start date used by backfill logic.
+Stores sync-wide state, including the update tracking start date used by normal sync and backfill logic.
 
 ## Comic Vine Sync System
 
@@ -194,7 +265,7 @@ The command names follow this vocabulary:
 add      = discover and create new local rows from Comic Vine list endpoints
 update   = refresh existing/returned local rows from Comic Vine list endpoints
 hydrate  = fill richer detail fields from Comic Vine detail endpoints
-backfill = manually import older historical issue records
+backfill = manually import older or special-case issue records
 ```
 
 ## Normal Sync Commands
@@ -257,15 +328,15 @@ Used for:
 * syncing issue-level person credits with roles
 * marking issue hydration attempts so empty optional fields do not cause repeat API calls forever
 
-## Manual Backfill Command
+## Manual Backfill Commands
+
+Manual backfill commands are intentionally not part of the normal scheduled sync.
 
 ### `backfill_issues`
 
 Backfills older Comic Vine issue records before the normal update tracking start date.
 
-This command is intentionally not part of the normal scheduled sync.
-
-Run it manually when older historical data should be imported:
+Run manually when older historical data should be imported:
 
 ```bash
 python manage.py backfill_issues
@@ -277,20 +348,26 @@ Dry run:
 python manage.py backfill_issues --dry-run
 ```
 
+### Temporary current-run backfill utilities
+
+The project may also include temporary/manual commands used while building a controlled current-Marvel sandbox.
+
+These commands are not the normal sync system. They exist to help seed and test a smaller current-run dataset before expanding into broader historical data.
+
 ## Automatic Syncing
 
 The repo includes a GitHub Actions workflow for scheduled Comic Vine syncing.
 
 The workflow:
 
-* Can be run manually from GitHub Actions
-* Runs on a recurring cron schedule
-* Installs project dependencies
-* Runs `python manage.py check`
-* Runs `python manage.py migrate --noinput`
-* Runs `python manage.py sync_comics`
-* Uses GitHub repository secrets for environment variables
-* Uses workflow concurrency to avoid overlapping sync jobs
+* Can be run manually from GitHub Actions.
+* Runs on a recurring cron schedule.
+* Installs project dependencies.
+* Runs `python manage.py check`.
+* Runs `python manage.py migrate --noinput`.
+* Runs `python manage.py sync_comics`.
+* Uses GitHub repository secrets for environment variables.
+* Uses workflow concurrency to avoid overlapping sync jobs.
 
 Required GitHub secrets:
 
@@ -347,6 +424,12 @@ Start the development server:
 
 ```bash
 python manage.py runserver
+```
+
+Open:
+
+```text
+http://127.0.0.1:8000/
 ```
 
 ## Common Commands
@@ -406,12 +489,13 @@ EzyReadComics is intentionally being built in stages.
 Currently included:
 
 * Basic issue storage
-* Basic volume storage
+* Basic volume/run storage
 * Expanded Comic Vine issue and volume metadata
 * Comic Vine image URL storage
+* Centralized Browse page
 * Publisher-aware browsing
-* Searchable publisher filters
-* Simple database-backed pages
+* Searchable publisher, run, and issue filters
+* Paginated database-backed browse results
 * Comic Vine import commands
 * Comic Vine update commands
 * Comic Vine detail hydration commands
@@ -421,6 +505,9 @@ Currently included:
 
 Not currently included:
 
+* User login/signup pages
+* User reading tracking
+* User read lists
 * Reading-order algorithms
 * Issue-to-issue reading order links
 * Event models
@@ -429,9 +516,19 @@ Not currently included:
 * Story arc models
 * Recommendation logic
 * Issue detail pages
-* Volume detail pages
+* Volume/run detail pages
 
-Those may be added later after the core data import system is stable.
+Those may be added later after the core data import and browse systems are stable.
+
+## Near-Term Planned Work
+
+Likely next steps:
+
+* Add a dedicated accounts app.
+* Add basic login, logout, and signup pages.
+* Keep admin accounts handled through Django admin.
+* Add user-specific reading tracking models later.
+* Add user controls for marking issues/runs as read, wanted, or currently reading.
 
 ## Documentation
 

@@ -1,5 +1,112 @@
 # Development Log
 
+## 2026-06-29 — Added Central Browse Page and Split Comics Views
+
+Replaced the temporary separate issue and volume browsing pages with a centralized Browse page.
+
+Before this change, the project had separate pages for:
+
+```text
+/issues/
+/volumes/
+```
+
+Those pages were useful for confirming that imported data could be displayed, but they were not the right long-term browsing structure.
+
+The new central browsing route is:
+
+```text
+/browse/
+```
+
+The old routes are still kept so links do not break:
+
+```text
+/issues/
+/volumes/
+```
+
+They now use the new Browse behavior instead of remaining separate UI tabs.
+
+Browse behavior:
+
+* Publisher filter is available first.
+* Run filter becomes useful after a publisher is selected.
+* Issue filter becomes useful after a run is selected.
+* Searchable dropdowns are used for publisher, run, and issue selection.
+* Runs display their start year so repeated run names stay clear.
+* Browse results are paginated.
+* Selecting a run changes the result table from runs to issues.
+* Selecting an issue narrows the result table to that issue.
+* Comic Vine links remain available for runs and issues.
+
+The UI now treats Comic Vine volumes as user-facing comic runs.
+
+For example:
+
+```text
+X-Men (2024)
+```
+
+is displayed as a run, even though the database model remains `ComicVolume`.
+
+Code organization also changed.
+
+The old single file was removed:
+
+```text
+comics/views.py
+```
+
+It was replaced with a package:
+
+```text
+comics/views/
+    __init__.py
+    browse.py
+    home.py
+```
+
+A new selector module was added:
+
+```text
+comics/selectors.py
+```
+
+Purpose of `selectors.py`:
+
+* keep reusable database queries out of view files
+* provide publisher, run, and issue query helpers
+* make future current-era and user-reading features easier to build without duplicating query logic
+
+Templates updated:
+
+```text
+comics/templates/comics/base.html
+comics/templates/comics/home.html
+comics/templates/comics/browse.html
+```
+
+Templates removed:
+
+```text
+comics/templates/comics/issues.html
+comics/templates/comics/volumes.html
+```
+
+The shared base template also received a stronger dark/blue visual direction.
+
+Current UI style direction:
+
+* dark panels
+* cyan/blue active controls
+* searchable dropdowns
+* clear table layouts
+* visible hover/active states
+* no large all-issues dropdown by default
+
+This change does not add user accounts, read tracking, reading-order logic, or detail pages. It is a frontend and structure cleanup step before building accounts and user-specific reading features.
+
 ## 2026-06-28 — Added Searchable Publisher Dropdowns
 
 Updated the publisher filters on the issue and volume pages.
@@ -657,17 +764,29 @@ The project currently has:
 * GitHub Actions secret support
 * Comic Vine API key support
 * simple homepage
-* issue list page
-* volume list page
-* searchable publisher dropdowns
+* centralized Browse page
+* legacy `/issues/` and `/volumes/` routes pointing to Browse behavior
+* searchable publisher dropdown
+* searchable run dropdown
+* searchable issue dropdown
+* paginated run browsing
+* paginated issue browsing
+* dark/blue Bootstrap-based UI direction
+* split comics view package
+* reusable comics selector helpers
 * `ComicIssue` model
 * `ComicVolume` model
+* `ComicPerson` model
+* `ComicCreditRole` model
+* `ComicIssuePersonCredit` model
+* `ComicVolumePersonCredit` model
 * `ComicVineDateScan` model
 * `ComicVineSyncState` model
 * current issue updater
 * current issue adder
 * current volume updater
-* volume detail filler
+* volume detail hydration
+* issue detail hydration
 * historical issue backfill command
 * full sync wrapper command
 * scheduled GitHub Actions sync workflow
@@ -680,4 +799,4 @@ The normal full-sync entry point is now:
 python manage.py sync_comics
 ```
 
-The next likely step is to keep testing the scheduled sync behavior and continue tightening docs as the importer behavior proves itself.
+The next likely step is to add a dedicated accounts app with basic login, logout, and signup pages before building user-specific reading tracking.
