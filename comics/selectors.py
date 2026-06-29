@@ -51,6 +51,18 @@ def get_run_by_id(run_id):
     return get_run_queryset().filter(id=run_id).first()
 
 
+def get_run_detail_by_id(run_id):
+    if not run_id:
+        return None
+
+    return (
+        get_run_queryset()
+        .prefetch_related("person_credits__person")
+        .filter(id=run_id)
+        .first()
+    )
+
+
 def get_issues_for_run(run):
     if not run:
         return ComicIssue.objects.none()
@@ -72,3 +84,18 @@ def get_issue_for_run(run, issue_id):
         return None
 
     return get_issues_for_run(run).filter(id=issue_id).first()
+
+
+def get_issue_detail_by_id(issue_id):
+    if not issue_id:
+        return None
+
+    return (
+        ComicIssue.objects.select_related("volume")
+        .prefetch_related(
+            "person_credits__person",
+            "person_credits__role",
+        )
+        .filter(id=issue_id)
+        .first()
+    )

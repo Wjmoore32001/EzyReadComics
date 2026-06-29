@@ -297,7 +297,12 @@
 
                             <tbody>
                                 {% for run in page_obj.object_list %}
-                                    <tr>
+                                    <tr
+                                        class="clickable-row"
+                                        data-row-href="{% url 'run_detail' run.id %}"
+                                        tabindex="0"
+                                        aria-label="Open run details for {{ run.name }}"
+                                    >
                                         <td>
                                             {% if run.start_year %}
                                                 {{ run.start_year }}
@@ -377,7 +382,12 @@
 
                             <tbody>
                                 {% for issue in page_obj.object_list %}
-                                    <tr>
+                                    <tr
+                                        class="clickable-row"
+                                        data-row-href="{% url 'issue_detail' issue.id %}"
+                                        tabindex="0"
+                                        aria-label="Open issue details for issue {{ issue.issue_number }}"
+                                    >
                                         <td>
                                             {% if issue.volume.start_year %}
                                                 {{ issue.volume.start_year }}

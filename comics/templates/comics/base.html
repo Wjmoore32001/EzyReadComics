@@ -122,6 +122,15 @@
             border-bottom-color: var(--erc-border);
         }
 
+        tr.clickable-row {
+            cursor: pointer;
+        }
+
+        tr.clickable-row:focus {
+            outline: 2px solid var(--erc-border-bright);
+            outline-offset: -2px;
+        }
+
         .text-secondary {
             color: var(--erc-text-soft) !important;
         }
@@ -166,7 +175,7 @@
                 <ul class="navbar-nav ms-auto align-items-lg-center">
                     <li class="nav-item">
                         <a
-                            class="nav-link {% if request.resolver_match.url_name == 'browse' or request.resolver_match.url_name == 'issues' or request.resolver_match.url_name == 'volumes' %}active{% endif %}"
+                            class="nav-link {% if request.resolver_match.url_name == 'browse' or request.resolver_match.url_name == 'issues' or request.resolver_match.url_name == 'volumes' or request.resolver_match.url_name == 'run_detail' or request.resolver_match.url_name == 'issue_detail' %}active{% endif %}"
                             href="{% url 'browse' %}"
                         >
                             Browse
@@ -240,5 +249,38 @@
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" crossorigin="anonymous"></script>
+
+    <script>
+    document.addEventListener("click", function (event) {
+        const row = event.target.closest("[data-row-href]");
+
+        if (!row) {
+            return;
+        }
+
+        if (event.target.closest("a, button, input, select, textarea, label, .dropdown-menu")) {
+            return;
+        }
+
+        window.location.href = row.dataset.rowHref;
+    });
+
+    document.addEventListener("keydown", function (event) {
+        const row = event.target.closest("[data-row-href]");
+
+        if (!row) {
+            return;
+        }
+
+        if (event.target.closest("a, button, input, select, textarea, label, .dropdown-menu")) {
+            return;
+        }
+
+        if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            window.location.href = row.dataset.rowHref;
+        }
+    });
+    </script>
 </body>
 </html>

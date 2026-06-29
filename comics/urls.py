@@ -8,6 +8,8 @@ from .forms import StyledAuthenticationForm
 urlpatterns = [
     path("", views.home, name="home"),
     path("browse/", views.browse, name="browse"),
+    path("runs/<int:run_id>/", views.run_detail, name="run_detail"),
+    path("issues/<int:issue_id>/", views.issue_detail, name="issue_detail"),
 
     path(
         "accounts/login/",
