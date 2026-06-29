@@ -1,10 +1,341 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Title</title>
-</head>
-<body>
+{% extends "comics/base.html" %}
 
-</body>
-</html>
+{% block title %}
+    {% if issue.volume %}{{ issue.volume.name }} {% endif %}#{{ issue.issue_number }} | Issue Details | EzyReadComics
+{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-column gap-4">
+    <div class="d-flex flex-column flex-lg-row justify-content-between gap-3">
+        <div>
+            <p class="text-uppercase text-secondary fw-semibold mb-2">Issue Details</p>
+            <h1 class="display-6 fw-bold mb-1">
+                {% if issue.volume %}
+                    {{ issue.volume.name }}
+                {% else %}
+                    Unknown Run
+                {% endif %}
+                #{{ issue.issue_number }}
+            </h1>
+
+            <p class="text-secondary mb-0">
+                {% if issue.issue_title %}
+                    {{ issue.issue_title }}
+                {% else %}
+                    Untitled issue
+                {% endif %}
+
+                {% if issue.store_date %}
+                    · Store date {{ issue.store_date }}
+                {% endif %}
+
+                {% if issue.cover_date %}
+                    · Cover date {{ issue.cover_date }}
+                {% endif %}
+            </p>
+        </div>
+
+        <div class="d-flex flex-wrap align-items-start gap-2">
+            <a href="{% url 'browse' %}" class="btn btn-outline-secondary">
+                Back to Browse
+            </a>
+
+            {% if issue.volume %}
+                <a href="{% url 'run_detail' issue.volume.id %}" class="btn btn-outline-info">
+                    Open run
+                </a>
+
+                {% if issue.volume.publisher %}
+                    <a href="{% url 'browse' %}?publisher={{ issue.volume.publisher|urlencode }}&run={{ issue.volume.id }}" class="btn btn-outline-secondary">
+                        View run in Browse
+                    </a>
+                {% else %}
+                    <a href="{% url 'browse' %}?run={{ issue.volume.id }}" class="btn btn-outline-secondary">
+                        View run in Browse
+                    </a>
+                {% endif %}
+            {% endif %}
+
+            {% if issue.comicvine_url %}
+                <a href="{{ issue.comicvine_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary">
+                    Open Comic Vine
+                </a>
+            {% endif %}
+        </div>
+    </div>
+
+    <section class="card border-secondary bg-body-tertiary">
+        <div class="card-body">
+            <p class="text-uppercase text-secondary fw-semibold mb-3">IDs</p>
+
+            <div class="row g-3">
+                {% for field in id_fields %}
+                    <div class="col-12 col-sm-6 col-lg">
+                        <div class="small text-secondary">{{ field.label }}</div>
+
+                        {% if field.is_missing %}
+                            <div class="fw-semibold text-secondary">{{ field.value }}</div>
+                        {% else %}
+                            <div class="fw-semibold">{{ field.value }}</div>
+                        {% endif %}
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+    </section>
+
+    <div class="row g-4">
+        {% for group in detail_groups %}
+            <div class="col-12 col-xl-6">
+                <section class="card border-secondary bg-body-tertiary h-100">
+                    <div class="card-body">
+                        <h2 class="h5 fw-bold mb-3">{{ group.title }}</h2>
+
+                        <dl class="row mb-0">
+                            {% for field in group.fields %}
+                                <dt class="col-sm-5 text-secondary fw-semibold">{{ field.label }}</dt>
+                                <dd class="col-sm-7">
+                                    {% if field.url %}
+                                        <a href="{{ field.url }}" target="_blank" rel="noopener noreferrer">
+                                            {{ field.value }}
+                                        </a>
+                                    {% elif field.is_missing %}
+                                        <span class="text-secondary">{{ field.value }}</span>
+                                    {% else %}
+                                        {{ field.value }}
+                                    {% endif %}
+                                </dd>
+                            {% endfor %}
+                        </dl>
+                    </div>
+                </section>
+            </div>
+        {% endfor %}
+    </div>
+
+    <section class="card border-secondary bg-body-tertiary">
+        <div class="card-body">
+            <h2 class="h5 fw-bold mb-3">Issue credits</h2>
+
+            {% if issue_credit_groups %}
+                <div class="d-flex flex-column gap-3">
+                    {% for group in issue_credit_groups %}
+                        <div>
+                            <h3 class="h6 text-secondary fw-bold mb-2">{{ group.role_name }}</h3>
+
+                            <div class="list-group list-group-flush">
+                                {% for credit in group.credits %}
+                                    <div class="list-group-item bg-transparent border-secondary px-0">
+                                        <div class="d-flex flex-column flex-md-row justify-content-between gap-2">
+                                            <span class="fw-semibold">{{ credit.person.name }}</span>
+
+                                            <div class="d-flex flex-wrap gap-2">
+                                                {% if credit.comicvine_url %}
+                                                    <a href="{{ credit.comicvine_url }}" target="_blank" rel="noopener noreferrer">
+                                                        Comic Vine
+                                                    </a>
+                                                {% endif %}
+
+                                                {% if credit.api_detail_url %}
+                                                    <a href="{{ credit.api_detail_url }}" target="_blank" rel="noopener noreferrer">
+                                                        API
+                                                    </a>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                    </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <p class="text-secondary mb-0">No issue credits stored for this issue.</p>
+            {% endif %}
+        </div>
+    </section>
+
+    <div class="row g-4">
+        {% for block in text_blocks %}
+            <div class="col-12">
+                <section class="card border-secondary bg-body-tertiary">
+                    <div class="card-body">
+                        <h2 class="h5 fw-bold mb-3">{{ block.label }}</h2>
+
+                        {% if block.value %}
+                            <div class="text-secondary">
+                                {{ block.value|striptags|linebreaksbr }}
+                            </div>
+                        {% else %}
+                            <p class="text-secondary mb-0">None stored.</p>
+                        {% endif %}
+                    </div>
+                </section>
+            </div>
+        {% endfor %}
+    </div>
+
+    <section>
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-end gap-2 mb-3">
+            <div>
+                <h2 class="h4 fw-bold mb-1">Other issues in this run</h2>
+
+                {% if issue.volume %}
+                    {% if other_issue_page_obj.paginator.count == 1 %}
+                        <p class="text-secondary mb-0">1 other stored issue</p>
+                    {% else %}
+                        <p class="text-secondary mb-0">{{ other_issue_page_obj.paginator.count }} other stored issues</p>
+                    {% endif %}
+                {% else %}
+                    <p class="text-secondary mb-0">This issue is not connected to a stored run.</p>
+                {% endif %}
+            </div>
+
+            {% if other_issue_page_obj.paginator.num_pages > 1 %}
+                <p class="text-secondary mb-0">
+                    Page {{ other_issue_page_obj.number }} of {{ other_issue_page_obj.paginator.num_pages }}
+                </p>
+            {% endif %}
+        </div>
+
+        <div class="card border-secondary bg-body-tertiary">
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-dark table-hover align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th scope="col">Year</th>
+                                <th scope="col">Run</th>
+                                <th scope="col">Issue</th>
+                                <th scope="col">Title</th>
+                                <th scope="col">Store Date</th>
+                                <th scope="col">Cover Date</th>
+                                <th scope="col">Comic Vine</th>
+                                <th scope="col">Comic Vine Issue ID</th>
+                                <th scope="col">Comic Vine Volume ID</th>
+                            </tr>
+                        </thead>
+
+                        <tbody>
+                            {% for other_issue in other_issue_page_obj.object_list %}
+                                <tr
+                                    class="clickable-row"
+                                    data-row-href="{% url 'issue_detail' other_issue.id %}"
+                                    tabindex="0"
+                                    aria-label="Open issue details for issue {{ other_issue.issue_number }}"
+                                >
+                                    <td>
+                                        {% if other_issue.volume.start_year %}
+                                            {{ other_issue.volume.start_year }}
+                                        {% else %}
+                                            <span class="text-secondary">Unknown</span>
+                                        {% endif %}
+                                    </td>
+
+                                    <td class="fw-semibold">
+                                        {% if other_issue.volume %}
+                                            {{ other_issue.volume.name }}
+                                        {% else %}
+                                            <span class="text-secondary">Unknown Run</span>
+                                        {% endif %}
+                                    </td>
+
+                                    <td>#{{ other_issue.issue_number }}</td>
+
+                                    <td>
+                                        {% if other_issue.issue_title %}
+                                            {{ other_issue.issue_title }}
+                                        {% else %}
+                                            <span class="text-secondary">Untitled</span>
+                                        {% endif %}
+                                    </td>
+
+                                    <td>
+                                        {% if other_issue.store_date %}
+                                            {{ other_issue.store_date }}
+                                        {% else %}
+                                            <span class="text-secondary">Unknown</span>
+                                        {% endif %}
+                                    </td>
+
+                                    <td>
+                                        {% if other_issue.cover_date %}
+                                            {{ other_issue.cover_date }}
+                                        {% else %}
+                                            <span class="text-secondary">Unknown</span>
+                                        {% endif %}
+                                    </td>
+
+                                    <td>
+                                        {% if other_issue.comicvine_url %}
+                                            <a href="{{ other_issue.comicvine_url }}" target="_blank" rel="noopener noreferrer">
+                                                Open
+                                            </a>
+                                        {% else %}
+                                            <span class="text-secondary">None</span>
+                                        {% endif %}
+                                    </td>
+
+                                    <td>
+                                        {% if other_issue.comicvine_id %}
+                                            {{ other_issue.comicvine_id }}
+                                        {% else %}
+                                            <span class="text-secondary">Unknown</span>
+                                        {% endif %}
+                                    </td>
+
+                                    <td>
+                                        {% if other_issue.volume and other_issue.volume.comicvine_id %}
+                                            {{ other_issue.volume.comicvine_id }}
+                                        {% else %}
+                                            <span class="text-secondary">Unknown</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                            {% empty %}
+                                <tr>
+                                    <td colspan="9" class="text-center text-secondary py-4">
+                                        No other issues found for this run.
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        {% if other_issue_page_obj.paginator.num_pages > 1 %}
+            <nav class="mt-4" aria-label="Other issue pagination">
+                <ul class="pagination justify-content-center">
+                    <li class="page-item {% if not other_issue_page_obj.has_previous %}disabled{% endif %}">
+                        {% if other_issue_page_obj.has_previous %}
+                            <a class="page-link" href="?page={{ other_issue_page_obj.previous_page_number }}">
+                                Previous
+                            </a>
+                        {% else %}
+                            <span class="page-link">Previous</span>
+                        {% endif %}
+                    </li>
+
+                    <li class="page-item disabled">
+                        <span class="page-link">
+                            Page {{ other_issue_page_obj.number }} of {{ other_issue_page_obj.paginator.num_pages }}
+                        </span>
+                    </li>
+
+                    <li class="page-item {% if not other_issue_page_obj.has_next %}disabled{% endif %}">
+                        {% if other_issue_page_obj.has_next %}
+                            <a class="page-link" href="?page={{ other_issue_page_obj.next_page_number }}">
+                                Next
+                            </a>
+                        {% else %}
+                            <span class="page-link">Next</span>
+                        {% endif %}
+                    </li>
+                </ul>
+            </nav>
+        {% endif %}
+    </section>
+</div>
+{% endblock %}
