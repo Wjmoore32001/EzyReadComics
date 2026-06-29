@@ -5,6 +5,7 @@ from datetime import datetime, time as datetime_time, timedelta
 
 import requests
 from django.core.management.base import BaseCommand, CommandError
+from django.db import transaction
 from django.utils import timezone
 
 from comics.models import (
@@ -118,37 +119,45 @@ class Command(BaseCommand):
         summary = ImportSummary()
         volume_cache = {}
 
-        for batch_number in range(1, max_backfill_batches + 1):
-            scan = get_next_incomplete_backfill_date_scan(
-                newest_backfill_scan_date=newest_backfill_scan_date,
-                dry_run=dry_run,
+        with requests.Session() as session:
+            session.headers.update(
+                {
+                    "User-Agent": USER_AGENT,
+                }
             )
 
-            self.stdout.write("")
-            self.stdout.write(self.style.SUCCESS(f"Issue backfill batch {batch_number}"))
-            self.stdout.write(f"Scan date_added day: {scan.scan_date}")
-            self.stdout.write(f"Starting offset for this date_added day: {scan.next_offset}")
+            for batch_number in range(1, max_backfill_batches + 1):
+                scan = get_next_incomplete_backfill_date_scan(
+                    newest_backfill_scan_date=newest_backfill_scan_date,
+                    dry_run=dry_run,
+                )
 
-            result = process_one_issue_backfill_batch(
-                command=self,
-                api_key=api_key,
-                scan=scan,
-                candidate_limit=candidate_limit,
-                volume_cache=volume_cache,
-                dry_run=dry_run,
-            )
+                self.stdout.write("")
+                self.stdout.write(self.style.SUCCESS(f"Issue backfill batch {batch_number}"))
+                self.stdout.write(f"Scan date_added day: {scan.scan_date}")
+                self.stdout.write(f"Starting offset for this date_added day: {scan.next_offset}")
 
-            summary.issue_backfill_batches_fetched += 1
-            summary.candidates_checked += result.candidates_checked
-            summary.issues_created += result.issues_created
-            summary.existing_issues_skipped += result.existing_issues_skipped
-            summary.missing_data_skipped += result.missing_data_skipped
-            summary.minimal_volumes_needed += result.minimal_volumes_needed
+                result = process_one_issue_backfill_batch(
+                    command=self,
+                    session=session,
+                    api_key=api_key,
+                    scan=scan,
+                    candidate_limit=candidate_limit,
+                    volume_cache=volume_cache,
+                    dry_run=dry_run,
+                )
 
-            if result.date_completed:
-                summary.dates_completed += 1
+                summary.issue_backfill_batches_fetched += 1
+                summary.candidates_checked += result.candidates_checked
+                summary.issues_created += result.issues_created
+                summary.existing_issues_skipped += result.existing_issues_skipped
+                summary.missing_data_skipped += result.missing_data_skipped
+                summary.minimal_volumes_needed += result.minimal_volumes_needed
 
-            print_batch_summary(self, result)
+                if result.date_completed:
+                    summary.dates_completed += 1
+
+                print_batch_summary(self, result)
 
         print_import_summary(self, summary)
 
@@ -224,6 +233,7 @@ def get_next_incomplete_backfill_date_scan(newest_backfill_scan_date, dry_run):
 
 def process_one_issue_backfill_batch(
     command,
+    session,
     api_key,
     scan,
     candidate_limit,
@@ -233,6 +243,7 @@ def process_one_issue_backfill_batch(
     starting_offset = scan.next_offset
 
     data = fetch_issue_backfill_candidates(
+        session=session,
         api_key=api_key,
         scan_date=scan.scan_date,
         limit=candidate_limit,
@@ -325,7 +336,7 @@ def process_one_issue_backfill_batch(
     return result
 
 
-def fetch_issue_backfill_candidates(api_key, scan_date, limit, offset):
+def fetch_issue_backfill_candidates(session, api_key, scan_date, limit, offset):
     start_datetime = datetime.combine(scan_date, datetime_time.min)
     end_datetime = datetime.combine(scan_date, datetime_time.max).replace(microsecond=0)
 
@@ -357,7 +368,7 @@ def fetch_issue_backfill_candidates(api_key, scan_date, limit, offset):
         ),
     }
 
-    return fetch_comicvine_json(ISSUES_URL, params)
+    return fetch_comicvine_json(session, ISSUES_URL, params)
 
 
 def get_existing_issue_ids(candidates):
@@ -415,37 +426,38 @@ def get_volume_data_from_issue_response(volume, volume_cache):
 
 
 def save_issue(issue, volume_data):
-    volume_object = get_or_create_volume_object(volume_data)
-    image = issue.get("image") or {}
+    with transaction.atomic():
+        volume_object = get_or_create_volume_object(volume_data)
+        image = issue.get("image") or {}
 
-    ComicIssue.objects.update_or_create(
-        comicvine_id=issue["id"],
-        defaults={
-            "volume": volume_object,
-            "issue_number": issue.get("issue_number") or "",
-            "issue_title": issue.get("name") or "",
-            "cover_date": parse_comicvine_date(issue.get("cover_date")),
-            "store_date": parse_comicvine_date(issue.get("store_date")),
-            "date_added": parse_comicvine_datetime(issue.get("date_added")),
-            "date_last_updated": parse_comicvine_datetime(issue.get("date_last_updated")),
-            "comicvine_url": issue.get("site_detail_url") or "",
-            "api_detail_url": issue.get("api_detail_url") or "",
-            "aliases": issue.get("aliases") or "",
-            "deck": issue.get("deck") or "",
-            "description": issue.get("description") or "",
-            "has_staff_review": bool(issue.get("has_staff_review")),
-            "comicvine_image_icon_url": image.get("icon_url") or "",
-            "comicvine_image_medium_url": image.get("medium_url") or "",
-            "comicvine_image_screen_url": image.get("screen_url") or "",
-            "comicvine_image_screen_large_url": image.get("screen_large_url") or "",
-            "comicvine_image_small_url": image.get("small_url") or "",
-            "comicvine_image_super_url": image.get("super_url") or "",
-            "comicvine_image_thumb_url": image.get("thumb_url") or "",
-            "comicvine_image_tiny_url": image.get("tiny_url") or "",
-            "comicvine_image_original_url": image.get("original_url") or "",
-            "comicvine_image_tags": image.get("image_tags") or "",
-        },
-    )
+        ComicIssue.objects.update_or_create(
+            comicvine_id=issue["id"],
+            defaults={
+                "volume": volume_object,
+                "issue_number": issue.get("issue_number") or "",
+                "issue_title": issue.get("name") or "",
+                "cover_date": parse_comicvine_date(issue.get("cover_date")),
+                "store_date": parse_comicvine_date(issue.get("store_date")),
+                "date_added": parse_comicvine_datetime(issue.get("date_added")),
+                "date_last_updated": parse_comicvine_datetime(issue.get("date_last_updated")),
+                "comicvine_url": issue.get("site_detail_url") or "",
+                "api_detail_url": issue.get("api_detail_url") or "",
+                "aliases": issue.get("aliases") or "",
+                "deck": issue.get("deck") or "",
+                "description": issue.get("description") or "",
+                "has_staff_review": bool(issue.get("has_staff_review")),
+                "comicvine_image_icon_url": image.get("icon_url") or "",
+                "comicvine_image_medium_url": image.get("medium_url") or "",
+                "comicvine_image_screen_url": image.get("screen_url") or "",
+                "comicvine_image_screen_large_url": image.get("screen_large_url") or "",
+                "comicvine_image_small_url": image.get("small_url") or "",
+                "comicvine_image_super_url": image.get("super_url") or "",
+                "comicvine_image_thumb_url": image.get("thumb_url") or "",
+                "comicvine_image_tiny_url": image.get("tiny_url") or "",
+                "comicvine_image_original_url": image.get("original_url") or "",
+                "comicvine_image_tags": image.get("image_tags") or "",
+            },
+        )
 
 
 def get_or_create_volume_object(volume_data):
@@ -514,12 +526,8 @@ def get_volume_id(volume):
     return None
 
 
-def fetch_comicvine_json(url, params):
-    headers = {
-        "User-Agent": USER_AGENT,
-    }
-
-    response = requests.get(url, params=params, headers=headers, timeout=30)
+def fetch_comicvine_json(session, url, params):
+    response = session.get(url, params=params, timeout=30)
 
     if response.status_code == 420:
         raise CommandError(

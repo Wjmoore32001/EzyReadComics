@@ -4,6 +4,7 @@ from datetime import datetime, time as datetime_time, timedelta
 
 import requests
 from django.core.management.base import BaseCommand, CommandError
+from django.db import transaction
 from django.utils import timezone
 
 from comics.models import ComicVineDateScan, ComicVineSyncState, ComicVolume
@@ -117,46 +118,54 @@ class Command(BaseCommand):
 
         summary = ImportSummary()
 
-        for batch_number in range(1, max_update_batches + 1):
-            scan = get_next_incomplete_date_scan(
-                update_tracking_start_date=update_tracking_start_date,
-                dry_run=dry_run,
+        with requests.Session() as session:
+            session.headers.update(
+                {
+                    "User-Agent": USER_AGENT,
+                }
             )
 
-            if not scan:
-                self.stdout.write("")
-                self.stdout.write(
-                    self.style.SUCCESS(
-                        "No incomplete volume update dates remain at or after the update tracking start date."
-                    )
+            for batch_number in range(1, max_update_batches + 1):
+                scan = get_next_incomplete_date_scan(
+                    update_tracking_start_date=update_tracking_start_date,
+                    dry_run=dry_run,
                 )
-                self.stdout.write("No Comic Vine API request was needed.")
-                break
 
-            self.stdout.write("")
-            self.stdout.write(self.style.SUCCESS(f"Volume update batch {batch_number}"))
-            self.stdout.write(f"Scan date_last_updated day: {scan.scan_date}")
-            self.stdout.write(f"Starting offset for this date_last_updated day: {scan.next_offset}")
+                if not scan:
+                    self.stdout.write("")
+                    self.stdout.write(
+                        self.style.SUCCESS(
+                            "No incomplete volume update dates remain at or after the update tracking start date."
+                        )
+                    )
+                    self.stdout.write("No Comic Vine API request was needed.")
+                    break
 
-            result = process_one_volume_update_batch(
-                command=self,
-                api_key=api_key,
-                scan=scan,
-                candidate_limit=candidate_limit,
-                dry_run=dry_run,
-            )
+                self.stdout.write("")
+                self.stdout.write(self.style.SUCCESS(f"Volume update batch {batch_number}"))
+                self.stdout.write(f"Scan date_last_updated day: {scan.scan_date}")
+                self.stdout.write(f"Starting offset for this date_last_updated day: {scan.next_offset}")
 
-            summary.volume_update_batches_fetched += 1
-            summary.candidates_checked += result.candidates_checked
-            summary.volumes_updated += result.volumes_updated
-            summary.volumes_skipped_not_newer += result.volumes_skipped_not_newer
-            summary.unknown_volumes_skipped += result.unknown_volumes_skipped
-            summary.missing_data_skipped += result.missing_data_skipped
+                result = process_one_volume_update_batch(
+                    command=self,
+                    session=session,
+                    api_key=api_key,
+                    scan=scan,
+                    candidate_limit=candidate_limit,
+                    dry_run=dry_run,
+                )
 
-            if result.date_completed:
-                summary.dates_completed += 1
+                summary.volume_update_batches_fetched += 1
+                summary.candidates_checked += result.candidates_checked
+                summary.volumes_updated += result.volumes_updated
+                summary.volumes_skipped_not_newer += result.volumes_skipped_not_newer
+                summary.unknown_volumes_skipped += result.unknown_volumes_skipped
+                summary.missing_data_skipped += result.missing_data_skipped
 
-            print_batch_summary(self, result)
+                if result.date_completed:
+                    summary.dates_completed += 1
+
+                print_batch_summary(self, result)
 
         print_import_summary(self, summary)
 
@@ -252,6 +261,7 @@ def get_next_incomplete_date_scan(update_tracking_start_date, dry_run):
 
 def process_one_volume_update_batch(
     command,
+    session,
     api_key,
     scan,
     candidate_limit,
@@ -260,6 +270,7 @@ def process_one_volume_update_batch(
     starting_offset = scan.next_offset
 
     data = fetch_volume_update_candidates(
+        session=session,
         api_key=api_key,
         scan_date=scan.scan_date,
         limit=candidate_limit,
@@ -359,7 +370,7 @@ def process_one_volume_update_batch(
     return result
 
 
-def fetch_volume_update_candidates(api_key, scan_date, limit, offset):
+def fetch_volume_update_candidates(session, api_key, scan_date, limit, offset):
     start_datetime = datetime.combine(scan_date, datetime_time.min)
     end_datetime = datetime.combine(scan_date, datetime_time.max).replace(microsecond=0)
 
@@ -391,7 +402,7 @@ def fetch_volume_update_candidates(api_key, scan_date, limit, offset):
         ),
     }
 
-    return fetch_comicvine_json(VOLUMES_URL, params)
+    return fetch_comicvine_json(session, VOLUMES_URL, params)
 
 
 def get_existing_volumes_by_id(candidates):
@@ -429,13 +440,14 @@ def build_volume_data(volume, local_volume, remote_date_last_updated):
 
     display_image_url = local_volume.display_image_url
     display_image_source = local_volume.display_image_source
+    preferred_image_url = get_preferred_image_url(image)
 
     if (
         display_image_source != ComicVolume.IMAGE_SOURCE_MANUAL
         and not display_image_url
-        and get_preferred_image_url(image)
+        and preferred_image_url
     ):
-        display_image_url = get_preferred_image_url(image)
+        display_image_url = preferred_image_url
         display_image_source = ComicVolume.IMAGE_SOURCE_COMICVINE_VOLUME
 
     return {
@@ -477,85 +489,86 @@ def build_volume_data(volume, local_volume, remote_date_last_updated):
 
 
 def update_existing_volume(local_volume, volume_data):
-    local_volume.name = volume_data["name"]
-    local_volume.publisher = volume_data["publisher"]
-    local_volume.publisher_comicvine_id = volume_data["publisher_comicvine_id"]
-    local_volume.publisher_api_detail_url = volume_data["publisher_api_detail_url"]
+    with transaction.atomic():
+        local_volume.name = volume_data["name"]
+        local_volume.publisher = volume_data["publisher"]
+        local_volume.publisher_comicvine_id = volume_data["publisher_comicvine_id"]
+        local_volume.publisher_api_detail_url = volume_data["publisher_api_detail_url"]
 
-    local_volume.start_year = volume_data["start_year"]
-    local_volume.count_of_issues = volume_data["count_of_issues"]
+        local_volume.start_year = volume_data["start_year"]
+        local_volume.count_of_issues = volume_data["count_of_issues"]
 
-    local_volume.date_added = volume_data["date_added"]
-    local_volume.date_last_updated = volume_data["date_last_updated"]
+        local_volume.date_added = volume_data["date_added"]
+        local_volume.date_last_updated = volume_data["date_last_updated"]
 
-    local_volume.comicvine_url = volume_data["comicvine_url"]
-    local_volume.api_detail_url = volume_data["api_detail_url"]
+        local_volume.comicvine_url = volume_data["comicvine_url"]
+        local_volume.api_detail_url = volume_data["api_detail_url"]
 
-    local_volume.aliases = volume_data["aliases"]
-    local_volume.deck = volume_data["deck"]
-    local_volume.description = volume_data["description"]
+        local_volume.aliases = volume_data["aliases"]
+        local_volume.deck = volume_data["deck"]
+        local_volume.description = volume_data["description"]
 
-    local_volume.comicvine_image_icon_url = volume_data["comicvine_image_icon_url"]
-    local_volume.comicvine_image_medium_url = volume_data["comicvine_image_medium_url"]
-    local_volume.comicvine_image_screen_url = volume_data["comicvine_image_screen_url"]
-    local_volume.comicvine_image_screen_large_url = volume_data["comicvine_image_screen_large_url"]
-    local_volume.comicvine_image_small_url = volume_data["comicvine_image_small_url"]
-    local_volume.comicvine_image_super_url = volume_data["comicvine_image_super_url"]
-    local_volume.comicvine_image_thumb_url = volume_data["comicvine_image_thumb_url"]
-    local_volume.comicvine_image_tiny_url = volume_data["comicvine_image_tiny_url"]
-    local_volume.comicvine_image_original_url = volume_data["comicvine_image_original_url"]
-    local_volume.comicvine_image_tags = volume_data["comicvine_image_tags"]
+        local_volume.comicvine_image_icon_url = volume_data["comicvine_image_icon_url"]
+        local_volume.comicvine_image_medium_url = volume_data["comicvine_image_medium_url"]
+        local_volume.comicvine_image_screen_url = volume_data["comicvine_image_screen_url"]
+        local_volume.comicvine_image_screen_large_url = volume_data["comicvine_image_screen_large_url"]
+        local_volume.comicvine_image_small_url = volume_data["comicvine_image_small_url"]
+        local_volume.comicvine_image_super_url = volume_data["comicvine_image_super_url"]
+        local_volume.comicvine_image_thumb_url = volume_data["comicvine_image_thumb_url"]
+        local_volume.comicvine_image_tiny_url = volume_data["comicvine_image_tiny_url"]
+        local_volume.comicvine_image_original_url = volume_data["comicvine_image_original_url"]
+        local_volume.comicvine_image_tags = volume_data["comicvine_image_tags"]
 
-    local_volume.display_image_url = volume_data["display_image_url"]
-    local_volume.display_image_source = volume_data["display_image_source"]
+        local_volume.display_image_url = volume_data["display_image_url"]
+        local_volume.display_image_source = volume_data["display_image_source"]
 
-    local_volume.first_issue_comicvine_id = volume_data["first_issue_comicvine_id"]
-    local_volume.first_issue_number = volume_data["first_issue_number"]
-    local_volume.first_issue_name = volume_data["first_issue_name"]
-    local_volume.first_issue_api_url = volume_data["first_issue_api_url"]
+        local_volume.first_issue_comicvine_id = volume_data["first_issue_comicvine_id"]
+        local_volume.first_issue_number = volume_data["first_issue_number"]
+        local_volume.first_issue_name = volume_data["first_issue_name"]
+        local_volume.first_issue_api_url = volume_data["first_issue_api_url"]
 
-    local_volume.last_issue_comicvine_id = volume_data["last_issue_comicvine_id"]
-    local_volume.last_issue_number = volume_data["last_issue_number"]
-    local_volume.last_issue_name = volume_data["last_issue_name"]
-    local_volume.last_issue_api_url = volume_data["last_issue_api_url"]
+        local_volume.last_issue_comicvine_id = volume_data["last_issue_comicvine_id"]
+        local_volume.last_issue_number = volume_data["last_issue_number"]
+        local_volume.last_issue_name = volume_data["last_issue_name"]
+        local_volume.last_issue_api_url = volume_data["last_issue_api_url"]
 
-    local_volume.save(
-        update_fields=[
-            "name",
-            "publisher",
-            "publisher_comicvine_id",
-            "publisher_api_detail_url",
-            "start_year",
-            "count_of_issues",
-            "date_added",
-            "date_last_updated",
-            "comicvine_url",
-            "api_detail_url",
-            "aliases",
-            "deck",
-            "description",
-            "comicvine_image_icon_url",
-            "comicvine_image_medium_url",
-            "comicvine_image_screen_url",
-            "comicvine_image_screen_large_url",
-            "comicvine_image_small_url",
-            "comicvine_image_super_url",
-            "comicvine_image_thumb_url",
-            "comicvine_image_tiny_url",
-            "comicvine_image_original_url",
-            "comicvine_image_tags",
-            "display_image_url",
-            "display_image_source",
-            "first_issue_comicvine_id",
-            "first_issue_number",
-            "first_issue_name",
-            "first_issue_api_url",
-            "last_issue_comicvine_id",
-            "last_issue_number",
-            "last_issue_name",
-            "last_issue_api_url",
-        ]
-    )
+        local_volume.save(
+            update_fields=[
+                "name",
+                "publisher",
+                "publisher_comicvine_id",
+                "publisher_api_detail_url",
+                "start_year",
+                "count_of_issues",
+                "date_added",
+                "date_last_updated",
+                "comicvine_url",
+                "api_detail_url",
+                "aliases",
+                "deck",
+                "description",
+                "comicvine_image_icon_url",
+                "comicvine_image_medium_url",
+                "comicvine_image_screen_url",
+                "comicvine_image_screen_large_url",
+                "comicvine_image_small_url",
+                "comicvine_image_super_url",
+                "comicvine_image_thumb_url",
+                "comicvine_image_tiny_url",
+                "comicvine_image_original_url",
+                "comicvine_image_tags",
+                "display_image_url",
+                "display_image_source",
+                "first_issue_comicvine_id",
+                "first_issue_number",
+                "first_issue_name",
+                "first_issue_api_url",
+                "last_issue_comicvine_id",
+                "last_issue_number",
+                "last_issue_name",
+                "last_issue_api_url",
+            ]
+        )
 
 
 def get_preferred_image_url(image):
@@ -568,12 +581,8 @@ def get_preferred_image_url(image):
     )
 
 
-def fetch_comicvine_json(url, params):
-    headers = {
-        "User-Agent": USER_AGENT,
-    }
-
-    response = requests.get(url, params=params, headers=headers, timeout=30)
+def fetch_comicvine_json(session, url, params):
+    response = session.get(url, params=params, timeout=30)
 
     if response.status_code == 420:
         raise CommandError(

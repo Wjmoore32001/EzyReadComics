@@ -5,6 +5,7 @@ from datetime import datetime
 
 import requests
 from django.core.management.base import BaseCommand, CommandError
+from django.db import transaction
 from django.db.models import F, Q
 from django.utils import timezone
 
@@ -77,13 +78,21 @@ class Command(BaseCommand):
         self.stdout.write(f"Volume limit this run: {volume_limit}")
         self.stdout.write(f"Request delay: {request_delay}")
 
-        result = hydrate_volumes(
-            command=self,
-            api_key=api_key,
-            volume_limit=volume_limit,
-            request_delay=request_delay,
-            dry_run=dry_run,
-        )
+        with requests.Session() as session:
+            session.headers.update(
+                {
+                    "User-Agent": USER_AGENT,
+                }
+            )
+
+            result = hydrate_volumes(
+                command=self,
+                session=session,
+                api_key=api_key,
+                volume_limit=volume_limit,
+                request_delay=request_delay,
+                dry_run=dry_run,
+            )
 
         print_summary(self, result)
 
@@ -103,7 +112,7 @@ def validate_options(volume_limit, request_delay):
         raise CommandError("request-delay cannot be negative.")
 
 
-def hydrate_volumes(command, api_key, volume_limit, request_delay, dry_run):
+def hydrate_volumes(command, session, api_key, volume_limit, request_delay, dry_run):
     volumes_queryset = get_volumes_needing_hydration_queryset()
     volumes_needing_hydration_found = volumes_queryset.count()
     volumes_to_check = list(volumes_queryset[:volume_limit])
@@ -125,6 +134,7 @@ def hydrate_volumes(command, api_key, volume_limit, request_delay, dry_run):
         attempted_at = timezone.now()
 
         data = fetch_volume_detail(
+            session=session,
             api_key=api_key,
             volume_id=local_volume.comicvine_id,
         )
@@ -217,7 +227,7 @@ def get_volumes_needing_hydration_queryset():
     )
 
 
-def fetch_volume_detail(api_key, volume_id):
+def fetch_volume_detail(session, api_key, volume_id):
     url = VOLUME_DETAIL_URL_TEMPLATE.format(volume_id=volume_id)
 
     params = {
@@ -245,7 +255,7 @@ def fetch_volume_detail(api_key, volume_id):
         ),
     }
 
-    return fetch_comicvine_json(url, params)
+    return fetch_comicvine_json(session, url, params)
 
 
 def build_volume_data(local_volume, remote_volume, attempted_at):
@@ -321,95 +331,96 @@ def has_useful_volume_data(volume_data):
 
 
 def update_volume(local_volume, volume_data, remote_people):
-    local_volume.name = volume_data["name"]
-    local_volume.publisher = volume_data["publisher"]
-    local_volume.publisher_comicvine_id = volume_data["publisher_comicvine_id"]
-    local_volume.publisher_api_detail_url = volume_data["publisher_api_detail_url"]
+    with transaction.atomic():
+        local_volume.name = volume_data["name"]
+        local_volume.publisher = volume_data["publisher"]
+        local_volume.publisher_comicvine_id = volume_data["publisher_comicvine_id"]
+        local_volume.publisher_api_detail_url = volume_data["publisher_api_detail_url"]
 
-    local_volume.start_year = volume_data["start_year"]
-    local_volume.count_of_issues = volume_data["count_of_issues"]
+        local_volume.start_year = volume_data["start_year"]
+        local_volume.count_of_issues = volume_data["count_of_issues"]
 
-    local_volume.date_added = volume_data["date_added"]
-    local_volume.date_last_updated = volume_data["date_last_updated"]
+        local_volume.date_added = volume_data["date_added"]
+        local_volume.date_last_updated = volume_data["date_last_updated"]
 
-    local_volume.comicvine_url = volume_data["comicvine_url"]
-    local_volume.api_detail_url = volume_data["api_detail_url"]
+        local_volume.comicvine_url = volume_data["comicvine_url"]
+        local_volume.api_detail_url = volume_data["api_detail_url"]
 
-    local_volume.aliases = volume_data["aliases"]
-    local_volume.deck = volume_data["deck"]
-    local_volume.description = volume_data["description"]
+        local_volume.aliases = volume_data["aliases"]
+        local_volume.deck = volume_data["deck"]
+        local_volume.description = volume_data["description"]
 
-    local_volume.comicvine_image_icon_url = volume_data["comicvine_image_icon_url"]
-    local_volume.comicvine_image_medium_url = volume_data["comicvine_image_medium_url"]
-    local_volume.comicvine_image_screen_url = volume_data["comicvine_image_screen_url"]
-    local_volume.comicvine_image_screen_large_url = volume_data["comicvine_image_screen_large_url"]
-    local_volume.comicvine_image_small_url = volume_data["comicvine_image_small_url"]
-    local_volume.comicvine_image_super_url = volume_data["comicvine_image_super_url"]
-    local_volume.comicvine_image_thumb_url = volume_data["comicvine_image_thumb_url"]
-    local_volume.comicvine_image_tiny_url = volume_data["comicvine_image_tiny_url"]
-    local_volume.comicvine_image_original_url = volume_data["comicvine_image_original_url"]
-    local_volume.comicvine_image_tags = volume_data["comicvine_image_tags"]
+        local_volume.comicvine_image_icon_url = volume_data["comicvine_image_icon_url"]
+        local_volume.comicvine_image_medium_url = volume_data["comicvine_image_medium_url"]
+        local_volume.comicvine_image_screen_url = volume_data["comicvine_image_screen_url"]
+        local_volume.comicvine_image_screen_large_url = volume_data["comicvine_image_screen_large_url"]
+        local_volume.comicvine_image_small_url = volume_data["comicvine_image_small_url"]
+        local_volume.comicvine_image_super_url = volume_data["comicvine_image_super_url"]
+        local_volume.comicvine_image_thumb_url = volume_data["comicvine_image_thumb_url"]
+        local_volume.comicvine_image_tiny_url = volume_data["comicvine_image_tiny_url"]
+        local_volume.comicvine_image_original_url = volume_data["comicvine_image_original_url"]
+        local_volume.comicvine_image_tags = volume_data["comicvine_image_tags"]
 
-    local_volume.display_image_url = volume_data["display_image_url"]
-    local_volume.display_image_source = volume_data["display_image_source"]
+        local_volume.display_image_url = volume_data["display_image_url"]
+        local_volume.display_image_source = volume_data["display_image_source"]
 
-    local_volume.first_issue_comicvine_id = volume_data["first_issue_comicvine_id"]
-    local_volume.first_issue_number = volume_data["first_issue_number"]
-    local_volume.first_issue_name = volume_data["first_issue_name"]
-    local_volume.first_issue_api_url = volume_data["first_issue_api_url"]
+        local_volume.first_issue_comicvine_id = volume_data["first_issue_comicvine_id"]
+        local_volume.first_issue_number = volume_data["first_issue_number"]
+        local_volume.first_issue_name = volume_data["first_issue_name"]
+        local_volume.first_issue_api_url = volume_data["first_issue_api_url"]
 
-    local_volume.last_issue_comicvine_id = volume_data["last_issue_comicvine_id"]
-    local_volume.last_issue_number = volume_data["last_issue_number"]
-    local_volume.last_issue_name = volume_data["last_issue_name"]
-    local_volume.last_issue_api_url = volume_data["last_issue_api_url"]
+        local_volume.last_issue_comicvine_id = volume_data["last_issue_comicvine_id"]
+        local_volume.last_issue_number = volume_data["last_issue_number"]
+        local_volume.last_issue_name = volume_data["last_issue_name"]
+        local_volume.last_issue_api_url = volume_data["last_issue_api_url"]
 
-    local_volume.detail_hydration_attempted_at = volume_data["detail_hydration_attempted_at"]
-    local_volume.detail_hydrated_at = volume_data["detail_hydrated_at"]
+        local_volume.detail_hydration_attempted_at = volume_data["detail_hydration_attempted_at"]
+        local_volume.detail_hydrated_at = volume_data["detail_hydrated_at"]
 
-    local_volume.save(
-        update_fields=[
-            "name",
-            "publisher",
-            "publisher_comicvine_id",
-            "publisher_api_detail_url",
-            "start_year",
-            "count_of_issues",
-            "date_added",
-            "date_last_updated",
-            "comicvine_url",
-            "api_detail_url",
-            "aliases",
-            "deck",
-            "description",
-            "comicvine_image_icon_url",
-            "comicvine_image_medium_url",
-            "comicvine_image_screen_url",
-            "comicvine_image_screen_large_url",
-            "comicvine_image_small_url",
-            "comicvine_image_super_url",
-            "comicvine_image_thumb_url",
-            "comicvine_image_tiny_url",
-            "comicvine_image_original_url",
-            "comicvine_image_tags",
-            "display_image_url",
-            "display_image_source",
-            "first_issue_comicvine_id",
-            "first_issue_number",
-            "first_issue_name",
-            "first_issue_api_url",
-            "last_issue_comicvine_id",
-            "last_issue_number",
-            "last_issue_name",
-            "last_issue_api_url",
-            "detail_hydration_attempted_at",
-            "detail_hydrated_at",
-        ]
-    )
+        local_volume.save(
+            update_fields=[
+                "name",
+                "publisher",
+                "publisher_comicvine_id",
+                "publisher_api_detail_url",
+                "start_year",
+                "count_of_issues",
+                "date_added",
+                "date_last_updated",
+                "comicvine_url",
+                "api_detail_url",
+                "aliases",
+                "deck",
+                "description",
+                "comicvine_image_icon_url",
+                "comicvine_image_medium_url",
+                "comicvine_image_screen_url",
+                "comicvine_image_screen_large_url",
+                "comicvine_image_small_url",
+                "comicvine_image_super_url",
+                "comicvine_image_thumb_url",
+                "comicvine_image_tiny_url",
+                "comicvine_image_original_url",
+                "comicvine_image_tags",
+                "display_image_url",
+                "display_image_source",
+                "first_issue_comicvine_id",
+                "first_issue_number",
+                "first_issue_name",
+                "first_issue_api_url",
+                "last_issue_comicvine_id",
+                "last_issue_number",
+                "last_issue_name",
+                "last_issue_api_url",
+                "detail_hydration_attempted_at",
+                "detail_hydrated_at",
+            ]
+        )
 
-    return sync_volume_people(
-        volume=local_volume,
-        remote_people=remote_people,
-    )
+        return sync_volume_people(
+            volume=local_volume,
+            remote_people=remote_people,
+        )
 
 
 def mark_volume_hydration_attempted(local_volume, attempted_at):
@@ -508,12 +519,8 @@ def get_preferred_image_url(image):
     )
 
 
-def fetch_comicvine_json(url, params):
-    headers = {
-        "User-Agent": USER_AGENT,
-    }
-
-    response = requests.get(url, params=params, headers=headers, timeout=30)
+def fetch_comicvine_json(session, url, params):
+    response = session.get(url, params=params, timeout=30)
 
     if response.status_code == 420:
         raise CommandError(

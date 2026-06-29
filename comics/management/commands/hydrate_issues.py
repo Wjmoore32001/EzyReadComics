@@ -6,6 +6,7 @@ from datetime import datetime
 
 import requests
 from django.core.management.base import BaseCommand, CommandError
+from django.db import transaction
 from django.db.models import F, Q
 from django.utils import timezone
 
@@ -47,8 +48,8 @@ class Command(BaseCommand):
         parser.add_argument(
             "--request-delay",
             type=float,
-            default=0.25,
-            help="Seconds to pause after each Comic Vine issue request. Defaults to 0.25.",
+            default=0,
+            help="Seconds to pause after each Comic Vine issue request. Defaults to 0.",
         )
 
         parser.add_argument(
@@ -85,13 +86,21 @@ class Command(BaseCommand):
         self.stdout.write(f"Issue limit this run: {issue_limit}")
         self.stdout.write(f"Request delay: {request_delay}")
 
-        result = hydrate_issues(
-            command=self,
-            api_key=api_key,
-            issue_limit=issue_limit,
-            request_delay=request_delay,
-            dry_run=dry_run,
-        )
+        with requests.Session() as session:
+            session.headers.update(
+                {
+                    "User-Agent": USER_AGENT,
+                }
+            )
+
+            result = hydrate_issues(
+                command=self,
+                session=session,
+                api_key=api_key,
+                issue_limit=issue_limit,
+                request_delay=request_delay,
+                dry_run=dry_run,
+            )
 
         print_summary(self, result)
 
@@ -111,7 +120,7 @@ def validate_options(issue_limit, request_delay):
         raise CommandError("request-delay cannot be negative.")
 
 
-def hydrate_issues(command, api_key, issue_limit, request_delay, dry_run):
+def hydrate_issues(command, session, api_key, issue_limit, request_delay, dry_run):
     issues_queryset = get_issues_needing_hydration_queryset()
     issues_needing_hydration_found = issues_queryset.count()
     issues_to_check = list(issues_queryset[:issue_limit])
@@ -133,6 +142,7 @@ def hydrate_issues(command, api_key, issue_limit, request_delay, dry_run):
         attempted_at = timezone.now()
 
         data = fetch_issue_detail(
+            session=session,
             api_key=api_key,
             issue_id=local_issue.comicvine_id,
         )
@@ -207,7 +217,7 @@ def get_issues_needing_hydration_queryset():
     )
 
 
-def fetch_issue_detail(api_key, issue_id):
+def fetch_issue_detail(session, api_key, issue_id):
     url = ISSUE_DETAIL_URL_TEMPLATE.format(issue_id=issue_id)
 
     params = {
@@ -235,7 +245,7 @@ def fetch_issue_detail(api_key, issue_id):
         ),
     }
 
-    return fetch_comicvine_json(url, params)
+    return fetch_comicvine_json(session, url, params)
 
 
 def build_issue_data(local_issue, remote_issue, attempted_at):
@@ -271,74 +281,75 @@ def build_issue_data(local_issue, remote_issue, attempted_at):
 
 
 def update_issue(local_issue, issue_data, volume_data, remote_people):
-    volume_object = local_issue.volume or get_or_create_volume_object(volume_data)
+    with transaction.atomic():
+        volume_object = local_issue.volume or get_or_create_volume_object(volume_data)
 
-    local_issue.volume = volume_object
-    local_issue.issue_number = issue_data["issue_number"]
-    local_issue.issue_title = issue_data["issue_title"]
+        local_issue.volume = volume_object
+        local_issue.issue_number = issue_data["issue_number"]
+        local_issue.issue_title = issue_data["issue_title"]
 
-    local_issue.cover_date = issue_data["cover_date"]
-    local_issue.store_date = issue_data["store_date"]
+        local_issue.cover_date = issue_data["cover_date"]
+        local_issue.store_date = issue_data["store_date"]
 
-    local_issue.date_added = issue_data["date_added"]
-    local_issue.date_last_updated = issue_data["date_last_updated"]
+        local_issue.date_added = issue_data["date_added"]
+        local_issue.date_last_updated = issue_data["date_last_updated"]
 
-    local_issue.comicvine_url = issue_data["comicvine_url"]
-    local_issue.api_detail_url = issue_data["api_detail_url"]
+        local_issue.comicvine_url = issue_data["comicvine_url"]
+        local_issue.api_detail_url = issue_data["api_detail_url"]
 
-    local_issue.aliases = issue_data["aliases"]
-    local_issue.deck = issue_data["deck"]
-    local_issue.description = issue_data["description"]
-    local_issue.has_staff_review = issue_data["has_staff_review"]
+        local_issue.aliases = issue_data["aliases"]
+        local_issue.deck = issue_data["deck"]
+        local_issue.description = issue_data["description"]
+        local_issue.has_staff_review = issue_data["has_staff_review"]
 
-    local_issue.detail_hydration_attempted_at = issue_data["detail_hydration_attempted_at"]
-    local_issue.detail_hydrated_at = issue_data["detail_hydrated_at"]
+        local_issue.detail_hydration_attempted_at = issue_data["detail_hydration_attempted_at"]
+        local_issue.detail_hydrated_at = issue_data["detail_hydrated_at"]
 
-    local_issue.comicvine_image_icon_url = issue_data["comicvine_image_icon_url"]
-    local_issue.comicvine_image_medium_url = issue_data["comicvine_image_medium_url"]
-    local_issue.comicvine_image_screen_url = issue_data["comicvine_image_screen_url"]
-    local_issue.comicvine_image_screen_large_url = issue_data["comicvine_image_screen_large_url"]
-    local_issue.comicvine_image_small_url = issue_data["comicvine_image_small_url"]
-    local_issue.comicvine_image_super_url = issue_data["comicvine_image_super_url"]
-    local_issue.comicvine_image_thumb_url = issue_data["comicvine_image_thumb_url"]
-    local_issue.comicvine_image_tiny_url = issue_data["comicvine_image_tiny_url"]
-    local_issue.comicvine_image_original_url = issue_data["comicvine_image_original_url"]
-    local_issue.comicvine_image_tags = issue_data["comicvine_image_tags"]
+        local_issue.comicvine_image_icon_url = issue_data["comicvine_image_icon_url"]
+        local_issue.comicvine_image_medium_url = issue_data["comicvine_image_medium_url"]
+        local_issue.comicvine_image_screen_url = issue_data["comicvine_image_screen_url"]
+        local_issue.comicvine_image_screen_large_url = issue_data["comicvine_image_screen_large_url"]
+        local_issue.comicvine_image_small_url = issue_data["comicvine_image_small_url"]
+        local_issue.comicvine_image_super_url = issue_data["comicvine_image_super_url"]
+        local_issue.comicvine_image_thumb_url = issue_data["comicvine_image_thumb_url"]
+        local_issue.comicvine_image_tiny_url = issue_data["comicvine_image_tiny_url"]
+        local_issue.comicvine_image_original_url = issue_data["comicvine_image_original_url"]
+        local_issue.comicvine_image_tags = issue_data["comicvine_image_tags"]
 
-    local_issue.save(
-        update_fields=[
-            "volume",
-            "issue_number",
-            "issue_title",
-            "cover_date",
-            "store_date",
-            "date_added",
-            "date_last_updated",
-            "comicvine_url",
-            "api_detail_url",
-            "aliases",
-            "deck",
-            "description",
-            "has_staff_review",
-            "detail_hydration_attempted_at",
-            "detail_hydrated_at",
-            "comicvine_image_icon_url",
-            "comicvine_image_medium_url",
-            "comicvine_image_screen_url",
-            "comicvine_image_screen_large_url",
-            "comicvine_image_small_url",
-            "comicvine_image_super_url",
-            "comicvine_image_thumb_url",
-            "comicvine_image_tiny_url",
-            "comicvine_image_original_url",
-            "comicvine_image_tags",
-        ]
-    )
+        local_issue.save(
+            update_fields=[
+                "volume",
+                "issue_number",
+                "issue_title",
+                "cover_date",
+                "store_date",
+                "date_added",
+                "date_last_updated",
+                "comicvine_url",
+                "api_detail_url",
+                "aliases",
+                "deck",
+                "description",
+                "has_staff_review",
+                "detail_hydration_attempted_at",
+                "detail_hydrated_at",
+                "comicvine_image_icon_url",
+                "comicvine_image_medium_url",
+                "comicvine_image_screen_url",
+                "comicvine_image_screen_large_url",
+                "comicvine_image_small_url",
+                "comicvine_image_super_url",
+                "comicvine_image_thumb_url",
+                "comicvine_image_tiny_url",
+                "comicvine_image_original_url",
+                "comicvine_image_tags",
+            ]
+        )
 
-    return sync_issue_person_credits(
-        issue=local_issue,
-        remote_people=remote_people,
-    )
+        return sync_issue_person_credits(
+            issue=local_issue,
+            remote_people=remote_people,
+        )
 
 
 def mark_issue_hydration_attempted(local_issue, attempted_at):
@@ -504,12 +515,8 @@ def get_volume_id(volume):
     return None
 
 
-def fetch_comicvine_json(url, params):
-    headers = {
-        "User-Agent": USER_AGENT,
-    }
-
-    response = requests.get(url, params=params, headers=headers, timeout=30)
+def fetch_comicvine_json(session, url, params):
+    response = session.get(url, params=params, timeout=30)
 
     if response.status_code == 420:
         raise CommandError(

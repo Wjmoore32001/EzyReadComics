@@ -1,4 +1,17 @@
 # Development Log
+## 2026-06-29 — Hardened Comic Vine Commands and Added Alternating Local Runner
+
+Improved the Comic Vine management commands for safer reruns, fewer repeated HTTP connection setups, and better protection against partial writes.
+
+Commands updated:
+
+```text
+add_issues.py
+update_issues.py
+update_volumes.py
+hydrate_volumes.py
+hydrate_issues.py
+backfill_issues.py
 
 ## 2026-06-29 — Added Central Browse Page and Split Comics Views
 
