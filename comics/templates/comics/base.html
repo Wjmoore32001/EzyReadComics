@@ -34,6 +34,10 @@
             box-shadow: 0 0.75rem 2rem rgba(0, 0, 0, 0.18);
         }
 
+        .auth-card {
+            max-width: 32rem;
+        }
+
         .searchable-dropdown .dropdown-toggle,
         .searchable-dropdown .dropdown-toggle.show {
             background-color: var(--erc-accent-soft);
@@ -55,13 +59,15 @@
             box-shadow: 0 1rem 2rem rgba(0, 0, 0, 0.35);
         }
 
-        .searchable-dropdown .form-control {
+        .searchable-dropdown .form-control,
+        .auth-card .form-control {
             background-color: #0d131a;
             border-color: var(--erc-border);
             color: #f8f9fa;
         }
 
-        .searchable-dropdown .form-control:focus {
+        .searchable-dropdown .form-control:focus,
+        .auth-card .form-control:focus {
             border-color: var(--erc-border-bright);
             box-shadow: 0 0 0 0.2rem rgba(13, 202, 240, 0.18);
         }
@@ -124,6 +130,27 @@
             color: #c7d0da !important;
             font-weight: 600;
         }
+
+        .form-text,
+        .helptext {
+            color: var(--erc-text-soft) !important;
+        }
+
+        .errorlist {
+            margin: 0.5rem 0 0;
+            padding-left: 1.25rem;
+            color: #ffb4b4;
+        }
+
+        .nav-logout-button {
+            color: rgba(255, 255, 255, 0.65);
+            text-decoration: none;
+        }
+
+        .nav-logout-button:hover,
+        .nav-logout-button:focus {
+            color: rgba(255, 255, 255, 0.8);
+        }
     </style>
 </head>
 <body class="text-light">
@@ -136,7 +163,7 @@
             </button>
 
             <div class="collapse navbar-collapse" id="mainNavbar">
-                <ul class="navbar-nav ms-auto">
+                <ul class="navbar-nav ms-auto align-items-lg-center">
                     <li class="nav-item">
                         <a
                             class="nav-link {% if request.resolver_match.url_name == 'browse' or request.resolver_match.url_name == 'issues' or request.resolver_match.url_name == 'volumes' %}active{% endif %}"
@@ -145,10 +172,67 @@
                             Browse
                         </a>
                     </li>
+
+                    {% if request.user.is_authenticated %}
+                        <li class="nav-item">
+                            <a
+                                class="nav-link {% if request.resolver_match.url_name == 'account' %}active{% endif %}"
+                                href="{% url 'account' %}"
+                            >
+                                Account
+                            </a>
+                        </li>
+
+                        {% if request.user.is_staff %}
+                            <li class="nav-item">
+                                <a class="nav-link" href="{% url 'admin:index' %}">
+                                    Admin
+                                </a>
+                            </li>
+                        {% endif %}
+
+                        <li class="nav-item">
+                            <form action="{% url 'logout' %}" method="post" class="d-inline">
+                                {% csrf_token %}
+                                <button type="submit" class="nav-link btn btn-link nav-logout-button px-lg-2">
+                                    Log out
+                                </button>
+                            </form>
+                        </li>
+                    {% else %}
+                        <li class="nav-item">
+                            <a
+                                class="nav-link {% if request.resolver_match.url_name == 'login' %}active{% endif %}"
+                                href="{% url 'login' %}"
+                            >
+                                Log in
+                            </a>
+                        </li>
+
+                        <li class="nav-item">
+                            <a
+                                class="nav-link {% if request.resolver_match.url_name == 'signup' %}active{% endif %}"
+                                href="{% url 'signup' %}"
+                            >
+                                Sign up
+                            </a>
+                        </li>
+                    {% endif %}
                 </ul>
             </div>
         </div>
     </nav>
+
+    {% if messages %}
+        <div class="container pt-4">
+            {% for message in messages %}
+                <div class="alert alert-{% if message.tags == 'error' %}danger{% else %}{{ message.tags|default:'info' }}{% endif %} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            {% endfor %}
+        </div>
+    {% endif %}
 
     <main class="container py-5">
         {% block content %}

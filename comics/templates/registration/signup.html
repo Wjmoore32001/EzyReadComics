@@ -1,0 +1,60 @@
+{% extends "comics/base.html" %}
+
+{% block title %}Sign up | EzyReadComics{% endblock %}
+
+{% block content %}
+<div class="card border-secondary bg-body-tertiary auth-card mx-auto">
+    <div class="card-body p-4 p-md-5">
+        <p class="text-uppercase text-secondary fw-semibold mb-2">
+            Account
+        </p>
+
+        <h1 class="h2 fw-bold mb-3">Create an account</h1>
+
+        <p class="text-secondary mb-4">
+            Sign up to start using account-based EzyReadComics features as they are added.
+        </p>
+
+        <form method="post" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+                <div class="alert alert-danger">
+                    {{ form.non_field_errors }}
+                </div>
+            {% endif %}
+
+            {% for field in form %}
+                <div class="mb-3">
+                    <label class="form-label" for="{{ field.id_for_label }}">
+                        {{ field.label }}
+                    </label>
+
+                    {{ field }}
+
+                    {% if field.help_text %}
+                        <div class="form-text">
+                            {{ field.help_text }}
+                        </div>
+                    {% endif %}
+
+                    {% if field.errors %}
+                        {{ field.errors }}
+                    {% endif %}
+                </div>
+            {% endfor %}
+
+            <button type="submit" class="btn btn-primary w-100">
+                Create account
+            </button>
+        </form>
+
+        <hr class="border-secondary my-4">
+
+        <p class="text-secondary mb-0">
+            Already have an account?
+            <a href="{% url 'login' %}">Log in</a>
+        </p>
+    </div>
+</div>
+{% endblock %}

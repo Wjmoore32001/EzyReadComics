@@ -291,6 +291,7 @@
                                     <th scope="col">Stored Issues</th>
                                     <th scope="col">Browse</th>
                                     <th scope="col">Comic Vine</th>
+                                    <th scope="col">Comic Vine Volume ID</th>
                                 </tr>
                             </thead>
 
@@ -344,10 +345,12 @@
                                                 <span class="text-secondary">None</span>
                                             {% endif %}
                                         </td>
+
+                                        <td>{{ run.comicvine_id }}</td>
                                     </tr>
                                 {% empty %}
                                     <tr>
-                                        <td colspan="6" class="text-center text-secondary py-4">
+                                        <td colspan="7" class="text-center text-secondary py-4">
                                             No runs found.
                                         </td>
                                     </tr>
@@ -367,6 +370,8 @@
                                     <th scope="col">Store Date</th>
                                     <th scope="col">Cover Date</th>
                                     <th scope="col">Comic Vine</th>
+                                    <th scope="col">Comic Vine Issue ID</th>
+                                    <th scope="col">Comic Vine Volume ID</th>
                                 </tr>
                             </thead>
 
@@ -424,10 +429,26 @@
                                                 <span class="text-secondary">None</span>
                                             {% endif %}
                                         </td>
+
+                                        <td>
+                                            {% if issue.comicvine_id %}
+                                                {{ issue.comicvine_id }}
+                                            {% else %}
+                                                <span class="text-secondary">Unknown</span>
+                                            {% endif %}
+                                        </td>
+
+                                        <td>
+                                            {% if issue.volume and issue.volume.comicvine_id %}
+                                                {{ issue.volume.comicvine_id }}
+                                            {% else %}
+                                                <span class="text-secondary">Unknown</span>
+                                            {% endif %}
+                                        </td>
                                     </tr>
                                 {% empty %}
                                     <tr>
-                                        <td colspan="7" class="text-center text-secondary py-4">
+                                        <td colspan="9" class="text-center text-secondary py-4">
                                             No issues found.
                                         </td>
                                     </tr>
