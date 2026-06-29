@@ -39,8 +39,8 @@ class Command(BaseCommand):
         parser.add_argument(
             "--request-delay",
             type=float,
-            default=0.25,
-            help="Seconds to pause after each Comic Vine volume request. Defaults to 0.25.",
+            default=0,
+            help="Seconds to pause after each Comic Vine volume request. Defaults to 0.",
         )
 
         parser.add_argument(
