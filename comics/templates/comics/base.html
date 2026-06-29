@@ -5,9 +5,129 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}EzyReadComics{% endblock %}</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
+
+    <style>
+        :root {
+            --erc-bg: #101419;
+            --erc-panel: #171d24;
+            --erc-panel-soft: #1f2730;
+            --erc-border: #39434f;
+            --erc-border-bright: #0dcaf0;
+            --erc-text-soft: #aab4c0;
+            --erc-accent-soft: rgba(13, 202, 240, 0.12);
+            --erc-accent-strong: rgba(13, 202, 240, 0.22);
+        }
+
+        body {
+            background:
+                radial-gradient(circle at top left, rgba(13, 202, 240, 0.07), transparent 28rem),
+                var(--erc-bg);
+        }
+
+        .navbar {
+            background-color: rgba(23, 29, 36, 0.96) !important;
+        }
+
+        .card.bg-body-tertiary {
+            background: linear-gradient(180deg, var(--erc-panel-soft), var(--erc-panel)) !important;
+            border-color: var(--erc-border) !important;
+            box-shadow: 0 0.75rem 2rem rgba(0, 0, 0, 0.18);
+        }
+
+        .searchable-dropdown .dropdown-toggle,
+        .searchable-dropdown .dropdown-toggle.show {
+            background-color: var(--erc-accent-soft);
+            border-color: var(--erc-border-bright);
+            color: #f8f9fa;
+        }
+
+        .searchable-dropdown .dropdown-toggle:hover,
+        .searchable-dropdown .dropdown-toggle:focus {
+            background-color: var(--erc-accent-strong);
+            border-color: var(--erc-border-bright);
+            box-shadow: 0 0 0 0.2rem rgba(13, 202, 240, 0.18);
+            color: #ffffff;
+        }
+
+        .searchable-dropdown .dropdown-menu {
+            background-color: #111820;
+            border-color: var(--erc-border);
+            box-shadow: 0 1rem 2rem rgba(0, 0, 0, 0.35);
+        }
+
+        .searchable-dropdown .form-control {
+            background-color: #0d131a;
+            border-color: var(--erc-border);
+            color: #f8f9fa;
+        }
+
+        .searchable-dropdown .form-control:focus {
+            border-color: var(--erc-border-bright);
+            box-shadow: 0 0 0 0.2rem rgba(13, 202, 240, 0.18);
+        }
+
+        .dropdown-item {
+            color: #e9ecef;
+        }
+
+        .dropdown-item:hover,
+        .dropdown-item:focus {
+            background-color: var(--erc-accent-soft);
+            color: #ffffff;
+        }
+
+        .dropdown-item.active,
+        .dropdown-item:active {
+            background-color: var(--erc-border-bright);
+            color: #061016;
+            font-weight: 700;
+        }
+
+        .btn-outline-secondary {
+            border-color: var(--erc-border);
+            color: var(--erc-text-soft);
+        }
+
+        .btn-outline-secondary:hover {
+            background-color: var(--erc-panel-soft);
+            border-color: var(--erc-border-bright);
+            color: #ffffff;
+        }
+
+        .btn-outline-info {
+            background-color: var(--erc-accent-soft);
+            color: #7ee7ff;
+        }
+
+        .btn-outline-info:hover {
+            color: #061016;
+        }
+
+        .table-dark {
+            --bs-table-bg: #151b22;
+            --bs-table-striped-bg: #19212a;
+            --bs-table-hover-bg: rgba(13, 202, 240, 0.08);
+            border-color: var(--erc-border);
+        }
+
+        .table thead th {
+            background-color: #10161d;
+            color: #f8f9fa;
+            border-bottom-color: var(--erc-border);
+        }
+
+        .text-secondary {
+            color: var(--erc-text-soft) !important;
+        }
+
+        .form-label {
+            color: #c7d0da !important;
+            font-weight: 600;
+        }
+    </style>
 </head>
-<body class="bg-dark text-light">
-    <nav class="navbar navbar-expand-lg border-bottom border-secondary bg-body-tertiary">
+<body class="text-light">
+    <nav class="navbar navbar-expand-lg border-bottom border-secondary">
         <div class="container">
             <a class="navbar-brand fw-bold" href="{% url 'home' %}">EzyReadComics</a>
 
