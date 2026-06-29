@@ -24,10 +24,8 @@
                 {% endif %}
 
                 {% if run.count_of_issues %}
-                    · {{ run.count_of_issues }} Comic Vine issues
+                    · {{ run.count_of_issues }} issues listed by Comic Vine
                 {% endif %}
-
-                · {{ run.stored_issue_count }} stored locally
             </p>
         </div>
 
@@ -53,26 +51,6 @@
             {% endif %}
         </div>
     </div>
-
-    <section class="card border-secondary bg-body-tertiary">
-        <div class="card-body">
-            <p class="text-uppercase text-secondary fw-semibold mb-3">IDs</p>
-
-            <div class="row g-3">
-                {% for field in id_fields %}
-                    <div class="col-12 col-sm-6 col-lg">
-                        <div class="small text-secondary">{{ field.label }}</div>
-
-                        {% if field.is_missing %}
-                            <div class="fw-semibold text-secondary">{{ field.value }}</div>
-                        {% else %}
-                            <div class="fw-semibold">{{ field.value }}</div>
-                        {% endif %}
-                    </div>
-                {% endfor %}
-            </div>
-        </div>
-    </section>
 
     <div class="row g-4">
         {% for group in detail_groups %}
@@ -105,43 +83,162 @@
 
     <section class="card border-secondary bg-body-tertiary">
         <div class="card-body">
-            <h2 class="h5 fw-bold mb-3">Volume-level credits</h2>
-
-            {% if volume_credits %}
-                <div class="list-group list-group-flush">
-                    {% for credit in volume_credits %}
-                        <div class="list-group-item bg-transparent border-secondary px-0">
-                            <div class="d-flex flex-column flex-md-row justify-content-between gap-2">
-                                <div>
-                                    <span class="fw-semibold">{{ credit.person.name }}</span>
-
-                                    {% if credit.credit_count %}
-                                        <span class="text-secondary">
-                                            · {{ credit.credit_count }} credits
-                                        </span>
-                                    {% endif %}
-                                </div>
-
-                                <div class="d-flex flex-wrap gap-2">
-                                    {% if credit.comicvine_url %}
-                                        <a href="{{ credit.comicvine_url }}" target="_blank" rel="noopener noreferrer">
-                                            Comic Vine
-                                        </a>
-                                    {% endif %}
-
-                                    {% if credit.api_detail_url %}
-                                        <a href="{{ credit.api_detail_url }}" target="_blank" rel="noopener noreferrer">
-                                            API
-                                        </a>
-                                    {% endif %}
-                                </div>
-                            </div>
-                        </div>
-                    {% endfor %}
+            <div class="d-flex flex-column flex-md-row justify-content-between gap-2 mb-3">
+                <div>
+                    <h2 class="h5 fw-bold mb-1">Credits</h2>
+                    <p class="text-secondary mb-0">
+                        Showing writers and artists by default. Open the full list to see everyone credited.
+                    </p>
                 </div>
-            {% else %}
-                <p class="text-secondary mb-0">No volume-level credits stored for this run.</p>
-            {% endif %}
+
+                <div>
+                    <button
+                        class="btn btn-sm btn-outline-secondary"
+                        type="button"
+                        data-bs-toggle="collapse"
+                        data-bs-target="#all-run-credits"
+                        aria-expanded="false"
+                        aria-controls="all-run-credits"
+                    >
+                        Show all credited people
+                    </button>
+                </div>
+            </div>
+
+            <div class="row g-3">
+                {% for section in primary_credit_sections %}
+                    <div class="col-12 col-lg-6">
+                        <div class="border border-secondary rounded p-3 h-100">
+                            <h3 class="h6 fw-bold mb-3">{{ section.title }}</h3>
+
+                            {% if section.items %}
+                                <div class="list-group list-group-flush">
+                                    {% for item in section.items %}
+                                        <div class="list-group-item bg-transparent border-secondary px-0">
+                                            <div class="d-flex flex-column flex-md-row justify-content-between gap-2">
+                                                <div>
+                                                    <span class="fw-semibold">{{ item.person_name }}</span>
+                                                    <span class="text-secondary">· {{ item.role_name }}</span>
+
+                                                    {% if item.count_label %}
+                                                        <span class="text-secondary">· {{ item.count_label }}</span>
+                                                    {% endif %}
+                                                </div>
+
+                                                <div class="d-flex flex-wrap gap-2">
+                                                    {% if item.comicvine_url %}
+                                                        <a href="{{ item.comicvine_url }}" target="_blank" rel="noopener noreferrer">
+                                                            Comic Vine
+                                                        </a>
+                                                    {% endif %}
+
+                                                    {% if item.api_detail_url %}
+                                                        <a href="{{ item.api_detail_url }}" target="_blank" rel="noopener noreferrer">
+                                                            API
+                                                        </a>
+                                                    {% endif %}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    {% endfor %}
+                                </div>
+                            {% else %}
+                                <p class="text-secondary mb-0">No {{ section.title|lower }} stored for this run.</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+
+            <div class="collapse mt-4" id="all-run-credits">
+                <div class="border border-secondary rounded p-3">
+                    <h3 class="h6 fw-bold mb-3">All issue-level credited people</h3>
+
+                    {% if all_issue_credit_groups %}
+                        <div class="d-flex flex-column gap-4">
+                            {% for group in all_issue_credit_groups %}
+                                <div>
+                                    <h4 class="h6 text-secondary fw-bold mb-2">{{ group.role_name }}</h4>
+
+                                    <div class="list-group list-group-flush">
+                                        {% for item in group.items %}
+                                            <div class="list-group-item bg-transparent border-secondary px-0">
+                                                <div class="d-flex flex-column flex-md-row justify-content-between gap-2">
+                                                    <div>
+                                                        <span class="fw-semibold">{{ item.person_name }}</span>
+
+                                                        {% if item.count_label %}
+                                                            <span class="text-secondary">· {{ item.count_label }}</span>
+                                                        {% endif %}
+                                                    </div>
+
+                                                    <div class="d-flex flex-wrap gap-2">
+                                                        {% if item.comicvine_url %}
+                                                            <a href="{{ item.comicvine_url }}" target="_blank" rel="noopener noreferrer">
+                                                                Comic Vine
+                                                            </a>
+                                                        {% endif %}
+
+                                                        {% if item.api_detail_url %}
+                                                            <a href="{{ item.api_detail_url }}" target="_blank" rel="noopener noreferrer">
+                                                                API
+                                                            </a>
+                                                        {% endif %}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <p class="text-secondary mb-0">No issue-level credits stored for this run.</p>
+                    {% endif %}
+
+                    <hr class="border-secondary my-4">
+
+                    <h3 class="h6 fw-bold mb-1">Volume-level people</h3>
+                    <p class="text-secondary mb-3">
+                        These come from the stored volume-level Comic Vine people data. This local table does not store specific roles.
+                    </p>
+
+                    {% if volume_credit_items %}
+                        <div class="list-group list-group-flush">
+                            {% for item in volume_credit_items %}
+                                <div class="list-group-item bg-transparent border-secondary px-0">
+                                    <div class="d-flex flex-column flex-md-row justify-content-between gap-2">
+                                        <div>
+                                            <span class="fw-semibold">{{ item.person_name }}</span>
+                                            <span class="text-secondary">· {{ item.role_name }}</span>
+
+                                            {% if item.count_label %}
+                                                <span class="text-secondary">· {{ item.count_label }}</span>
+                                            {% endif %}
+                                        </div>
+
+                                        <div class="d-flex flex-wrap gap-2">
+                                            {% if item.comicvine_url %}
+                                                <a href="{{ item.comicvine_url }}" target="_blank" rel="noopener noreferrer">
+                                                    Comic Vine
+                                                </a>
+                                            {% endif %}
+
+                                            {% if item.api_detail_url %}
+                                                <a href="{{ item.api_detail_url }}" target="_blank" rel="noopener noreferrer">
+                                                    API
+                                                </a>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <p class="text-secondary mb-0">No volume-level people stored for this run.</p>
+                    {% endif %}
+                </div>
+            </div>
         </div>
     </section>
 
@@ -165,15 +262,55 @@
         {% endfor %}
     </div>
 
+    <section class="card border-secondary bg-body-tertiary">
+        <div class="card-body py-3">
+            <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2">
+                <div>
+                    <h2 class="h6 fw-bold mb-1">Technical IDs</h2>
+                    <p class="small text-secondary mb-0">
+                        Internal and Comic Vine IDs for debugging/import work.
+                    </p>
+                </div>
+
+                <button
+                    class="btn btn-sm btn-outline-secondary"
+                    type="button"
+                    data-bs-toggle="collapse"
+                    data-bs-target="#run-technical-ids"
+                    aria-expanded="false"
+                    aria-controls="run-technical-ids"
+                >
+                    Show IDs
+                </button>
+            </div>
+
+            <div class="collapse mt-3" id="run-technical-ids">
+                <div class="row g-3">
+                    {% for field in id_fields %}
+                        <div class="col-12 col-sm-6 col-lg">
+                            <div class="small text-secondary">{{ field.label }}</div>
+
+                            {% if field.is_missing %}
+                                <div class="fw-semibold text-secondary">{{ field.value }}</div>
+                            {% else %}
+                                <div class="fw-semibold">{{ field.value }}</div>
+                            {% endif %}
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </section>
+
     <section>
         <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-end gap-2 mb-3">
             <div>
                 <h2 class="h4 fw-bold mb-1">Issues in this run</h2>
 
                 {% if issue_page_obj.paginator.count == 1 %}
-                    <p class="text-secondary mb-0">1 stored issue</p>
+                    <p class="text-secondary mb-0">1 issue</p>
                 {% else %}
-                    <p class="text-secondary mb-0">{{ issue_page_obj.paginator.count }} stored issues</p>
+                    <p class="text-secondary mb-0">{{ issue_page_obj.paginator.count }} issues</p>
                 {% endif %}
             </div>
 
@@ -281,7 +418,7 @@
                             {% empty %}
                                 <tr>
                                     <td colspan="9" class="text-center text-secondary py-4">
-                                        No issues stored for this run.
+                                        No issues found for this run.
                                     </td>
                                 </tr>
                             {% endfor %}

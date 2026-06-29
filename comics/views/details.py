@@ -2,7 +2,7 @@ from django.core.paginator import Paginator
 from django.http import Http404
 from django.shortcuts import render
 
-from comics.models import ComicIssue
+from comics.models import ComicIssue, ComicIssuePersonCredit
 from comics.selectors import (
     get_issue_detail_by_id,
     get_issues_for_run,
@@ -19,6 +19,9 @@ def run_detail(request, run_id):
     if not run:
         raise Http404("Run not found.")
 
+    run_issue_credit_items = build_run_issue_credit_items(run)
+    volume_credit_items = build_volume_credit_items(run)
+
     issue_page_obj = paginate_queryset(
         request=request,
         queryset=get_issues_for_run(run),
@@ -30,7 +33,9 @@ def run_detail(request, run_id):
         "id_fields": build_run_id_fields(run),
         "detail_groups": build_run_detail_groups(run),
         "text_blocks": build_run_text_blocks(run),
-        "volume_credits": run.person_credits.select_related("person").all(),
+        "primary_credit_sections": build_primary_credit_sections(run_issue_credit_items),
+        "all_issue_credit_groups": build_credit_groups(run_issue_credit_items),
+        "volume_credit_items": volume_credit_items,
         "issue_page_obj": issue_page_obj,
     }
 
@@ -43,14 +48,16 @@ def issue_detail(request, issue_id):
     if not issue:
         raise Http404("Issue not found.")
 
-    if issue.volume:
-        other_issues = get_issues_for_run(issue.volume).exclude(id=issue.id)
-    else:
-        other_issues = ComicIssue.objects.none()
+    issue_credit_items = build_issue_credit_items(issue)
 
-    other_issue_page_obj = paginate_queryset(
+    if issue.volume:
+        run_issues = get_issues_for_run(issue.volume)
+    else:
+        run_issues = ComicIssue.objects.none()
+
+    run_issue_page_obj = paginate_queryset(
         request=request,
-        queryset=other_issues,
+        queryset=run_issues,
         page_size=DETAIL_PAGE_SIZE,
     )
 
@@ -59,8 +66,9 @@ def issue_detail(request, issue_id):
         "id_fields": build_issue_id_fields(issue),
         "detail_groups": build_issue_detail_groups(issue),
         "text_blocks": build_issue_text_blocks(issue),
-        "issue_credit_groups": build_issue_credit_groups(issue),
-        "other_issue_page_obj": other_issue_page_obj,
+        "primary_credit_sections": build_primary_credit_sections(issue_credit_items),
+        "all_issue_credit_groups": build_credit_groups(issue_credit_items),
+        "run_issue_page_obj": run_issue_page_obj,
     }
 
     return render(request, "comics/issue_details.html", context)
@@ -107,9 +115,9 @@ def build_run_detail_groups(run):
                 detail_field("Publisher", run.publisher),
                 detail_field("Start year", run.start_year),
                 detail_field("Comic Vine issue count", run.count_of_issues),
-                detail_field("Stored issue count", getattr(run, "stored_issue_count", None)),
+                detail_field("Issues in this run", getattr(run, "stored_issue_count", None)),
                 detail_field(
-                    "Latest local issue store date",
+                    "Latest issue store date",
                     getattr(run, "latest_store_date", None),
                 ),
             ],
@@ -212,27 +220,172 @@ def build_issue_text_blocks(issue):
     ]
 
 
-def build_issue_credit_groups(issue):
-    groups = []
+def build_run_issue_credit_items(run):
+    credits = (
+        ComicIssuePersonCredit.objects.select_related("person", "role")
+        .filter(issue__volume=run)
+        .order_by("role__name", "person__name", "issue_id")
+    )
+
+    credit_map = {}
+
+    for credit in credits:
+        key = (credit.person_id, credit.role_id)
+
+        if key not in credit_map:
+            credit_map[key] = {
+                "person_name": credit.person.name,
+                "role_name": credit.role.name,
+                "comicvine_url": credit.comicvine_url or credit.person.comicvine_url,
+                "api_detail_url": credit.api_detail_url or credit.person.api_detail_url,
+                "issue_ids": set(),
+                "count_label": "",
+            }
+
+        credit_map[key]["issue_ids"].add(credit.issue_id)
+
+    items = []
+
+    for item in credit_map.values():
+        issue_count = len(item["issue_ids"])
+
+        items.append(
+            {
+                "person_name": item["person_name"],
+                "role_name": item["role_name"],
+                "comicvine_url": item["comicvine_url"],
+                "api_detail_url": item["api_detail_url"],
+                "count_label": format_issue_credit_count(issue_count),
+            }
+        )
+
+    return sorted(
+        items,
+        key=lambda item: (
+            item["role_name"].lower(),
+            item["person_name"].lower(),
+        ),
+    )
+
+
+def build_issue_credit_items(issue):
     credits = issue.person_credits.select_related("person", "role").order_by(
         "role__name",
         "person__name",
     )
 
+    items = []
+
     for credit in credits:
-        role_name = credit.role.name
+        items.append(
+            {
+                "person_name": credit.person.name,
+                "role_name": credit.role.name,
+                "comicvine_url": credit.comicvine_url or credit.person.comicvine_url,
+                "api_detail_url": credit.api_detail_url or credit.person.api_detail_url,
+                "count_label": "",
+            }
+        )
+
+    return items
+
+
+def build_volume_credit_items(run):
+    items = []
+
+    for credit in run.person_credits.select_related("person").all():
+        count_label = ""
+
+        if credit.credit_count is not None:
+            if credit.credit_count == 1:
+                count_label = "1 credit"
+            else:
+                count_label = f"{credit.credit_count} credits"
+
+        items.append(
+            {
+                "person_name": credit.person.name,
+                "role_name": "Volume credit",
+                "comicvine_url": credit.comicvine_url or credit.person.comicvine_url,
+                "api_detail_url": credit.api_detail_url or credit.person.api_detail_url,
+                "count_label": count_label,
+            }
+        )
+
+    return sorted(
+        items,
+        key=lambda item: item["person_name"].lower(),
+    )
+
+
+def build_primary_credit_sections(credit_items):
+    return [
+        {
+            "title": "Writers",
+            "items": [
+                item for item in credit_items
+                if is_writer_role(item["role_name"])
+            ],
+        },
+        {
+            "title": "Artists",
+            "items": [
+                item for item in credit_items
+                if is_artist_role(item["role_name"])
+            ],
+        },
+    ]
+
+
+def build_credit_groups(credit_items):
+    groups = []
+
+    for item in credit_items:
+        role_name = item["role_name"]
 
         if not groups or groups[-1]["role_name"] != role_name:
             groups.append(
                 {
                     "role_name": role_name,
-                    "credits": [],
+                    "items": [],
                 }
             )
 
-        groups[-1]["credits"].append(credit)
+        groups[-1]["items"].append(item)
 
     return groups
+
+
+def is_writer_role(role_name):
+    normalized_role = normalize_role_name(role_name)
+
+    return "writer" in normalized_role
+
+
+def is_artist_role(role_name):
+    normalized_role = normalize_role_name(role_name)
+
+    if "cover" in normalized_role:
+        return False
+
+    artist_role_names = {
+        "artist",
+        "penciller",
+        "penciler",
+    }
+
+    return normalized_role in artist_role_names
+
+
+def normalize_role_name(role_name):
+    return str(role_name or "").strip().lower()
+
+
+def format_issue_credit_count(issue_count):
+    if issue_count == 1:
+        return "1 issue"
+
+    return f"{issue_count} issues"
 
 
 def detail_field(label, value, missing="Unknown"):
