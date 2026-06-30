@@ -2,9 +2,9 @@ import time
 
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
-from django.utils import timezone
 
 from comics.comicvine.client import (
+    ComicVineAPIError,
     create_comicvine_session,
     fetch_issues_page,
     get_comicvine_api_key,
@@ -26,11 +26,24 @@ from comics.models import ComicVineDateScan
 
 USER_AGENT = "EzyReadComics bulk_import_new_issues"
 
+SCAN_PHASES = [
+    {
+        "title": "Issues added on Comic Vine",
+        "scan_kind": ComicVineDateScan.ISSUE_DATE_ADDED,
+        "comicvine_field": "date_added",
+    },
+    {
+        "title": "Issues updated on Comic Vine",
+        "scan_kind": ComicVineDateScan.ISSUE_DATE_LAST_UPDATED,
+        "comicvine_field": "date_last_updated",
+    },
+]
+
 
 class Command(BaseCommand):
     help = (
-        "Import newly added Comic Vine issues using completed date_added days only. "
-        "This is the first current-data command to run on an empty database."
+        "Import current Comic Vine issues using completed date_added and "
+        "date_last_updated days."
     )
 
     def add_arguments(self, parser):
@@ -57,15 +70,20 @@ class Command(BaseCommand):
         parser.add_argument(
             "--max-pages",
             type=int,
-            default=1,
-            help="Maximum /issues/ pages to fetch this run. Defaults to 1.",
+            default=None,
+            help=(
+                "Optional maximum pages to fetch for each scan type this run. "
+                "If omitted during a real run, the command keeps going until all "
+                "available completed-day work is caught up or Comic Vine stops it. "
+                "Dry runs default to 1 page per scan type."
+            ),
         )
 
         parser.add_argument(
             "--request-delay",
             type=float,
-            default=0.0,
-            help="Seconds to wait between API pages when --max-pages is above 1.",
+            default=3.0,
+            help="Seconds to wait between API pages/phases. Defaults to 3.",
         )
 
         parser.add_argument(
@@ -84,6 +102,9 @@ class Command(BaseCommand):
         request_delay = options["request_delay"]
         dry_run = options["dry_run"]
 
+        if dry_run and max_pages is None:
+            max_pages = 1
+
         validate_command_options(
             page_size=page_size,
             max_pages=max_pages,
@@ -101,143 +122,222 @@ class Command(BaseCommand):
         validate_date_window(start_date, end_date)
 
         self.stdout.write("")
-        self.stdout.write(self.style.SUCCESS("Bulk import new Comic Vine issues"))
-        self.stdout.write(f"Dry run: {dry_run}")
-        self.stdout.write("")
-        self.stdout.write("Completed-day scan:")
-        self.stdout.write(f"  Today: {timezone.localdate()}")
-        self.stdout.write(f"  Default completed day: {default_completed_day}")
-        self.stdout.write(f"  Start date: {start_date}")
-        self.stdout.write(f"  End date: {end_date}")
-        self.stdout.write("")
+        self.stdout.write(self.style.SUCCESS("Bulk import current Comic Vine issues"))
+        self.stdout.write(f"Mode: {'dry run' if dry_run else 'writing to database'}")
+        self.stdout.write(f"Import date range: {start_date} through {end_date}")
         self.stdout.write(f"Page size: {page_size}")
-        self.stdout.write(f"Max pages this run: {max_pages}")
 
-        if state_created:
+        if max_pages is None:
+            self.stdout.write("Page cap per phase: no limit")
+        else:
+            self.stdout.write(f"Page cap per phase: {max_pages}")
+
+        if state_created or state_initialized:
             self.stdout.write("")
-            self.stdout.write(
-                self.style.WARNING(
-                    "Sync state would be created."
-                    if dry_run
-                    else "Sync state created."
+            if dry_run:
+                self.stdout.write(
+                    self.style.WARNING(
+                        f"Import start date would be initialized to {start_date}."
+                    )
                 )
-            )
-
-        if state_initialized:
-            self.stdout.write(
-                self.style.WARNING(
-                    f"Current import start date would be set to {start_date}."
-                    if dry_run
-                    else f"Current import start date set to {start_date}."
+            else:
+                self.stdout.write(
+                    self.style.WARNING(
+                        f"Import start date initialized to {start_date}."
+                    )
                 )
-            )
 
-        pages_processed = 0
+        total_pages_processed = 0
+        stopped_by_api_error = False
+        phase_results = []
 
         with create_comicvine_session(USER_AGENT) as session:
-            while pages_processed < max_pages:
-                scan, scan_created = get_next_incomplete_date_scan(
-                    scan_kind=ComicVineDateScan.ISSUE_DATE_ADDED,
-                    start_date=start_date,
-                    end_date=end_date,
-                    dry_run=dry_run,
-                )
-
-                if scan is None:
-                    self.stdout.write("")
-                    self.stdout.write(self.style.SUCCESS("No incomplete date_added scans remain."))
-                    break
-
-                if scan_created:
-                    self.stdout.write("")
-                    self.stdout.write(
-                        self.style.WARNING(
-                            f"Scan progress would be created for {scan.scan_date}."
-                            if dry_run
-                            else f"Scan progress created for {scan.scan_date}."
-                        )
-                    )
-
-                starting_offset = scan.next_offset
+            for phase_index, phase in enumerate(SCAN_PHASES, start=1):
+                if phase_index > 1:
+                    sleep_if_needed(request_delay)
 
                 self.stdout.write("")
-                self.stdout.write("=" * 80)
-                self.stdout.write(f"Scanning date_added: {scan.scan_date}")
-                self.stdout.write(f"Offset: {starting_offset}")
-                self.stdout.write("=" * 80)
-
-                response_data = fetch_issues_page(
-                    session,
-                    api_key,
-                    filter_value=build_day_filter("date_added", scan.scan_date),
-                    fields=ISSUE_LIST_FIELDS,
-                    offset=starting_offset,
-                    limit=page_size,
-                    sort="date_added:asc",
+                self.stdout.write("#" * 80)
+                self.stdout.write(
+                    f"Phase {phase_index} of {len(SCAN_PHASES)}: {phase['title']}"
                 )
+                self.stdout.write("#" * 80)
 
-                remote_issues = response_data.get("results") or []
-                total_results = int(response_data.get("number_of_total_results") or 0)
-                page_results = len(remote_issues)
-
-                if dry_run:
-                    save_result, item_results = process_issue_page_dry_run(remote_issues)
-                    progress_result = advance_date_scan_after_page(
-                        scan=scan,
-                        starting_offset=starting_offset,
-                        total_results=total_results,
-                        page_results=page_results,
-                        dry_run=True,
+                try:
+                    phase_result = run_scan_phase(
+                        command=self,
+                        session=session,
+                        api_key=api_key,
+                        phase=phase,
+                        start_date=start_date,
+                        end_date=end_date,
+                        page_size=page_size,
+                        max_pages=max_pages,
+                        request_delay=request_delay,
+                        dry_run=dry_run,
                     )
-                else:
-                    with transaction.atomic():
-                        save_result, item_results = process_issue_page(remote_issues)
-                        progress_result = advance_date_scan_after_page(
-                            scan=scan,
-                            starting_offset=starting_offset,
-                            total_results=total_results,
-                            page_results=page_results,
-                            dry_run=False,
-                        )
-
-                print_issue_items(
-                    command=self,
-                    item_results=item_results,
-                    dry_run=dry_run,
-                )
-
-                print_batch_summary(
-                    command=self,
-                    save_result=save_result,
-                    progress_result=progress_result,
-                    dry_run=dry_run,
-                )
-
-                pages_processed += 1
-
-                if progress_result.completed:
+                except ComicVineAPIError as error:
+                    stopped_by_api_error = True
                     self.stdout.write("")
-                    self.stdout.write(self.style.SUCCESS(f"Completed date: {scan.scan_date}"))
-                else:
+                    self.stdout.write(self.style.ERROR("Comic Vine stopped the run."))
+                    self.stdout.write(str(error))
                     self.stdout.write("")
                     self.stdout.write(
-                        self.style.WARNING(
-                            f"Date not complete yet. Next offset: {progress_result.ending_offset}"
-                        )
+                        "Progress from completed pages was saved. "
+                        "Run this command again later to continue."
                     )
+                    break
 
-                if pages_processed < max_pages and request_delay > 0:
-                    time.sleep(request_delay)
+                phase_results.append(phase_result)
+                total_pages_processed += phase_result["pages_processed"]
+
+        all_phases_caught_up = (
+            len(phase_results) == len(SCAN_PHASES)
+            and all(phase_result["caught_up"] for phase_result in phase_results)
+        )
 
         self.stdout.write("")
         self.stdout.write(self.style.SUCCESS("Run complete."))
-        self.stdout.write(f"Pages processed: {pages_processed}")
+        self.stdout.write(f"Total pages processed: {total_pages_processed}")
 
-        if pages_processed >= max_pages:
-            if dry_run:
-                self.stdout.write("Dry run only. No database changes were saved.")
-            else:
-                self.stdout.write("Run again to continue from the saved date/offset.")
+        if dry_run:
+            self.stdout.write("Dry run only. No database changes were saved.")
+        elif stopped_by_api_error:
+            self.stdout.write("Stopped early because Comic Vine returned an API error.")
+        elif all_phases_caught_up:
+            self.stdout.write("Caught up through the selected import date range.")
+        else:
+            self.stdout.write(
+                "Stopped at the page cap before all scans were confirmed complete. "
+                "Run again to continue."
+            )
+
+
+def run_scan_phase(
+    *,
+    command,
+    session,
+    api_key,
+    phase,
+    start_date,
+    end_date,
+    page_size,
+    max_pages,
+    request_delay,
+    dry_run,
+):
+    pages_processed = 0
+    caught_up = False
+    scan_kind = phase["scan_kind"]
+    comicvine_field = phase["comicvine_field"]
+
+    while max_pages is None or pages_processed < max_pages:
+        scan, scan_created = get_next_incomplete_date_scan(
+            scan_kind=scan_kind,
+            start_date=start_date,
+            end_date=end_date,
+            dry_run=dry_run,
+        )
+
+        if scan is None:
+            caught_up = True
+            command.stdout.write("")
+            command.stdout.write(
+                command.style.SUCCESS(
+                    f"No incomplete {comicvine_field} scans remain."
+                )
+            )
+            break
+
+        if scan_created:
+            command.stdout.write("")
+            command.stdout.write(
+                command.style.WARNING(
+                    f"Scan progress would be created for {comicvine_field} {scan.scan_date}."
+                    if dry_run
+                    else f"Scan progress created for {comicvine_field} {scan.scan_date}."
+                )
+            )
+
+        starting_offset = scan.next_offset
+
+        command.stdout.write("")
+        command.stdout.write("=" * 80)
+        command.stdout.write(f"Scanning {comicvine_field}: {scan.scan_date}")
+        command.stdout.write(f"Offset: {starting_offset}")
+        command.stdout.write("=" * 80)
+
+        response_data = fetch_issues_page(
+            session,
+            api_key,
+            filter_value=build_day_filter(comicvine_field, scan.scan_date),
+            fields=ISSUE_LIST_FIELDS,
+            offset=starting_offset,
+            limit=page_size,
+            sort=f"{comicvine_field}:asc",
+        )
+
+        remote_issues = response_data.get("results") or []
+        total_results = int(response_data.get("number_of_total_results") or 0)
+        page_results = len(remote_issues)
+
+        if dry_run:
+            save_result, item_results = process_issue_page_dry_run(remote_issues)
+            progress_result = advance_date_scan_after_page(
+                scan=scan,
+                starting_offset=starting_offset,
+                total_results=total_results,
+                page_results=page_results,
+                dry_run=True,
+            )
+        else:
+            with transaction.atomic():
+                save_result, item_results = process_issue_page(remote_issues)
+                progress_result = advance_date_scan_after_page(
+                    scan=scan,
+                    starting_offset=starting_offset,
+                    total_results=total_results,
+                    page_results=page_results,
+                    dry_run=False,
+                )
+
+        print_issue_items(
+            command=command,
+            item_results=item_results,
+            dry_run=dry_run,
+        )
+
+        print_batch_summary(
+            command=command,
+            save_result=save_result,
+            progress_result=progress_result,
+            dry_run=dry_run,
+        )
+
+        pages_processed += 1
+
+        if progress_result.completed:
+            command.stdout.write("")
+            command.stdout.write(
+                command.style.SUCCESS(
+                    f"Completed {comicvine_field}: {scan.scan_date}"
+                )
+            )
+        else:
+            command.stdout.write("")
+            command.stdout.write(
+                command.style.WARNING(
+                    f"{comicvine_field} date not complete yet. "
+                    f"Next offset: {progress_result.ending_offset}"
+                )
+            )
+
+        sleep_if_needed(request_delay)
+
+    return {
+        "pages_processed": pages_processed,
+        "caught_up": caught_up,
+    }
 
 
 def validate_command_options(*, page_size, max_pages, request_delay):
@@ -247,8 +347,8 @@ def validate_command_options(*, page_size, max_pages, request_delay):
     if page_size > 100:
         raise CommandError("--page-size cannot be above 100.")
 
-    if max_pages < 1:
-        raise CommandError("--max-pages must be at least 1.")
+    if max_pages is not None and max_pages < 1:
+        raise CommandError("--max-pages must be at least 1 when provided.")
 
     if request_delay < 0:
         raise CommandError("--request-delay cannot be negative.")
@@ -371,6 +471,9 @@ def format_issue_line(remote_issue):
     issue_title = clean_text(remote_issue.get("name")) or "No title"
     store_date = clean_text(remote_issue.get("store_date")) or "unknown store date"
     date_added = clean_text(remote_issue.get("date_added")) or "unknown date_added"
+    date_last_updated = (
+        clean_text(remote_issue.get("date_last_updated")) or "unknown date_last_updated"
+    )
 
     remote_volume = remote_issue.get("volume") or {}
     volume_name = clean_text(remote_volume.get("name")) or "Unknown volume"
@@ -378,7 +481,8 @@ def format_issue_line(remote_issue):
 
     return (
         f"{volume_name} #{issue_number} — {issue_title} "
-        f"(issue {issue_id}, volume {volume_id}, store {store_date}, added {date_added})"
+        f"(issue {issue_id}, volume {volume_id}, store {store_date}, "
+        f"added {date_added}, updated {date_last_updated})"
     )
 
 
@@ -400,3 +504,8 @@ def print_batch_summary(*, command, save_result, progress_result, dry_run):
     command.stdout.write(f"  {prefix}minimal volumes updated: {save_result.volumes_updated}")
     command.stdout.write(f"  {prefix}associated images created: {save_result.associated_images_created}")
     command.stdout.write(f"  {prefix}associated images deleted: {save_result.associated_images_deleted}")
+
+
+def sleep_if_needed(request_delay):
+    if request_delay > 0:
+        time.sleep(request_delay)
