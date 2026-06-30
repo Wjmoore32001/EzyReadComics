@@ -1,0 +1,2523 @@
+{
+  "issue_detail_default_full_shape": {
+    "endpoint": "/issue/4000-1174850/",
+    "params_without_api_key": {
+      "format": "json"
+    },
+    "response": {
+      "http_status": 200,
+      "json": {
+        "error": "OK",
+        "limit": 1,
+        "number_of_page_results": 1,
+        "number_of_total_results": 1,
+        "offset": 0,
+        "results": {
+          "aliases": null,
+          "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-1174850/",
+          "associated_images": [],
+          "character_credits": [],
+          "character_died_in": [],
+          "concept_credits": [],
+          "cover_date": "2026-05-01",
+          "date_added": "2026-06-28 00:07:39",
+          "date_last_updated": "2026-06-28 00:08:07",
+          "deck": null,
+          "description": null,
+          "first_appearance_characters": null,
+          "first_appearance_concepts": null,
+          "first_appearance_locations": null,
+          "first_appearance_objects": null,
+          "first_appearance_storyarcs": null,
+          "first_appearance_teams": null,
+          "has_staff_review": false,
+          "id": 1174850,
+          "image": {
+            "icon_url": "https://comicvine.gamespot.com/a/uploads/square_avatar/11158/111586530/10109749-cover.jpg",
+            "image_tags": "All Images",
+            "medium_url": "https://comicvine.gamespot.com/a/uploads/scale_medium/11158/111586530/10109749-cover.jpg",
+            "original_url": "https://comicvine.gamespot.com/a/uploads/original/11158/111586530/10109749-cover.jpg",
+            "screen_large_url": "https://comicvine.gamespot.com/a/uploads/screen_kubrick/11158/111586530/10109749-cover.jpg",
+            "screen_url": "https://comicvine.gamespot.com/a/uploads/screen_medium/11158/111586530/10109749-cover.jpg",
+            "small_url": "https://comicvine.gamespot.com/a/uploads/scale_small/11158/111586530/10109749-cover.jpg",
+            "super_url": "https://comicvine.gamespot.com/a/uploads/scale_large/11158/111586530/10109749-cover.jpg",
+            "thumb_url": "https://comicvine.gamespot.com/a/uploads/scale_avatar/11158/111586530/10109749-cover.jpg",
+            "tiny_url": "https://comicvine.gamespot.com/a/uploads/square_mini/11158/111586530/10109749-cover.jpg"
+          },
+          "issue_number": "1",
+          "location_credits": [],
+          "name": null,
+          "object_credits": [],
+          "person_credits": [
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/person/4040-62850/",
+              "id": 62850,
+              "name": "Iou Kuroda",
+              "role": "writer, artist, cover",
+              "site_detail_url": "https://comicvine.gamespot.com/iou-kuroda/4040-62850/"
+            }
+          ],
+          "site_detail_url": "https://comicvine.gamespot.com/sendou-yasugorou-1/4000-1174850/",
+          "store_date": "2026-04-27",
+          "story_arc_credits": [],
+          "team_credits": [],
+          "team_disbanded_in": [],
+          "volume": {
+            "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-173584/",
+            "id": 173584,
+            "name": "Sendou Yasugorou",
+            "site_detail_url": "https://comicvine.gamespot.com/sendou-yasugorou/4050-173584/"
+          }
+        },
+        "status_code": 1,
+        "version": "1.0"
+      },
+      "transport_error": ""
+    }
+  },
+  "issues_list_by_date_added_default_full_shape": {
+    "endpoint": "/issues/ filter=date_added:2026-06-28",
+    "params_without_api_key": {
+      "filter": "date_added:2026-06-28 00:00:00|2026-06-28 23:59:59",
+      "format": "json",
+      "limit": 5,
+      "offset": 0,
+      "sort": "date_added:asc"
+    },
+    "response": {
+      "http_status": 200,
+      "json": {
+        "error": "OK",
+        "limit": 5,
+        "number_of_page_results": 5,
+        "number_of_total_results": 237,
+        "offset": 0,
+        "results": [
+          {
+            "aliases": null,
+            "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-1174850/",
+            "associated_images": [],
+            "cover_date": "2026-05-01",
+            "date_added": "2026-06-28 00:07:39",
+            "date_last_updated": "2026-06-28 00:08:07",
+            "deck": null,
+            "description": null,
+            "has_staff_review": false,
+            "id": 1174850,
+            "image": {
+              "icon_url": "https://comicvine.gamespot.com/a/uploads/square_avatar/11158/111586530/10109749-cover.jpg",
+              "image_tags": "All Images",
+              "medium_url": "https://comicvine.gamespot.com/a/uploads/scale_medium/11158/111586530/10109749-cover.jpg",
+              "original_url": "https://comicvine.gamespot.com/a/uploads/original/11158/111586530/10109749-cover.jpg",
+              "screen_large_url": "https://comicvine.gamespot.com/a/uploads/screen_kubrick/11158/111586530/10109749-cover.jpg",
+              "screen_url": "https://comicvine.gamespot.com/a/uploads/screen_medium/11158/111586530/10109749-cover.jpg",
+              "small_url": "https://comicvine.gamespot.com/a/uploads/scale_small/11158/111586530/10109749-cover.jpg",
+              "super_url": "https://comicvine.gamespot.com/a/uploads/scale_large/11158/111586530/10109749-cover.jpg",
+              "thumb_url": "https://comicvine.gamespot.com/a/uploads/scale_avatar/11158/111586530/10109749-cover.jpg",
+              "tiny_url": "https://comicvine.gamespot.com/a/uploads/square_mini/11158/111586530/10109749-cover.jpg"
+            },
+            "issue_number": "1",
+            "name": null,
+            "site_detail_url": "https://comicvine.gamespot.com/sendou-yasugorou-1/4000-1174850/",
+            "store_date": "2026-04-27",
+            "volume": {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-173584/",
+              "id": 173584,
+              "name": "Sendou Yasugorou",
+              "site_detail_url": "https://comicvine.gamespot.com/sendou-yasugorou/4050-173584/"
+            }
+          },
+          {
+            "aliases": null,
+            "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-1174851/",
+            "associated_images": [],
+            "cover_date": "2026-04-01",
+            "date_added": "2026-06-28 01:03:52",
+            "date_last_updated": "2026-06-30 09:43:56",
+            "deck": null,
+            "description": "<p><em>Kieron Gillen masterminds a tumultuous era for the X-Men!Beast and Abigail Brand must save the alien-monitoring S.W.O.R.D. agency when Henry Peter Gyrich stages a coup! But down on Earth, how will the X-Men explain themselves when the public learns Magneto has joined the team? Making matters worse, a Breakworld warship arrives on a vengeance-filled mission \u2014 and when Asgardian black magic empowers the Juggernaut, he becomes more unstoppable than ever! Then, after the X-Men are torn in two, Cyclops leads a new \u201cExtinction Team\u201d of heavy hitters \u2014 including Storm, Emma Frost, Namor, Colossus, Magik and Magneto! And not moment too soon as world-ending threats are mounting quickly \u2014 including Mister Sinister harnessing the power of a Dreaming Celestial! When the Phoenix Force returns, the X-Men clash with the Avengers \u2014 and the consequences are cataclysmic for Cyclops!</em></p><p><em>COLLECTING: S.W.O.R.D. (2009) #1-5; Uncanny X-Men (1981) #534.1, 535-544; X-Men: Regenesis (2011) #1; Uncanny X-Men (2011) #1-20; AVX: Consequences (2012) #1-5</em></p>",
+            "has_staff_review": false,
+            "id": 1174851,
+            "image": {
+              "icon_url": "https://comicvine.gamespot.com/a/uploads/square_avatar/11199/111990501/10109685-10105393-img_1930.jpg",
+              "image_tags": "All Images",
+              "medium_url": "https://comicvine.gamespot.com/a/uploads/scale_medium/11199/111990501/10109685-10105393-img_1930.jpg",
+              "original_url": "https://comicvine.gamespot.com/a/uploads/original/11199/111990501/10109685-10105393-img_1930.jpg",
+              "screen_large_url": "https://comicvine.gamespot.com/a/uploads/screen_kubrick/11199/111990501/10109685-10105393-img_1930.jpg",
+              "screen_url": "https://comicvine.gamespot.com/a/uploads/screen_medium/11199/111990501/10109685-10105393-img_1930.jpg",
+              "small_url": "https://comicvine.gamespot.com/a/uploads/scale_small/11199/111990501/10109685-10105393-img_1930.jpg",
+              "super_url": "https://comicvine.gamespot.com/a/uploads/scale_large/11199/111990501/10109685-10105393-img_1930.jpg",
+              "thumb_url": "https://comicvine.gamespot.com/a/uploads/scale_avatar/11199/111990501/10109685-10105393-img_1930.jpg",
+              "tiny_url": "https://comicvine.gamespot.com/a/uploads/square_mini/11199/111990501/10109685-10105393-img_1930.jpg"
+            },
+            "issue_number": "1",
+            "name": "HC",
+            "site_detail_url": "https://comicvine.gamespot.com/uncanny-x-men-by-kieron-gillen-omnibus-1-hc/4000-1174851/",
+            "store_date": "2026-04-14",
+            "volume": {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-173577/",
+              "id": 173577,
+              "name": "Uncanny X-Men by Kieron Gillen Omnibus",
+              "site_detail_url": "https://comicvine.gamespot.com/uncanny-x-men-by-kieron-gillen-omnibus/4050-173577/"
+            }
+          },
+          {
+            "aliases": null,
+            "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-1174852/",
+            "associated_images": [],
+            "cover_date": null,
+            "date_added": "2026-06-28 02:05:30",
+            "date_last_updated": "2026-06-28 02:05:30",
+            "deck": null,
+            "description": null,
+            "has_staff_review": false,
+            "id": 1174852,
+            "image": {
+              "icon_url": "https://comicvine.gamespot.com/a/uploads/square_avatar/1/15776/10109465-flash_road_rebirth_omnibus.jpg",
+              "image_tags": "All Images",
+              "medium_url": "https://comicvine.gamespot.com/a/uploads/scale_medium/1/15776/10109465-flash_road_rebirth_omnibus.jpg",
+              "original_url": "https://comicvine.gamespot.com/a/uploads/original/1/15776/10109465-flash_road_rebirth_omnibus.jpg",
+              "screen_large_url": "https://comicvine.gamespot.com/a/uploads/screen_kubrick/1/15776/10109465-flash_road_rebirth_omnibus.jpg",
+              "screen_url": "https://comicvine.gamespot.com/a/uploads/screen_medium/1/15776/10109465-flash_road_rebirth_omnibus.jpg",
+              "small_url": "https://comicvine.gamespot.com/a/uploads/scale_small/1/15776/10109465-flash_road_rebirth_omnibus.jpg",
+              "super_url": "https://comicvine.gamespot.com/a/uploads/scale_large/1/15776/10109465-flash_road_rebirth_omnibus.jpg",
+              "thumb_url": "https://comicvine.gamespot.com/a/uploads/scale_avatar/1/15776/10109465-flash_road_rebirth_omnibus.jpg",
+              "tiny_url": "https://comicvine.gamespot.com/a/uploads/square_mini/1/15776/10109465-flash_road_rebirth_omnibus.jpg"
+            },
+            "issue_number": "1",
+            "name": null,
+            "site_detail_url": "https://comicvine.gamespot.com/the-flash-the-road-to-rebirth-omnibus-1/4000-1174852/",
+            "store_date": null,
+            "volume": {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-173582/",
+              "id": 173582,
+              "name": "The Flash: The Road to Rebirth Omnibus",
+              "site_detail_url": "https://comicvine.gamespot.com/the-flash-the-road-to-rebirth-omnibus/4050-173582/"
+            }
+          },
+          {
+            "aliases": null,
+            "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-1174853/",
+            "associated_images": [],
+            "cover_date": null,
+            "date_added": "2026-06-28 02:05:54",
+            "date_last_updated": "2026-06-28 02:05:54",
+            "deck": null,
+            "description": null,
+            "has_staff_review": false,
+            "id": 1174853,
+            "image": {
+              "icon_url": "https://comicvine.gamespot.com/a/uploads/square_avatar/1/15776/10109422-batman_omnibus.jpg",
+              "image_tags": "All Images",
+              "medium_url": "https://comicvine.gamespot.com/a/uploads/scale_medium/1/15776/10109422-batman_omnibus.jpg",
+              "original_url": "https://comicvine.gamespot.com/a/uploads/original/1/15776/10109422-batman_omnibus.jpg",
+              "screen_large_url": "https://comicvine.gamespot.com/a/uploads/screen_kubrick/1/15776/10109422-batman_omnibus.jpg",
+              "screen_url": "https://comicvine.gamespot.com/a/uploads/screen_medium/1/15776/10109422-batman_omnibus.jpg",
+              "small_url": "https://comicvine.gamespot.com/a/uploads/scale_small/1/15776/10109422-batman_omnibus.jpg",
+              "super_url": "https://comicvine.gamespot.com/a/uploads/scale_large/1/15776/10109422-batman_omnibus.jpg",
+              "thumb_url": "https://comicvine.gamespot.com/a/uploads/scale_avatar/1/15776/10109422-batman_omnibus.jpg",
+              "tiny_url": "https://comicvine.gamespot.com/a/uploads/square_mini/1/15776/10109422-batman_omnibus.jpg"
+            },
+            "issue_number": "1",
+            "name": null,
+            "site_detail_url": "https://comicvine.gamespot.com/batman-by-james-tynion-iv-omnibus-1/4000-1174853/",
+            "store_date": null,
+            "volume": {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-173580/",
+              "id": 173580,
+              "name": "Batman by James Tynion IV Omnibus",
+              "site_detail_url": "https://comicvine.gamespot.com/batman-by-james-tynion-iv-omnibus/4050-173580/"
+            }
+          },
+          {
+            "aliases": null,
+            "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-1174854/",
+            "associated_images": [],
+            "cover_date": null,
+            "date_added": "2026-06-28 02:06:19",
+            "date_last_updated": "2026-06-28 12:20:36",
+            "deck": null,
+            "description": "<p><em>Welcome to Hellsalem\u2019s Lot, formerly known as New York City\u2014a magical city trapped in an impenetrable bubble where a breach between Earth and the Beyond has forced the human inhabitants to coexist with magic, monsters, and mystical creatures. A group of stylish superhumans stands between the ordinary citizens and supernatural violence, but someone is threatening to sever the bubble to unleash the chaos to the rest of the world! And a young man with special eyes aims to join the fight!</em></p><p><em>Collects Blood Blockade Battlefront Volumes 1\u20133 and the chapter \u201cE-Den of Master Fighters\u201d from Volume 4.</em></p>",
+            "has_staff_review": false,
+            "id": 1174854,
+            "image": {
+              "icon_url": "https://comicvine.gamespot.com/a/uploads/square_avatar/11183/111832710/10107875-bloodblockadebattlefront-c001%28v01%29-p000%5Bcover%5D%5Bdig%5D%5Bthoseshroudedinfog%5D%5Bdarkhorse%5D%5Bnao%5D%7Bhq%7D.jpg",
+              "image_tags": "All Images",
+              "medium_url": "https://comicvine.gamespot.com/a/uploads/scale_medium/11183/111832710/10107875-bloodblockadebattlefront-c001%28v01%29-p000%5Bcover%5D%5Bdig%5D%5Bthoseshroudedinfog%5D%5Bdarkhorse%5D%5Bnao%5D%7Bhq%7D.jpg",
+              "original_url": "https://comicvine.gamespot.com/a/uploads/original/11183/111832710/10107875-bloodblockadebattlefront-c001%28v01%29-p000%5Bcover%5D%5Bdig%5D%5Bthoseshroudedinfog%5D%5Bdarkhorse%5D%5Bnao%5D%7Bhq%7D.jpg",
+              "screen_large_url": "https://comicvine.gamespot.com/a/uploads/screen_kubrick/11183/111832710/10107875-bloodblockadebattlefront-c001%28v01%29-p000%5Bcover%5D%5Bdig%5D%5Bthoseshroudedinfog%5D%5Bdarkhorse%5D%5Bnao%5D%7Bhq%7D.jpg",
+              "screen_url": "https://comicvine.gamespot.com/a/uploads/screen_medium/11183/111832710/10107875-bloodblockadebattlefront-c001%28v01%29-p000%5Bcover%5D%5Bdig%5D%5Bthoseshroudedinfog%5D%5Bdarkhorse%5D%5Bnao%5D%7Bhq%7D.jpg",
+              "small_url": "https://comicvine.gamespot.com/a/uploads/scale_small/11183/111832710/10107875-bloodblockadebattlefront-c001%28v01%29-p000%5Bcover%5D%5Bdig%5D%5Bthoseshroudedinfog%5D%5Bdarkhorse%5D%5Bnao%5D%7Bhq%7D.jpg",
+              "super_url": "https://comicvine.gamespot.com/a/uploads/scale_large/11183/111832710/10107875-bloodblockadebattlefront-c001%28v01%29-p000%5Bcover%5D%5Bdig%5D%5Bthoseshroudedinfog%5D%5Bdarkhorse%5D%5Bnao%5D%7Bhq%7D.jpg",
+              "thumb_url": "https://comicvine.gamespot.com/a/uploads/scale_avatar/11183/111832710/10107875-bloodblockadebattlefront-c001%28v01%29-p000%5Bcover%5D%5Bdig%5D%5Bthoseshroudedinfog%5D%5Bdarkhorse%5D%5Bnao%5D%7Bhq%7D.jpg",
+              "tiny_url": "https://comicvine.gamespot.com/a/uploads/square_mini/11183/111832710/10107875-bloodblockadebattlefront-c001%28v01%29-p000%5Bcover%5D%5Bdig%5D%5Bthoseshroudedinfog%5D%5Bdarkhorse%5D%5Bnao%5D%7Bhq%7D.jpg"
+            },
+            "issue_number": "1",
+            "name": "Volume 1",
+            "site_detail_url": "https://comicvine.gamespot.com/blood-blockade-battlefront-omnibus-1-volume-1/4000-1174854/",
+            "store_date": null,
+            "volume": {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-173576/",
+              "id": 173576,
+              "name": "Blood Blockade Battlefront Omnibus",
+              "site_detail_url": "https://comicvine.gamespot.com/blood-blockade-battlefront-omnibus/4050-173576/"
+            }
+          }
+        ],
+        "status_code": 1,
+        "version": "1.0"
+      },
+      "transport_error": ""
+    }
+  },
+  "issues_list_by_date_last_updated_default_full_shape": {
+    "endpoint": "/issues/ filter=date_last_updated:2026-06-28",
+    "params_without_api_key": {
+      "filter": "date_last_updated:2026-06-28 00:00:00|2026-06-28 23:59:59",
+      "format": "json",
+      "limit": 5,
+      "offset": 0,
+      "sort": "date_last_updated:asc"
+    },
+    "response": {
+      "http_status": 200,
+      "json": {
+        "error": "OK",
+        "limit": 5,
+        "number_of_page_results": 5,
+        "number_of_total_results": 270,
+        "offset": 0,
+        "results": [
+          {
+            "aliases": null,
+            "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-1174850/",
+            "associated_images": [],
+            "cover_date": "2026-05-01",
+            "date_added": "2026-06-28 00:07:39",
+            "date_last_updated": "2026-06-28 00:08:07",
+            "deck": null,
+            "description": null,
+            "has_staff_review": false,
+            "id": 1174850,
+            "image": {
+              "icon_url": "https://comicvine.gamespot.com/a/uploads/square_avatar/11158/111586530/10109749-cover.jpg",
+              "image_tags": "All Images",
+              "medium_url": "https://comicvine.gamespot.com/a/uploads/scale_medium/11158/111586530/10109749-cover.jpg",
+              "original_url": "https://comicvine.gamespot.com/a/uploads/original/11158/111586530/10109749-cover.jpg",
+              "screen_large_url": "https://comicvine.gamespot.com/a/uploads/screen_kubrick/11158/111586530/10109749-cover.jpg",
+              "screen_url": "https://comicvine.gamespot.com/a/uploads/screen_medium/11158/111586530/10109749-cover.jpg",
+              "small_url": "https://comicvine.gamespot.com/a/uploads/scale_small/11158/111586530/10109749-cover.jpg",
+              "super_url": "https://comicvine.gamespot.com/a/uploads/scale_large/11158/111586530/10109749-cover.jpg",
+              "thumb_url": "https://comicvine.gamespot.com/a/uploads/scale_avatar/11158/111586530/10109749-cover.jpg",
+              "tiny_url": "https://comicvine.gamespot.com/a/uploads/square_mini/11158/111586530/10109749-cover.jpg"
+            },
+            "issue_number": "1",
+            "name": null,
+            "site_detail_url": "https://comicvine.gamespot.com/sendou-yasugorou-1/4000-1174850/",
+            "store_date": "2026-04-27",
+            "volume": {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-173584/",
+              "id": 173584,
+              "name": "Sendou Yasugorou",
+              "site_detail_url": "https://comicvine.gamespot.com/sendou-yasugorou/4050-173584/"
+            }
+          },
+          {
+            "aliases": null,
+            "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-1174852/",
+            "associated_images": [],
+            "cover_date": null,
+            "date_added": "2026-06-28 02:05:30",
+            "date_last_updated": "2026-06-28 02:05:30",
+            "deck": null,
+            "description": null,
+            "has_staff_review": false,
+            "id": 1174852,
+            "image": {
+              "icon_url": "https://comicvine.gamespot.com/a/uploads/square_avatar/1/15776/10109465-flash_road_rebirth_omnibus.jpg",
+              "image_tags": "All Images",
+              "medium_url": "https://comicvine.gamespot.com/a/uploads/scale_medium/1/15776/10109465-flash_road_rebirth_omnibus.jpg",
+              "original_url": "https://comicvine.gamespot.com/a/uploads/original/1/15776/10109465-flash_road_rebirth_omnibus.jpg",
+              "screen_large_url": "https://comicvine.gamespot.com/a/uploads/screen_kubrick/1/15776/10109465-flash_road_rebirth_omnibus.jpg",
+              "screen_url": "https://comicvine.gamespot.com/a/uploads/screen_medium/1/15776/10109465-flash_road_rebirth_omnibus.jpg",
+              "small_url": "https://comicvine.gamespot.com/a/uploads/scale_small/1/15776/10109465-flash_road_rebirth_omnibus.jpg",
+              "super_url": "https://comicvine.gamespot.com/a/uploads/scale_large/1/15776/10109465-flash_road_rebirth_omnibus.jpg",
+              "thumb_url": "https://comicvine.gamespot.com/a/uploads/scale_avatar/1/15776/10109465-flash_road_rebirth_omnibus.jpg",
+              "tiny_url": "https://comicvine.gamespot.com/a/uploads/square_mini/1/15776/10109465-flash_road_rebirth_omnibus.jpg"
+            },
+            "issue_number": "1",
+            "name": null,
+            "site_detail_url": "https://comicvine.gamespot.com/the-flash-the-road-to-rebirth-omnibus-1/4000-1174852/",
+            "store_date": null,
+            "volume": {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-173582/",
+              "id": 173582,
+              "name": "The Flash: The Road to Rebirth Omnibus",
+              "site_detail_url": "https://comicvine.gamespot.com/the-flash-the-road-to-rebirth-omnibus/4050-173582/"
+            }
+          },
+          {
+            "aliases": null,
+            "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-1174853/",
+            "associated_images": [],
+            "cover_date": null,
+            "date_added": "2026-06-28 02:05:54",
+            "date_last_updated": "2026-06-28 02:05:54",
+            "deck": null,
+            "description": null,
+            "has_staff_review": false,
+            "id": 1174853,
+            "image": {
+              "icon_url": "https://comicvine.gamespot.com/a/uploads/square_avatar/1/15776/10109422-batman_omnibus.jpg",
+              "image_tags": "All Images",
+              "medium_url": "https://comicvine.gamespot.com/a/uploads/scale_medium/1/15776/10109422-batman_omnibus.jpg",
+              "original_url": "https://comicvine.gamespot.com/a/uploads/original/1/15776/10109422-batman_omnibus.jpg",
+              "screen_large_url": "https://comicvine.gamespot.com/a/uploads/screen_kubrick/1/15776/10109422-batman_omnibus.jpg",
+              "screen_url": "https://comicvine.gamespot.com/a/uploads/screen_medium/1/15776/10109422-batman_omnibus.jpg",
+              "small_url": "https://comicvine.gamespot.com/a/uploads/scale_small/1/15776/10109422-batman_omnibus.jpg",
+              "super_url": "https://comicvine.gamespot.com/a/uploads/scale_large/1/15776/10109422-batman_omnibus.jpg",
+              "thumb_url": "https://comicvine.gamespot.com/a/uploads/scale_avatar/1/15776/10109422-batman_omnibus.jpg",
+              "tiny_url": "https://comicvine.gamespot.com/a/uploads/square_mini/1/15776/10109422-batman_omnibus.jpg"
+            },
+            "issue_number": "1",
+            "name": null,
+            "site_detail_url": "https://comicvine.gamespot.com/batman-by-james-tynion-iv-omnibus-1/4000-1174853/",
+            "store_date": null,
+            "volume": {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-173580/",
+              "id": 173580,
+              "name": "Batman by James Tynion IV Omnibus",
+              "site_detail_url": "https://comicvine.gamespot.com/batman-by-james-tynion-iv-omnibus/4050-173580/"
+            }
+          },
+          {
+            "aliases": null,
+            "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-1174858/",
+            "associated_images": [],
+            "cover_date": "2026-06-28",
+            "date_added": "2026-06-28 02:20:19",
+            "date_last_updated": "2026-06-28 02:20:44",
+            "deck": null,
+            "description": null,
+            "has_staff_review": false,
+            "id": 1174858,
+            "image": {
+              "icon_url": "https://comicvine.gamespot.com/a/uploads/square_avatar/11158/111588877/10109803-cover.jpg",
+              "image_tags": "All Images",
+              "medium_url": "https://comicvine.gamespot.com/a/uploads/scale_medium/11158/111588877/10109803-cover.jpg",
+              "original_url": "https://comicvine.gamespot.com/a/uploads/original/11158/111588877/10109803-cover.jpg",
+              "screen_large_url": "https://comicvine.gamespot.com/a/uploads/screen_kubrick/11158/111588877/10109803-cover.jpg",
+              "screen_url": "https://comicvine.gamespot.com/a/uploads/screen_medium/11158/111588877/10109803-cover.jpg",
+              "small_url": "https://comicvine.gamespot.com/a/uploads/scale_small/11158/111588877/10109803-cover.jpg",
+              "super_url": "https://comicvine.gamespot.com/a/uploads/scale_large/11158/111588877/10109803-cover.jpg",
+              "thumb_url": "https://comicvine.gamespot.com/a/uploads/scale_avatar/11158/111588877/10109803-cover.jpg",
+              "tiny_url": "https://comicvine.gamespot.com/a/uploads/square_mini/11158/111588877/10109803-cover.jpg"
+            },
+            "issue_number": "7",
+            "name": "Vol. 7",
+            "site_detail_url": "https://comicvine.gamespot.com/owl-night-7-vol-7/4000-1174858/",
+            "store_date": "2026-06-11",
+            "volume": {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-169298/",
+              "id": 169298,
+              "name": "Owl Night",
+              "site_detail_url": "https://comicvine.gamespot.com/owl-night/4050-169298/"
+            }
+          },
+          {
+            "aliases": null,
+            "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-1174859/",
+            "associated_images": [],
+            "cover_date": "2026-06-28",
+            "date_added": "2026-06-28 02:21:26",
+            "date_last_updated": "2026-06-28 02:21:46",
+            "deck": null,
+            "description": null,
+            "has_staff_review": false,
+            "id": 1174859,
+            "image": {
+              "icon_url": "https://comicvine.gamespot.com/a/uploads/square_avatar/11158/111588877/10109804-cover.jpg",
+              "image_tags": "All Images",
+              "medium_url": "https://comicvine.gamespot.com/a/uploads/scale_medium/11158/111588877/10109804-cover.jpg",
+              "original_url": "https://comicvine.gamespot.com/a/uploads/original/11158/111588877/10109804-cover.jpg",
+              "screen_large_url": "https://comicvine.gamespot.com/a/uploads/screen_kubrick/11158/111588877/10109804-cover.jpg",
+              "screen_url": "https://comicvine.gamespot.com/a/uploads/screen_medium/11158/111588877/10109804-cover.jpg",
+              "small_url": "https://comicvine.gamespot.com/a/uploads/scale_small/11158/111588877/10109804-cover.jpg",
+              "super_url": "https://comicvine.gamespot.com/a/uploads/scale_large/11158/111588877/10109804-cover.jpg",
+              "thumb_url": "https://comicvine.gamespot.com/a/uploads/scale_avatar/11158/111588877/10109804-cover.jpg",
+              "tiny_url": "https://comicvine.gamespot.com/a/uploads/square_mini/11158/111588877/10109804-cover.jpg"
+            },
+            "issue_number": "17",
+            "name": "Vol. 17",
+            "site_detail_url": "https://comicvine.gamespot.com/ojisama-to-neko-17-vol-17/4000-1174859/",
+            "store_date": "2026-06-11",
+            "volume": {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-145902/",
+              "id": 145902,
+              "name": "Ojisama to Neko",
+              "site_detail_url": "https://comicvine.gamespot.com/ojisama-to-neko/4050-145902/"
+            }
+          }
+        ],
+        "status_code": 1,
+        "version": "1.0"
+      },
+      "transport_error": ""
+    }
+  },
+  "issues_list_by_pipe_ids_default_full_shape": {
+    "endpoint": "/issues/ filter=id:a|b|c",
+    "params_without_api_key": {
+      "filter": "id:1174850|1174852|1174853",
+      "format": "json",
+      "limit": 5,
+      "offset": 0
+    },
+    "response": {
+      "http_status": 200,
+      "json": {
+        "error": "OK",
+        "limit": 5,
+        "number_of_page_results": 3,
+        "number_of_total_results": 3,
+        "offset": 0,
+        "results": [
+          {
+            "aliases": null,
+            "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-1174850/",
+            "associated_images": [],
+            "cover_date": "2026-05-01",
+            "date_added": "2026-06-28 00:07:39",
+            "date_last_updated": "2026-06-28 00:08:07",
+            "deck": null,
+            "description": null,
+            "has_staff_review": false,
+            "id": 1174850,
+            "image": {
+              "icon_url": "https://comicvine.gamespot.com/a/uploads/square_avatar/11158/111586530/10109749-cover.jpg",
+              "image_tags": "All Images",
+              "medium_url": "https://comicvine.gamespot.com/a/uploads/scale_medium/11158/111586530/10109749-cover.jpg",
+              "original_url": "https://comicvine.gamespot.com/a/uploads/original/11158/111586530/10109749-cover.jpg",
+              "screen_large_url": "https://comicvine.gamespot.com/a/uploads/screen_kubrick/11158/111586530/10109749-cover.jpg",
+              "screen_url": "https://comicvine.gamespot.com/a/uploads/screen_medium/11158/111586530/10109749-cover.jpg",
+              "small_url": "https://comicvine.gamespot.com/a/uploads/scale_small/11158/111586530/10109749-cover.jpg",
+              "super_url": "https://comicvine.gamespot.com/a/uploads/scale_large/11158/111586530/10109749-cover.jpg",
+              "thumb_url": "https://comicvine.gamespot.com/a/uploads/scale_avatar/11158/111586530/10109749-cover.jpg",
+              "tiny_url": "https://comicvine.gamespot.com/a/uploads/square_mini/11158/111586530/10109749-cover.jpg"
+            },
+            "issue_number": "1",
+            "name": null,
+            "site_detail_url": "https://comicvine.gamespot.com/sendou-yasugorou-1/4000-1174850/",
+            "store_date": "2026-04-27",
+            "volume": {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-173584/",
+              "id": 173584,
+              "name": "Sendou Yasugorou",
+              "site_detail_url": "https://comicvine.gamespot.com/sendou-yasugorou/4050-173584/"
+            }
+          },
+          {
+            "aliases": null,
+            "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-1174852/",
+            "associated_images": [],
+            "cover_date": null,
+            "date_added": "2026-06-28 02:05:30",
+            "date_last_updated": "2026-06-28 02:05:30",
+            "deck": null,
+            "description": null,
+            "has_staff_review": false,
+            "id": 1174852,
+            "image": {
+              "icon_url": "https://comicvine.gamespot.com/a/uploads/square_avatar/1/15776/10109465-flash_road_rebirth_omnibus.jpg",
+              "image_tags": "All Images",
+              "medium_url": "https://comicvine.gamespot.com/a/uploads/scale_medium/1/15776/10109465-flash_road_rebirth_omnibus.jpg",
+              "original_url": "https://comicvine.gamespot.com/a/uploads/original/1/15776/10109465-flash_road_rebirth_omnibus.jpg",
+              "screen_large_url": "https://comicvine.gamespot.com/a/uploads/screen_kubrick/1/15776/10109465-flash_road_rebirth_omnibus.jpg",
+              "screen_url": "https://comicvine.gamespot.com/a/uploads/screen_medium/1/15776/10109465-flash_road_rebirth_omnibus.jpg",
+              "small_url": "https://comicvine.gamespot.com/a/uploads/scale_small/1/15776/10109465-flash_road_rebirth_omnibus.jpg",
+              "super_url": "https://comicvine.gamespot.com/a/uploads/scale_large/1/15776/10109465-flash_road_rebirth_omnibus.jpg",
+              "thumb_url": "https://comicvine.gamespot.com/a/uploads/scale_avatar/1/15776/10109465-flash_road_rebirth_omnibus.jpg",
+              "tiny_url": "https://comicvine.gamespot.com/a/uploads/square_mini/1/15776/10109465-flash_road_rebirth_omnibus.jpg"
+            },
+            "issue_number": "1",
+            "name": null,
+            "site_detail_url": "https://comicvine.gamespot.com/the-flash-the-road-to-rebirth-omnibus-1/4000-1174852/",
+            "store_date": null,
+            "volume": {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-173582/",
+              "id": 173582,
+              "name": "The Flash: The Road to Rebirth Omnibus",
+              "site_detail_url": "https://comicvine.gamespot.com/the-flash-the-road-to-rebirth-omnibus/4050-173582/"
+            }
+          },
+          {
+            "aliases": null,
+            "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-1174853/",
+            "associated_images": [],
+            "cover_date": null,
+            "date_added": "2026-06-28 02:05:54",
+            "date_last_updated": "2026-06-28 02:05:54",
+            "deck": null,
+            "description": null,
+            "has_staff_review": false,
+            "id": 1174853,
+            "image": {
+              "icon_url": "https://comicvine.gamespot.com/a/uploads/square_avatar/1/15776/10109422-batman_omnibus.jpg",
+              "image_tags": "All Images",
+              "medium_url": "https://comicvine.gamespot.com/a/uploads/scale_medium/1/15776/10109422-batman_omnibus.jpg",
+              "original_url": "https://comicvine.gamespot.com/a/uploads/original/1/15776/10109422-batman_omnibus.jpg",
+              "screen_large_url": "https://comicvine.gamespot.com/a/uploads/screen_kubrick/1/15776/10109422-batman_omnibus.jpg",
+              "screen_url": "https://comicvine.gamespot.com/a/uploads/screen_medium/1/15776/10109422-batman_omnibus.jpg",
+              "small_url": "https://comicvine.gamespot.com/a/uploads/scale_small/1/15776/10109422-batman_omnibus.jpg",
+              "super_url": "https://comicvine.gamespot.com/a/uploads/scale_large/1/15776/10109422-batman_omnibus.jpg",
+              "thumb_url": "https://comicvine.gamespot.com/a/uploads/scale_avatar/1/15776/10109422-batman_omnibus.jpg",
+              "tiny_url": "https://comicvine.gamespot.com/a/uploads/square_mini/1/15776/10109422-batman_omnibus.jpg"
+            },
+            "issue_number": "1",
+            "name": null,
+            "site_detail_url": "https://comicvine.gamespot.com/batman-by-james-tynion-iv-omnibus-1/4000-1174853/",
+            "store_date": null,
+            "volume": {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-173580/",
+              "id": 173580,
+              "name": "Batman by James Tynion IV Omnibus",
+              "site_detail_url": "https://comicvine.gamespot.com/batman-by-james-tynion-iv-omnibus/4050-173580/"
+            }
+          }
+        ],
+        "status_code": 1,
+        "version": "1.0"
+      },
+      "transport_error": ""
+    }
+  },
+  "issues_list_by_volume_default_full_shape": {
+    "endpoint": "/issues/ filter=volume:173584",
+    "params_without_api_key": {
+      "filter": "volume:173584",
+      "format": "json",
+      "limit": 5,
+      "offset": 0
+    },
+    "response": {
+      "http_status": 200,
+      "json": {
+        "error": "OK",
+        "limit": 5,
+        "number_of_page_results": 1,
+        "number_of_total_results": 1,
+        "offset": 0,
+        "results": [
+          {
+            "aliases": null,
+            "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-1174850/",
+            "associated_images": [],
+            "cover_date": "2026-05-01",
+            "date_added": "2026-06-28 00:07:39",
+            "date_last_updated": "2026-06-28 00:08:07",
+            "deck": null,
+            "description": null,
+            "has_staff_review": false,
+            "id": 1174850,
+            "image": {
+              "icon_url": "https://comicvine.gamespot.com/a/uploads/square_avatar/11158/111586530/10109749-cover.jpg",
+              "image_tags": "All Images",
+              "medium_url": "https://comicvine.gamespot.com/a/uploads/scale_medium/11158/111586530/10109749-cover.jpg",
+              "original_url": "https://comicvine.gamespot.com/a/uploads/original/11158/111586530/10109749-cover.jpg",
+              "screen_large_url": "https://comicvine.gamespot.com/a/uploads/screen_kubrick/11158/111586530/10109749-cover.jpg",
+              "screen_url": "https://comicvine.gamespot.com/a/uploads/screen_medium/11158/111586530/10109749-cover.jpg",
+              "small_url": "https://comicvine.gamespot.com/a/uploads/scale_small/11158/111586530/10109749-cover.jpg",
+              "super_url": "https://comicvine.gamespot.com/a/uploads/scale_large/11158/111586530/10109749-cover.jpg",
+              "thumb_url": "https://comicvine.gamespot.com/a/uploads/scale_avatar/11158/111586530/10109749-cover.jpg",
+              "tiny_url": "https://comicvine.gamespot.com/a/uploads/square_mini/11158/111586530/10109749-cover.jpg"
+            },
+            "issue_number": "1",
+            "name": null,
+            "site_detail_url": "https://comicvine.gamespot.com/sendou-yasugorou-1/4000-1174850/",
+            "store_date": "2026-04-27",
+            "volume": {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-173584/",
+              "id": 173584,
+              "name": "Sendou Yasugorou",
+              "site_detail_url": "https://comicvine.gamespot.com/sendou-yasugorou/4050-173584/"
+            }
+          }
+        ],
+        "status_code": 1,
+        "version": "1.0"
+      },
+      "transport_error": ""
+    }
+  },
+  "person_detail_default_full_shape": {
+    "endpoint": "/person/4040-62850/",
+    "params_without_api_key": {
+      "format": "json"
+    },
+    "response": {
+      "http_status": 200,
+      "json": {
+        "error": "OK",
+        "limit": 1,
+        "number_of_page_results": 1,
+        "number_of_total_results": 1,
+        "offset": 0,
+        "results": {
+          "aliases": "\u9ed2\u7530\u786b\u9ec4\r\nIo Kuroda",
+          "api_detail_url": "https://comicvine.gamespot.com/api/person/4040-62850/",
+          "birth": "1971-01-05 00:00:00",
+          "count_of_isssue_appearances": null,
+          "country": null,
+          "created_characters": [],
+          "date_added": "2012-02-20 08:26:10",
+          "date_last_updated": "2015-02-16 02:32:38",
+          "death": null,
+          "deck": "Mangaka.",
+          "description": null,
+          "email": null,
+          "gender": 1,
+          "hometown": null,
+          "id": 62850,
+          "image": {
+            "icon_url": "https://comicvine.gamespot.com/a/uploads/square_avatar/6/67663/4395658-2394181912-4682..jpg",
+            "image_tags": "All Images",
+            "medium_url": "https://comicvine.gamespot.com/a/uploads/scale_medium/6/67663/4395658-2394181912-4682..jpg",
+            "original_url": "https://comicvine.gamespot.com/a/uploads/original/6/67663/4395658-2394181912-4682..jpg",
+            "screen_large_url": "https://comicvine.gamespot.com/a/uploads/screen_kubrick/6/67663/4395658-2394181912-4682..jpg",
+            "screen_url": "https://comicvine.gamespot.com/a/uploads/screen_medium/6/67663/4395658-2394181912-4682..jpg",
+            "small_url": "https://comicvine.gamespot.com/a/uploads/scale_small/6/67663/4395658-2394181912-4682..jpg",
+            "super_url": "https://comicvine.gamespot.com/a/uploads/scale_large/6/67663/4395658-2394181912-4682..jpg",
+            "thumb_url": "https://comicvine.gamespot.com/a/uploads/scale_avatar/6/67663/4395658-2394181912-4682..jpg",
+            "tiny_url": "https://comicvine.gamespot.com/a/uploads/square_mini/6/67663/4395658-2394181912-4682..jpg"
+          },
+          "issues": [
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-1174850/",
+              "id": 1174850,
+              "name": null,
+              "site_detail_url": "https://comicvine.gamespot.com/sendou-yasugorou-1/4000-1174850/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-1000281/",
+              "id": 1000281,
+              "name": "No. 8, 2023",
+              "site_detail_url": "https://comicvine.gamespot.com/gessan-171-no-8-2023/4000-1000281/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-994186/",
+              "id": 994186,
+              "name": "No. 7, 2023",
+              "site_detail_url": "https://comicvine.gamespot.com/gessan-170-no-7-2023/4000-994186/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-606436/",
+              "id": 606436,
+              "name": "",
+              "site_detail_url": "https://comicvine.gamespot.com/appleseed-alpha-1/4000-606436/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-608789/",
+              "id": 608789,
+              "name": "Vol. 2",
+              "site_detail_url": "https://comicvine.gamespot.com/appleseed-a-2-vol-2/4000-608789/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-561747/",
+              "id": 561747,
+              "name": "No. 1, 2016",
+              "site_detail_url": "https://comicvine.gamespot.com/morning-two-1897-no-1-2016/4000-561747/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-561737/",
+              "id": 561737,
+              "name": "No. 3, 2015",
+              "site_detail_url": "https://comicvine.gamespot.com/morning-two-1846-no-3-2015/4000-561737/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-479707/",
+              "id": 479707,
+              "name": "Vol. 1",
+              "site_detail_url": "https://comicvine.gamespot.com/appleseed-a-1-vol-1/4000-479707/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-561731/",
+              "id": 561731,
+              "name": "No. 9, 2014",
+              "site_detail_url": "https://comicvine.gamespot.com/morning-two-1816-no-9-2014/4000-561731/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-474359/",
+              "id": 474359,
+              "name": "No. 3, 2011",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-331-no-3-2011/4000-474359/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-515871/",
+              "id": 515871,
+              "name": "No. 5, 2009",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-298-no-5-2009/4000-515871/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-515872/",
+              "id": 515872,
+              "name": "No. 4, 2009",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-296-no-4-2009/4000-515872/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-515873/",
+              "id": 515873,
+              "name": "No. 3, 2009",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-295-no-3-2009/4000-515873/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-515875/",
+              "id": 515875,
+              "name": "No. 1, 2009",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-292-no-1-2009/4000-515875/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-515877/",
+              "id": 515877,
+              "name": "No. 11, 2008",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-289-no-11-2008/4000-515877/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-515878/",
+              "id": 515878,
+              "name": "No. 10, 2008",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-288-no-10-2008/4000-515878/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-515879/",
+              "id": 515879,
+              "name": "No. 9, 2008",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-287-no-9-2008/4000-515879/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-515895/",
+              "id": 515895,
+              "name": "No. 5, 2007",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-271-no-5-2007/4000-515895/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-515896/",
+              "id": 515896,
+              "name": "No. 4, 2007",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-270-no-4-2007/4000-515896/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-515897/",
+              "id": 515897,
+              "name": "No. 3, 2007",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-269-no-3-2007/4000-515897/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-515898/",
+              "id": 515898,
+              "name": "No. 2, 2007",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-268-no-2-2007/4000-515898/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-515899/",
+              "id": 515899,
+              "name": "No. 1, 2007",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-267-no-1-2007/4000-515899/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-515900/",
+              "id": 515900,
+              "name": "No. 12, 2006",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-266-no-12-2006/4000-515900/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-1140507/",
+              "id": 1140507,
+              "name": null,
+              "site_detail_url": "https://comicvine.gamespot.com/comic-cue-2/4000-1140507/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-515901/",
+              "id": 515901,
+              "name": "No. 11, 2006",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-265-no-11-2006/4000-515901/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-515902/",
+              "id": 515902,
+              "name": "No. 10, 2006",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-264-no-10-2006/4000-515902/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-515903/",
+              "id": 515903,
+              "name": "No. 9, 2006",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-263-no-9-2006/4000-515903/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-595580/",
+              "id": 595580,
+              "name": "No. 9, 2005",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-249-no-9-2005/4000-595580/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-561526/",
+              "id": 561526,
+              "name": "No. 8, 2005",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-248-no-8-2005/4000-561526/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-561525/",
+              "id": 561525,
+              "name": "No. 7, 2005",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-247-no-7-2005/4000-561525/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-260646/",
+              "id": 260646,
+              "name": "Vol. 1",
+              "site_detail_url": "https://comicvine.gamespot.com/sexy-voice-and-robo-1-vol-1/4000-260646/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-561524/",
+              "id": 561524,
+              "name": "No. 6, 2005",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-246-no-6-2005/4000-561524/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-561523/",
+              "id": 561523,
+              "name": "No. 5, 2005",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-245-no-5-2005/4000-561523/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-561522/",
+              "id": 561522,
+              "name": "No. 4, 2005",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-244-no-4-2005/4000-561522/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-562460/",
+              "id": 562460,
+              "name": "No. 9, 2003",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-225-no-9-2003/4000-562460/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-562459/",
+              "id": 562459,
+              "name": "No. 8, 2003",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-224-no-8-2003/4000-562459/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-924289/",
+              "id": 924289,
+              "name": "Volume 2",
+              "site_detail_url": "https://comicvine.gamespot.com/sexy-voice-and-robo-2-volume-2/4000-924289/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-626431/",
+              "id": 626431,
+              "name": "\u7b2c13\u53f7",
+              "site_detail_url": "https://comicvine.gamespot.com/spirits-zokan-ikki-1062-di-13hao/4000-626431/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-626430/",
+              "id": 626430,
+              "name": "\u7b2c12\u53f7",
+              "site_detail_url": "https://comicvine.gamespot.com/spirits-zokan-ikki-1048-di-12hao/4000-626430/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-562473/",
+              "id": 562473,
+              "name": "No. 10, 2002",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-213-no-10-2002/4000-562473/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-562472/",
+              "id": 562472,
+              "name": "No. 9, 2002",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-211-no-9-2002/4000-562472/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-626429/",
+              "id": 626429,
+              "name": "\u7b2c11\u53f7",
+              "site_detail_url": "https://comicvine.gamespot.com/spirits-zokan-ikki-1038-di-11hao/4000-626429/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-562471/",
+              "id": 562471,
+              "name": "No. 8, 2002",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-210-no-8-2002/4000-562471/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-562470/",
+              "id": 562470,
+              "name": "No. 7, 2002",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-208-no-7-2002/4000-562470/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-626428/",
+              "id": 626428,
+              "name": "\u7b2c10\u53f7",
+              "site_detail_url": "https://comicvine.gamespot.com/spirits-zokan-ikki-1028-di-10hao/4000-626428/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-562469/",
+              "id": 562469,
+              "name": "No. 6, 2002",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-207-no-6-2002/4000-562469/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-626427/",
+              "id": 626427,
+              "name": "\u7b2c9\u53f7",
+              "site_detail_url": "https://comicvine.gamespot.com/spirits-zokan-ikki-1017-di-9hao/4000-626427/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-562467/",
+              "id": 562467,
+              "name": "No. 4, 2002",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-204-no-4-2002/4000-562467/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-562466/",
+              "id": 562466,
+              "name": "No. 3, 2002",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-202-no-3-2002/4000-562466/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-626426/",
+              "id": 626426,
+              "name": "\u7b2c8\u53f7",
+              "site_detail_url": "https://comicvine.gamespot.com/spirits-zokan-ikki-1007-di-8hao/4000-626426/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-562465/",
+              "id": 562465,
+              "name": "No. 2, 2002",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-201-no-2-2002/4000-562465/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-562464/",
+              "id": 562464,
+              "name": "No. 1, 2002",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-200-no-1-2002/4000-562464/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-626425/",
+              "id": 626425,
+              "name": "\u7b2c7\u53f7",
+              "site_detail_url": "https://comicvine.gamespot.com/spirits-zokan-ikki-997-di-7hao/4000-626425/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-924288/",
+              "id": 924288,
+              "name": "Volume 1",
+              "site_detail_url": "https://comicvine.gamespot.com/sexy-voice-and-robo-1-volume-1/4000-924288/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-562487/",
+              "id": 562487,
+              "name": "No. 12, 2001",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-198-no-12-2001/4000-562487/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-562486/",
+              "id": 562486,
+              "name": "No. 11, 2001",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-197-no-11-2001/4000-562486/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-626424/",
+              "id": 626424,
+              "name": "\u7b2c6\u53f7",
+              "site_detail_url": "https://comicvine.gamespot.com/spirits-zokan-ikki-986-di-6hao/4000-626424/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-562485/",
+              "id": 562485,
+              "name": "No. 10, 2001",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-196-no-10-2001/4000-562485/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-562484/",
+              "id": 562484,
+              "name": "No. 9, 2001",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-194-no-9-2001/4000-562484/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-626423/",
+              "id": 626423,
+              "name": "\u7b2c5\u53f7",
+              "site_detail_url": "https://comicvine.gamespot.com/spirits-zokan-ikki-976-di-5hao/4000-626423/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-562483/",
+              "id": 562483,
+              "name": "No. 8, 2001",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-193-no-8-2001/4000-562483/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-562482/",
+              "id": 562482,
+              "name": "No. 7, 2001",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-192-no-7-2001/4000-562482/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-626422/",
+              "id": 626422,
+              "name": "\u7b2c4\u53f7",
+              "site_detail_url": "https://comicvine.gamespot.com/spirits-zokan-ikki-965-di-4hao/4000-626422/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-562481/",
+              "id": 562481,
+              "name": "No. 6, 2001",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-190-no-6-2001/4000-562481/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-562480/",
+              "id": 562480,
+              "name": "No. 5, 2001",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-189-no-5-2001/4000-562480/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-626421/",
+              "id": 626421,
+              "name": "\u7b2c3\u53f7",
+              "site_detail_url": "https://comicvine.gamespot.com/spirits-zokan-ikki-955-di-3hao/4000-626421/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-562479/",
+              "id": 562479,
+              "name": "No. 4, 2001",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-188-no-4-2001/4000-562479/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-562478/",
+              "id": 562478,
+              "name": "No. 3, 2001",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-186-no-3-2001/4000-562478/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-626420/",
+              "id": 626420,
+              "name": "\u7b2c2\u53f7",
+              "site_detail_url": "https://comicvine.gamespot.com/spirits-zokan-ikki-946-di-2hao/4000-626420/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-598613/",
+              "id": 598613,
+              "name": "No. 2, 2001",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-185-no-2-2001/4000-598613/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-562477/",
+              "id": 562477,
+              "name": "No. 1, 2001",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-184-no-1-2001/4000-562477/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-562494/",
+              "id": 562494,
+              "name": "No. 12, 2000",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-182-no-12-2000/4000-562494/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-626419/",
+              "id": 626419,
+              "name": "\u7b2c1\u53f7",
+              "site_detail_url": "https://comicvine.gamespot.com/spirits-zokan-ikki-936-di-1hao/4000-626419/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-562493/",
+              "id": 562493,
+              "name": "No. 11, 2000",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-181-no-11-2000/4000-562493/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-264358/",
+              "id": 264358,
+              "name": "Volume 3",
+              "site_detail_url": "https://comicvine.gamespot.com/neo-devilman-3-volume-3/4000-264358/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-575304/",
+              "id": 575304,
+              "name": "No. 1, 1997",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-129-no-1-1997/4000-575304/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-575303/",
+              "id": 575303,
+              "name": "No. 12, 1996",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-128-no-12-1996/4000-575303/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-562518/",
+              "id": 562518,
+              "name": "No. 11, 1996",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-127-no-11-1996/4000-562518/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-571966/",
+              "id": 571966,
+              "name": "No. 10, 1996",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-126-no-10-1996/4000-571966/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-562517/",
+              "id": 562517,
+              "name": "No. 9, 1996",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-125-no-9-1996/4000-562517/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-563029/",
+              "id": 563029,
+              "name": "No. 8, 1996",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-124-no-8-1996/4000-563029/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-575302/",
+              "id": 575302,
+              "name": "No. 7, 1996",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-123-no-7-1996/4000-575302/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-562516/",
+              "id": 562516,
+              "name": "No. 6, 1996",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-122-no-6-1996/4000-562516/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-562515/",
+              "id": 562515,
+              "name": "No. 5, 1996",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-121-no-5-1996/4000-562515/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-562514/",
+              "id": 562514,
+              "name": "No. 4, 1996",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-120-no-4-1996/4000-562514/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-562513/",
+              "id": 562513,
+              "name": "No. 3, 1996",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-119-no-3-1996/4000-562513/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-562512/",
+              "id": 562512,
+              "name": "No. 2, 1996",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-118-no-2-1996/4000-562512/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-562510/",
+              "id": 562510,
+              "name": "No. 12, 1995",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-116-no-12-1995/4000-562510/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-562509/",
+              "id": 562509,
+              "name": "No. 11, 1995",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-115-no-11-1995/4000-562509/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-571965/",
+              "id": 571965,
+              "name": "No. 10, 1995",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-114-no-10-1995/4000-571965/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-562508/",
+              "id": 562508,
+              "name": "No. 9, 1995",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-113-no-9-1995/4000-562508/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-562507/",
+              "id": 562507,
+              "name": "No. 8, 1995",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-112-no-8-1995/4000-562507/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-562506/",
+              "id": 562506,
+              "name": "No. 7, 1995",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-111-no-7-1995/4000-562506/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-562505/",
+              "id": 562505,
+              "name": "No. 6, 1995",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-110-no-6-1995/4000-562505/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-562504/",
+              "id": 562504,
+              "name": "No. 5, 1995",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-109-no-5-1995/4000-562504/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-575301/",
+              "id": 575301,
+              "name": "No. 4, 1995",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-108-no-4-1995/4000-575301/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-562503/",
+              "id": 562503,
+              "name": "No. 3, 1995",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-107-no-3-1995/4000-562503/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-562502/",
+              "id": 562502,
+              "name": "No. 2, 1995",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-106-no-2-1995/4000-562502/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-562501/",
+              "id": 562501,
+              "name": "No. 1, 1995",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-105-no-1-1995/4000-562501/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-563031/",
+              "id": 563031,
+              "name": "No. 12, 1994",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-104-no-12-1994/4000-563031/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-563030/",
+              "id": 563030,
+              "name": "No. 11, 1994",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-103-no-11-1994/4000-563030/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-562527/",
+              "id": 562527,
+              "name": "No. 10, 1994",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon-102-no-10-1994/4000-562527/"
+            }
+          ],
+          "name": "Iou Kuroda",
+          "site_detail_url": "https://comicvine.gamespot.com/iou-kuroda/4040-62850/",
+          "story_arc_credits": [],
+          "volume_credits": [
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-38838/",
+              "id": 38838,
+              "name": "Sexy Voice and Robo",
+              "site_detail_url": "https://comicvine.gamespot.com/sexy-voice-and-robo/4050-38838/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-39185/",
+              "id": 39185,
+              "name": "Neo Devilman",
+              "site_detail_url": "https://comicvine.gamespot.com/neo-devilman/4050-39185/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-78992/",
+              "id": 78992,
+              "name": "Afternoon",
+              "site_detail_url": "https://comicvine.gamespot.com/afternoon/4050-78992/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-80102/",
+              "id": 80102,
+              "name": "Appleseed \u03b1",
+              "site_detail_url": "https://comicvine.gamespot.com/appleseed-a/4050-80102/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-95966/",
+              "id": 95966,
+              "name": "Morning two",
+              "site_detail_url": "https://comicvine.gamespot.com/morning-two/4050-95966/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-102567/",
+              "id": 102567,
+              "name": "Appleseed Alpha",
+              "site_detail_url": "https://comicvine.gamespot.com/appleseed-alpha/4050-102567/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-115491/",
+              "id": 115491,
+              "name": "Spirits Z\u014dkan Ikki",
+              "site_detail_url": "https://comicvine.gamespot.com/spirits-zokan-ikki/4050-115491/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-142983/",
+              "id": 142983,
+              "name": "Sexy Voice and Robo",
+              "site_detail_url": "https://comicvine.gamespot.com/sexy-voice-and-robo/4050-142983/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-97781/",
+              "id": 97781,
+              "name": "Gessan",
+              "site_detail_url": "https://comicvine.gamespot.com/gessan/4050-97781/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-167996/",
+              "id": 167996,
+              "name": "Comic Cue",
+              "site_detail_url": "https://comicvine.gamespot.com/comic-cue/4050-167996/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-173584/",
+              "id": 173584,
+              "name": "Sendou Yasugorou",
+              "site_detail_url": "https://comicvine.gamespot.com/sendou-yasugorou/4050-173584/"
+            }
+          ],
+          "website": "http://www.kurodaiou.blog57.fc2.com/"
+        },
+        "status_code": 1,
+        "version": "1.0"
+      },
+      "transport_error": ""
+    }
+  },
+  "publisher_detail_default_full_shape": {
+    "endpoint": "/publisher/4010-4273/",
+    "params_without_api_key": {
+      "format": "json"
+    },
+    "response": {
+      "http_status": 200,
+      "json": {
+        "error": "OK",
+        "limit": 1,
+        "number_of_page_results": 1,
+        "number_of_total_results": 1,
+        "offset": 0,
+        "results": {
+          "aliases": "\u30ea\u30a4\u30c9\u793e\nSaito Productions\n\u3055\u3044\u3068\u3046\u30fb\u30d7\u30ed\u30c0\u30af\u30b7\u30e7\u30f3",
+          "api_detail_url": "https://comicvine.gamespot.com/api/publisher/4010-4273/",
+          "characters": [
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/character/4005-77092/",
+              "id": 77092,
+              "name": "Golgo 13",
+              "site_detail_url": "https://comicvine.gamespot.com/golgo-13/4005-77092/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/character/4005-144675/",
+              "id": 144675,
+              "name": "Dingo",
+              "site_detail_url": "https://comicvine.gamespot.com/dingo/4005-144675/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/character/4005-144677/",
+              "id": 144677,
+              "name": "Ryo Takashina",
+              "site_detail_url": "https://comicvine.gamespot.com/ryo-takashina/4005-144677/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/character/4005-144680/",
+              "id": 144680,
+              "name": "Oki",
+              "site_detail_url": "https://comicvine.gamespot.com/oki/4005-144680/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/character/4005-144681/",
+              "id": 144681,
+              "name": "Muy\u014dnosuke",
+              "site_detail_url": "https://comicvine.gamespot.com/muyonosuke/4005-144681/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/character/4005-165645/",
+              "id": 165645,
+              "name": "23",
+              "site_detail_url": "https://comicvine.gamespot.com/23/4005-165645/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/character/4005-165646/",
+              "id": 165646,
+              "name": "Fumiki Shimazaki",
+              "site_detail_url": "https://comicvine.gamespot.com/fumiki-shimazaki/4005-165646/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/character/4005-165647/",
+              "id": 165647,
+              "name": "Mika",
+              "site_detail_url": "https://comicvine.gamespot.com/mika/4005-165647/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/character/4005-165648/",
+              "id": 165648,
+              "name": "Yoshihiko Hishimi",
+              "site_detail_url": "https://comicvine.gamespot.com/yoshihiko-hishimi/4005-165648/"
+            }
+          ],
+          "date_added": "2013-05-16 02:00:40",
+          "date_last_updated": "2022-08-25 21:01:04",
+          "deck": "Originaly Leed was part of the publishing division of the Japanese company, Saito Productions, but split off in 1974 and went incorporated.",
+          "description": "<p>Saito Productions was founded in 1960 and is the company of Takao Saito (famous and prolific creator, best known for his serial <a href=\"https://comicvine.gamespot.com/golgo-13/4050-61493/\" data-ref-id=\"4050-61493\">Golgo 13</a> which has been ongoing for six decades). Besides being one of the longest manga serials in history, the series is also one of the best-selling and has been distributed by Leed since 1973 (despite being serialized in a Shogakukan magazine).</p><p>Leed's premier manga magazine initially was <a href=\"/leed-comic/4050-107125/\" data-ref-id=\"4050-107125\">Leed Comic</a> which began in 1971 but since the late 90's it has primarily serialized manga through its Comic Ran magazines (<a href=\"https://comicvine.gamespot.com/comic-ran/4050-105867/\" data-ref-id=\"4050-105867\">Comic Ran</a> and <a href=\"https://comicvine.gamespot.com/comic-ran-twins/4050-105866/\" data-ref-id=\"4050-105866\">Comic Ran Twins</a> being the most prominent). Many of the publisher's best-known franchises are associated with Takao Saito (though generally they involve other creators writing or illustrating them).</p>",
+          "id": 4273,
+          "image": {
+            "icon_url": "https://comicvine.gamespot.com/a/uploads/square_avatar/6/67663/3047265-logo.jpg",
+            "image_tags": "All Images",
+            "medium_url": "https://comicvine.gamespot.com/a/uploads/scale_medium/6/67663/3047265-logo.jpg",
+            "original_url": "https://comicvine.gamespot.com/a/uploads/original/6/67663/3047265-logo.jpg",
+            "screen_large_url": "https://comicvine.gamespot.com/a/uploads/screen_kubrick/6/67663/3047265-logo.jpg",
+            "screen_url": "https://comicvine.gamespot.com/a/uploads/screen_medium/6/67663/3047265-logo.jpg",
+            "small_url": "https://comicvine.gamespot.com/a/uploads/scale_small/6/67663/3047265-logo.jpg",
+            "super_url": "https://comicvine.gamespot.com/a/uploads/scale_large/6/67663/3047265-logo.jpg",
+            "thumb_url": "https://comicvine.gamespot.com/a/uploads/scale_avatar/6/67663/3047265-logo.jpg",
+            "tiny_url": "https://comicvine.gamespot.com/a/uploads/square_mini/6/67663/3047265-logo.jpg"
+          },
+          "location_address": null,
+          "location_city": null,
+          "location_state": null,
+          "name": "Leed Publishing Co., Ltd.",
+          "site_detail_url": "https://comicvine.gamespot.com/leed-publishing-co-ltd/4010-4273/",
+          "story_arcs": [],
+          "teams": [],
+          "volumes": [
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-1348/",
+              "id": 1348,
+              "name": "Z\u014dkan Comic Ran Twins: Sengoku Bush\u014d Retsuden",
+              "site_detail_url": "https://comicvine.gamespot.com/zokan-comic-ran-twins-sengoku-busho-retsuden/4050-1348/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-19603/",
+              "id": 19603,
+              "name": "Senritsu! Tako Sh\u014djo",
+              "site_detail_url": "https://comicvine.gamespot.com/senritsu-tako-shojo/4050-19603/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-21502/",
+              "id": 21502,
+              "name": "Gorilla Magazine",
+              "site_detail_url": "https://comicvine.gamespot.com/gorilla-magazine/4050-21502/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-61493/",
+              "id": 61493,
+              "name": "Golgo 13",
+              "site_detail_url": "https://comicvine.gamespot.com/golgo-13/4050-61493/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-61544/",
+              "id": 61544,
+              "name": "Golgo 13",
+              "site_detail_url": "https://comicvine.gamespot.com/golgo-13/4050-61544/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-71471/",
+              "id": 71471,
+              "name": "Sen no Natsu to Yume",
+              "site_detail_url": "https://comicvine.gamespot.com/sen-no-natsu-to-yume/4050-71471/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-77563/",
+              "id": 77563,
+              "name": "Comic Jackpot",
+              "site_detail_url": "https://comicvine.gamespot.com/comic-jackpot/4050-77563/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-93487/",
+              "id": 93487,
+              "name": "Survival: Sh\u014dnen S no Kiroku",
+              "site_detail_url": "https://comicvine.gamespot.com/survival-shonen-s-no-kiroku/4050-93487/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-96175/",
+              "id": 96175,
+              "name": "Ichigeki",
+              "site_detail_url": "https://comicvine.gamespot.com/ichigeki/4050-96175/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-96574/",
+              "id": 96574,
+              "name": "1-punkan Haahaa",
+              "site_detail_url": "https://comicvine.gamespot.com/1punkan-haahaa/4050-96574/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-97568/",
+              "id": 97568,
+              "name": "Kenkaku Shoubai",
+              "site_detail_url": "https://comicvine.gamespot.com/kenkaku-shoubai/4050-97568/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-98623/",
+              "id": 98623,
+              "name": "Onihei Hankach\u014d",
+              "site_detail_url": "https://comicvine.gamespot.com/onihei-hankacho/4050-98623/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-98782/",
+              "id": 98782,
+              "name": "Kujakuou: Sengoku Tensei",
+              "site_detail_url": "https://comicvine.gamespot.com/kujakuou-sengoku-tensei/4050-98782/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-99529/",
+              "id": 99529,
+              "name": "Sengoku Jieitai",
+              "site_detail_url": "https://comicvine.gamespot.com/sengoku-jieitai/4050-99529/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-99621/",
+              "id": 99621,
+              "name": "Sobaya Genan",
+              "site_detail_url": "https://comicvine.gamespot.com/sobaya-genan/4050-99621/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-99700/",
+              "id": 99700,
+              "name": "Sweets Sensei!",
+              "site_detail_url": "https://comicvine.gamespot.com/sweets-sensei/4050-99700/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-101072/",
+              "id": 101072,
+              "name": "Henshin Ninja Arashi Kai",
+              "site_detail_url": "https://comicvine.gamespot.com/henshin-ninja-arashi-kai/4050-101072/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-103135/",
+              "id": 103135,
+              "name": "Daima\u014d no Off",
+              "site_detail_url": "https://comicvine.gamespot.com/daimao-no-off/4050-103135/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-104692/",
+              "id": 104692,
+              "name": "Comic Ran Twins: Sengoku Bush\u014d Retsuden",
+              "site_detail_url": "https://comicvine.gamespot.com/comic-ran-twins-sengoku-busho-retsuden/4050-104692/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-105866/",
+              "id": 105866,
+              "name": "Comic Ran Twins",
+              "site_detail_url": "https://comicvine.gamespot.com/comic-ran-twins/4050-105866/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-105867/",
+              "id": 105867,
+              "name": "Comic Ran",
+              "site_detail_url": "https://comicvine.gamespot.com/comic-ran/4050-105867/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-107125/",
+              "id": 107125,
+              "name": "Leed Comic",
+              "site_detail_url": "https://comicvine.gamespot.com/leed-comic/4050-107125/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-107127/",
+              "id": 107127,
+              "name": "Hawking",
+              "site_detail_url": "https://comicvine.gamespot.com/hawking/4050-107127/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-107186/",
+              "id": 107186,
+              "name": "Barom-1",
+              "site_detail_url": "https://comicvine.gamespot.com/barom-1/4050-107186/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-107196/",
+              "id": 107196,
+              "name": "Survival: Another Story",
+              "site_detail_url": "https://comicvine.gamespot.com/survival-another-story/4050-107196/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-107203/",
+              "id": 107203,
+              "name": "Kitty Hawker",
+              "site_detail_url": "https://comicvine.gamespot.com/kitty-hawker/4050-107203/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-107225/",
+              "id": 107225,
+              "name": "Dingo",
+              "site_detail_url": "https://comicvine.gamespot.com/dingo/4050-107225/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-107235/",
+              "id": 107235,
+              "name": "Yagy\u016b Renya Bugeich\u014d",
+              "site_detail_url": "https://comicvine.gamespot.com/yagyu-renya-bugeicho/4050-107235/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-107469/",
+              "id": 107469,
+              "name": "Keiji Ank\u014d",
+              "site_detail_url": "https://comicvine.gamespot.com/keiji-anko/4050-107469/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-107716/",
+              "id": 107716,
+              "name": "Devil King",
+              "site_detail_url": "https://comicvine.gamespot.com/devil-king/4050-107716/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-107906/",
+              "id": 107906,
+              "name": "Oshitone Tenzen: Goldfinger",
+              "site_detail_url": "https://comicvine.gamespot.com/oshitone-tenzen-goldfinger/4050-107906/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-108045/",
+              "id": 108045,
+              "name": "Cho-no-Michiyuki",
+              "site_detail_url": "https://comicvine.gamespot.com/chono-michiyuki/4050-108045/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-108217/",
+              "id": 108217,
+              "name": "Nyx no Lantern",
+              "site_detail_url": "https://comicvine.gamespot.com/nyx-no-lantern/4050-108217/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-108474/",
+              "id": 108474,
+              "name": "Drop",
+              "site_detail_url": "https://comicvine.gamespot.com/drop/4050-108474/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-110272/",
+              "id": 110272,
+              "name": "Jinba",
+              "site_detail_url": "https://comicvine.gamespot.com/jinba/4050-110272/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-111010/",
+              "id": 111010,
+              "name": "Shukujo-tachi no Toshi Densetsu: Mitsumomo no Shitatari",
+              "site_detail_url": "https://comicvine.gamespot.com/shukujo-tachi-no-toshi-densetsu-mitsumomo-no-shita/4050-111010/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-114170/",
+              "id": 114170,
+              "name": "Garage Paradise",
+              "site_detail_url": "https://comicvine.gamespot.com/garage-paradise/4050-114170/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-117661/",
+              "id": 117661,
+              "name": "S\u014dkei: Hish\u014d no Fu",
+              "site_detail_url": "https://comicvine.gamespot.com/sokei-hisho-no-fu/4050-117661/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-122400/",
+              "id": 122400,
+              "name": "F\u016bunjitachi",
+              "site_detail_url": "https://comicvine.gamespot.com/fuunjitachi/4050-122400/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-122401/",
+              "id": 122401,
+              "name": "F\u016bunjitachi: Bakumatsu-Hen",
+              "site_detail_url": "https://comicvine.gamespot.com/fuunjitachi-bakumatsu-hen/4050-122401/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-130615/",
+              "id": 130615,
+              "name": "Ryuko",
+              "site_detail_url": "https://comicvine.gamespot.com/ryuko/4050-130615/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-132155/",
+              "id": 132155,
+              "name": "Inugami Kai",
+              "site_detail_url": "https://comicvine.gamespot.com/inugami-kai/4050-132155/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-133563/",
+              "id": 133563,
+              "name": "Color/less",
+              "site_detail_url": "https://comicvine.gamespot.com/colorless/4050-133563/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-153082/",
+              "id": 153082,
+              "name": "Tairan Sekigahara",
+              "site_detail_url": "https://comicvine.gamespot.com/tairan-sekigahara/4050-153082/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-153083/",
+              "id": 153083,
+              "name": "Hanashinobu: Rinka-Torimonoch\u014d",
+              "site_detail_url": "https://comicvine.gamespot.com/hanashinobu-rinka-torimonocho/4050-153083/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-153084/",
+              "id": 153084,
+              "name": "Fuben de Suteki na Edo-no-Machi",
+              "site_detail_url": "https://comicvine.gamespot.com/fuben-de-suteki-na-edo-no-machi/4050-153084/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-153085/",
+              "id": 153085,
+              "name": "Sozoro Gennai: \u014cedo Saguri Hikaech\u014d",
+              "site_detail_url": "https://comicvine.gamespot.com/sozoro-gennai-oedo-saguri-hikaecho/4050-153085/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-153086/",
+              "id": 153086,
+              "name": "Shinken ni Shisu",
+              "site_detail_url": "https://comicvine.gamespot.com/shinken-ni-shisu/4050-153086/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-153087/",
+              "id": 153087,
+              "name": "Bunmei Kaika Meshi",
+              "site_detail_url": "https://comicvine.gamespot.com/bunmei-kaika-meshi/4050-153087/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-153088/",
+              "id": 153088,
+              "name": "Kumauchi no Samurai",
+              "site_detail_url": "https://comicvine.gamespot.com/kumauchi-no-samurai/4050-153088/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-153089/",
+              "id": 153089,
+              "name": "Kyony\u016b Junj\u014dken: Saki",
+              "site_detail_url": "https://comicvine.gamespot.com/kyonyu-junjoken-saki/4050-153089/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-153090/",
+              "id": 153090,
+              "name": "Kyokaku",
+              "site_detail_url": "https://comicvine.gamespot.com/kyokaku/4050-153090/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-153092/",
+              "id": 153092,
+              "name": "Bijah no Jo\u014d",
+              "site_detail_url": "https://comicvine.gamespot.com/bijah-no-joo/4050-153092/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-153094/",
+              "id": 153094,
+              "name": "Kamuya Ride",
+              "site_detail_url": "https://comicvine.gamespot.com/kamuya-ride/4050-153094/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-153096/",
+              "id": 153096,
+              "name": "Oniyaku",
+              "site_detail_url": "https://comicvine.gamespot.com/oniyaku/4050-153096/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-153105/",
+              "id": 153105,
+              "name": "Yacchae!! Ukita-san",
+              "site_detail_url": "https://comicvine.gamespot.com/yacchae-ukita-san/4050-153105/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-153106/",
+              "id": 153106,
+              "name": "Kakisute!",
+              "site_detail_url": "https://comicvine.gamespot.com/kakisute/4050-153106/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-153107/",
+              "id": 153107,
+              "name": "Z\u014dhy\u014d Monogatari: Ashita wa Docchi e",
+              "site_detail_url": "https://comicvine.gamespot.com/zohyo-monogatari-ashita-wa-docchi-e/4050-153107/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-153108/",
+              "id": 153108,
+              "name": "Akatsuki no Inu",
+              "site_detail_url": "https://comicvine.gamespot.com/akatsuki-no-inu/4050-153108/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-153109/",
+              "id": 153109,
+              "name": "Kanj\u014d-Ginmiyaku Ibun",
+              "site_detail_url": "https://comicvine.gamespot.com/kanjo-ginmiyaku-ibun/4050-153109/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-153110/",
+              "id": 153110,
+              "name": "Onikirimaru-Den",
+              "site_detail_url": "https://comicvine.gamespot.com/onikirimaru-den/4050-153110/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-153111/",
+              "id": 153111,
+              "name": "Kumokiri Nizaemon",
+              "site_detail_url": "https://comicvine.gamespot.com/kumokiri-nizaemon/4050-153111/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-153112/",
+              "id": 153112,
+              "name": "Shikakenin: Fujieda Baian",
+              "site_detail_url": "https://comicvine.gamespot.com/shikakenin-fujieda-baian/4050-153112/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-153171/",
+              "id": 153171,
+              "name": "\u014cedo Black Angels",
+              "site_detail_url": "https://comicvine.gamespot.com/oedo-black-angels/4050-153171/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-153511/",
+              "id": 153511,
+              "name": "Aiken: Kenjutsush\u014d",
+              "site_detail_url": "https://comicvine.gamespot.com/aiken-kenjutsusho/4050-153511/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-153513/",
+              "id": 153513,
+              "name": "Shikakenin: Fujieda Baian",
+              "site_detail_url": "https://comicvine.gamespot.com/shikakenin-fujieda-baian/4050-153513/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-156934/",
+              "id": 156934,
+              "name": "Edo-no-Furin-wa-Shi-no-Kaori",
+              "site_detail_url": "https://comicvine.gamespot.com/edo-no-furin-wa-shi-no-kaori/4050-156934/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-157082/",
+              "id": 157082,
+              "name": "Kanda Gokura-ch\u014d Shokunin-Banashi",
+              "site_detail_url": "https://comicvine.gamespot.com/kanda-gokura-cho-shokunin-banashi/4050-157082/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-157210/",
+              "id": 157210,
+              "name": "Manetsu Shigoku: Local Uraura Toshi Densetsu",
+              "site_detail_url": "https://comicvine.gamespot.com/manetsu-shigoku-local-uraura-toshi-densetsu/4050-157210/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-157248/",
+              "id": 157248,
+              "name": "Shamo-Zamurai",
+              "site_detail_url": "https://comicvine.gamespot.com/shamo-zamurai/4050-157248/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-158657/",
+              "id": 158657,
+              "name": "Kichikujima: Dust Emperor",
+              "site_detail_url": "https://comicvine.gamespot.com/kichikujima-dust-emperor/4050-158657/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-158683/",
+              "id": 158683,
+              "name": "Sora ni Mairu",
+              "site_detail_url": "https://comicvine.gamespot.com/sora-ni-mairu/4050-158683/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-159150/",
+              "id": 159150,
+              "name": "Onmora Ponpoko",
+              "site_detail_url": "https://comicvine.gamespot.com/onmora-ponpoko/4050-159150/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-159312/",
+              "id": 159312,
+              "name": "Kuchihatch\u014dbori",
+              "site_detail_url": "https://comicvine.gamespot.com/kuchihatchobori/4050-159312/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-160950/",
+              "id": 160950,
+              "name": "Saki no K\u014dsetsu Hyaku Monogatari",
+              "site_detail_url": "https://comicvine.gamespot.com/saki-no-kosetsu-hyaku-monogatari/4050-160950/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-160951/",
+              "id": 160951,
+              "name": "Rendai wo Katsugu Kenshi",
+              "site_detail_url": "https://comicvine.gamespot.com/rendai-wo-katsugu-kenshi/4050-160951/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-162449/",
+              "id": 162449,
+              "name": "Shishi to Botan",
+              "site_detail_url": "https://comicvine.gamespot.com/shishi-to-botan/4050-162449/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-165299/",
+              "id": 165299,
+              "name": "Kett\u014d! Shinsengumi",
+              "site_detail_url": "https://comicvine.gamespot.com/ketto-shinsengumi/4050-165299/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-165785/",
+              "id": 165785,
+              "name": "Shin J\u016bky\u014dden",
+              "site_detail_url": "https://comicvine.gamespot.com/shin-jukyoden/4050-165785/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-165845/",
+              "id": 165845,
+              "name": "K",
+              "site_detail_url": "https://comicvine.gamespot.com/k/4050-165845/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-165937/",
+              "id": 165937,
+              "name": "Kawachi Zanky\u014dden: Shamo",
+              "site_detail_url": "https://comicvine.gamespot.com/kawachi-zankyoden-shamo/4050-165937/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-165939/",
+              "id": 165939,
+              "name": "Onna Shiokinin Zebra",
+              "site_detail_url": "https://comicvine.gamespot.com/onna-shiokinin-zebra/4050-165939/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-165942/",
+              "id": 165942,
+              "name": "Zero-Ka no Onna",
+              "site_detail_url": "https://comicvine.gamespot.com/zero-ka-no-onna/4050-165942/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-167447/",
+              "id": 167447,
+              "name": "Sh\u016bmatsu no Majo to Ningy\u014d",
+              "site_detail_url": "https://comicvine.gamespot.com/shumatsu-no-majo-to-ningyo/4050-167447/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-167727/",
+              "id": 167727,
+              "name": "Sennen Darling",
+              "site_detail_url": "https://comicvine.gamespot.com/sennen-darling/4050-167727/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-168252/",
+              "id": 168252,
+              "name": "Nightmare Busters",
+              "site_detail_url": "https://comicvine.gamespot.com/nightmare-busters/4050-168252/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-168253/",
+              "id": 168253,
+              "name": "Sayonara, Ano Hi no Fukuj\u016b",
+              "site_detail_url": "https://comicvine.gamespot.com/sayonara-ano-hi-no-fukuju/4050-168253/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-168254/",
+              "id": 168254,
+              "name": "Kotoba no Kemono",
+              "site_detail_url": "https://comicvine.gamespot.com/kotoba-no-kemono/4050-168254/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-168255/",
+              "id": 168255,
+              "name": "En Kai Pan",
+              "site_detail_url": "https://comicvine.gamespot.com/en-kai-pan/4050-168255/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-169380/",
+              "id": 169380,
+              "name": "4-Nensei Fur\u014dfushi",
+              "site_detail_url": "https://comicvine.gamespot.com/4-nensei-furofushi/4050-169380/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-170095/",
+              "id": 170095,
+              "name": "Tama-Korogashi",
+              "site_detail_url": "https://comicvine.gamespot.com/tama-korogashi/4050-170095/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-170097/",
+              "id": 170097,
+              "name": "Hana Kara Yaiba: Onna Kenshi, Sakuragi Momoka no Ikizama",
+              "site_detail_url": "https://comicvine.gamespot.com/hana-kara-yaiba-onna-kenshi-sakuragi-momoka-no-iki/4050-170097/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-170104/",
+              "id": 170104,
+              "name": "Sushigin Torimonoch\u014d",
+              "site_detail_url": "https://comicvine.gamespot.com/sushigin-torimonocho/4050-170104/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-170105/",
+              "id": 170105,
+              "name": "Tsujigettan: Kenjutsush\u014d",
+              "site_detail_url": "https://comicvine.gamespot.com/tsujigettan-kenjutsusho/4050-170105/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-170618/",
+              "id": 170618,
+              "name": "Enchanchi",
+              "site_detail_url": "https://comicvine.gamespot.com/enchanchi/4050-170618/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-170708/",
+              "id": 170708,
+              "name": "Kokai Atsumuru Hito: Sakasama",
+              "site_detail_url": "https://comicvine.gamespot.com/kokai-atsumuru-hito-sakasama/4050-170708/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-170709/",
+              "id": 170709,
+              "name": "Kuniyoshi, Hashiru: Bunsei Kiteretsu S\u014dd\u014d",
+              "site_detail_url": "https://comicvine.gamespot.com/kuniyoshi-hashiru-bunsei-kiteretsu-sodo/4050-170709/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-170710/",
+              "id": 170710,
+              "name": "Edo Yabadera Uranikkan",
+              "site_detail_url": "https://comicvine.gamespot.com/edo-yabadera-uranikkan/4050-170710/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-171136/",
+              "id": 171136,
+              "name": "Kunoichi Ninp\u014dch\u014d",
+              "site_detail_url": "https://comicvine.gamespot.com/kunoichi-ninpocho/4050-171136/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-173190/",
+              "id": 173190,
+              "name": "Cyber Momotar\u014d",
+              "site_detail_url": "https://comicvine.gamespot.com/cyber-momotaro/4050-173190/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-173191/",
+              "id": 173191,
+              "name": "Honoo no Usagi Senshi",
+              "site_detail_url": "https://comicvine.gamespot.com/honoo-no-usagi-senshi/4050-173191/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-173192/",
+              "id": 173192,
+              "name": "Heisei Bus\u014d Seigidan",
+              "site_detail_url": "https://comicvine.gamespot.com/heisei-buso-seigidan/4050-173192/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-173196/",
+              "id": 173196,
+              "name": "Akki Goy\u014d Garan",
+              "site_detail_url": "https://comicvine.gamespot.com/akki-goyo-garan/4050-173196/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-173197/",
+              "id": 173197,
+              "name": "Honoo no Usagi Senshi\u00d7Akki Goy\u014d Garan",
+              "site_detail_url": "https://comicvine.gamespot.com/honoo-no-usagi-senshixakki-goyo-garan/4050-173197/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-173198/",
+              "id": 173198,
+              "name": "Cyber Momotar\u014d\u00d7Heisei Bus\u014d Seigidan",
+              "site_detail_url": "https://comicvine.gamespot.com/cyber-momotaroxheisei-buso-seigidan/4050-173198/"
+            },
+            {
+              "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-173584/",
+              "id": 173584,
+              "name": "Sendou Yasugorou",
+              "site_detail_url": "https://comicvine.gamespot.com/sendou-yasugorou/4050-173584/"
+            }
+          ]
+        },
+        "status_code": 1,
+        "version": "1.0"
+      },
+      "transport_error": ""
+    }
+  },
+  "volume_detail_default_full_shape": {
+    "endpoint": "/volume/4050-173584/",
+    "params_without_api_key": {
+      "format": "json"
+    },
+    "response": {
+      "http_status": 420,
+      "json": {
+        "error": "Rate limit exceeded.  Slow down cowboy.",
+        "limit": 0,
+        "number_of_page_results": 0,
+        "number_of_total_results": 0,
+        "offset": 0,
+        "results": [],
+        "status_code": 107
+      },
+      "transport_error": ""
+    }
+  },
+  "volumes_list_by_date_last_updated_default_full_shape": {
+    "endpoint": "/volumes/ filter=date_last_updated:2026-06-28",
+    "params_without_api_key": {
+      "filter": "date_last_updated:2026-06-28 00:00:00|2026-06-28 23:59:59",
+      "format": "json",
+      "limit": 5,
+      "offset": 0,
+      "sort": "date_last_updated:asc"
+    },
+    "response": {
+      "http_status": 200,
+      "json": {
+        "error": "OK",
+        "limit": 5,
+        "number_of_page_results": 5,
+        "number_of_total_results": 112,
+        "offset": 0,
+        "results": [
+          {
+            "aliases": "\u8239\u982d\u5b89\u4e94\u90ce",
+            "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-173584/",
+            "count_of_issues": 1,
+            "date_added": "2026-06-28 00:06:58",
+            "date_last_updated": "2026-06-28 02:10:59",
+            "deck": " ",
+            "description": "<p><strong>Proper Japanese Title</strong>: \u8239\u982d\u5b89\u4e94\u90ce</p><p>Originally serialized in <a href=\"/comic-ran/4050-105867/\" data-ref-id=\"4050-105867\">Comic Ran</a>.</p>",
+            "first_issue": {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-1174850/",
+              "id": 1174850,
+              "issue_number": "1",
+              "name": null
+            },
+            "id": 173584,
+            "image": {
+              "icon_url": "https://comicvine.gamespot.com/a/uploads/square_avatar/11158/111586530/10109749-cover.jpg",
+              "image_tags": "All Images",
+              "medium_url": "https://comicvine.gamespot.com/a/uploads/scale_medium/11158/111586530/10109749-cover.jpg",
+              "original_url": "https://comicvine.gamespot.com/a/uploads/original/11158/111586530/10109749-cover.jpg",
+              "screen_large_url": "https://comicvine.gamespot.com/a/uploads/screen_kubrick/11158/111586530/10109749-cover.jpg",
+              "screen_url": "https://comicvine.gamespot.com/a/uploads/screen_medium/11158/111586530/10109749-cover.jpg",
+              "small_url": "https://comicvine.gamespot.com/a/uploads/scale_small/11158/111586530/10109749-cover.jpg",
+              "super_url": "https://comicvine.gamespot.com/a/uploads/scale_large/11158/111586530/10109749-cover.jpg",
+              "thumb_url": "https://comicvine.gamespot.com/a/uploads/scale_avatar/11158/111586530/10109749-cover.jpg",
+              "tiny_url": "https://comicvine.gamespot.com/a/uploads/square_mini/11158/111586530/10109749-cover.jpg"
+            },
+            "last_issue": {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-1174850/",
+              "id": 1174850,
+              "issue_number": "1",
+              "name": null
+            },
+            "name": "Sendou Yasugorou",
+            "publisher": {
+              "api_detail_url": "https://comicvine.gamespot.com/api/publisher/4010-4273/",
+              "id": 4273,
+              "name": "Leed Publishing Co., Ltd."
+            },
+            "site_detail_url": "https://comicvine.gamespot.com/sendou-yasugorou/4050-173584/",
+            "start_year": "2026"
+          },
+          {
+            "aliases": "\u30dd\u30f3\u30b3\u30c4\u98a8\u7d00\u59d4\u54e1\u3068\u30b9\u30ab\u30fc\u30c8\u4e08\u304c\u4e0d\u9069\u5207\u306aJK\u306e\u8a71",
+            "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-160318/",
+            "count_of_issues": 20,
+            "date_added": "2024-10-08 16:34:49",
+            "date_last_updated": "2026-06-28 02:40:19",
+            "deck": null,
+            "description": "<p><strong>Proper Japanese Title</strong>: \u30dd\u30f3\u30b3\u30c4\u98a8\u7d00\u59d4\u54e1\u3068\u30b9\u30ab\u30fc\u30c8\u4e08\u304c\u4e0d\u9069\u5207\u306aJK\u306e\u8a71</p><p>Originally serialized in <a href=\"/monthly-shonen-sirius/4050-97792/\" data-ref-id=\"4050-97792\">Shonen Sirius</a>. Initially became digital-only collections after the 11th issue, but in anticipation of the anime all the backlog digital issues were released simultaneously as physical collections alongside the new issue 20.</p>",
+            "first_issue": {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-1073305/",
+              "id": 1073305,
+              "issue_number": "1",
+              "name": "Vol. 1"
+            },
+            "id": 160318,
+            "image": {
+              "icon_url": "https://comicvine.gamespot.com/a/uploads/square_avatar/11145/111450787/9504678-9164896751-81Tz5.jpg",
+              "image_tags": "All Images",
+              "medium_url": "https://comicvine.gamespot.com/a/uploads/scale_medium/11145/111450787/9504678-9164896751-81Tz5.jpg",
+              "original_url": "https://comicvine.gamespot.com/a/uploads/original/11145/111450787/9504678-9164896751-81Tz5.jpg",
+              "screen_large_url": "https://comicvine.gamespot.com/a/uploads/screen_kubrick/11145/111450787/9504678-9164896751-81Tz5.jpg",
+              "screen_url": "https://comicvine.gamespot.com/a/uploads/screen_medium/11145/111450787/9504678-9164896751-81Tz5.jpg",
+              "small_url": "https://comicvine.gamespot.com/a/uploads/scale_small/11145/111450787/9504678-9164896751-81Tz5.jpg",
+              "super_url": "https://comicvine.gamespot.com/a/uploads/scale_large/11145/111450787/9504678-9164896751-81Tz5.jpg",
+              "thumb_url": "https://comicvine.gamespot.com/a/uploads/scale_avatar/11145/111450787/9504678-9164896751-81Tz5.jpg",
+              "tiny_url": "https://comicvine.gamespot.com/a/uploads/square_mini/11145/111450787/9504678-9164896751-81Tz5.jpg"
+            },
+            "last_issue": {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-1174878/",
+              "id": 1174878,
+              "issue_number": "20",
+              "name": "Vol. 20"
+            },
+            "name": "Ponkotsu Fuukiin to Skirt-Take ga Futekisetsu na JK no Hanashi",
+            "publisher": {
+              "api_detail_url": "https://comicvine.gamespot.com/api/publisher/4010-2259/",
+              "id": 2259,
+              "name": "Kodansha"
+            },
+            "site_detail_url": "https://comicvine.gamespot.com/ponkotsu-fuukiin-to-skirt-take-ga-futekisetsu-na-j/4050-160318/",
+            "start_year": "2019"
+          },
+          {
+            "aliases": "\u5a5a\u7d04\u7834\u68c4\u3055\u308c\u305f\u306e\u3067\u3001\u597d\u304d\u306b\u3059\u308b\u3053\u3068\u306b\u3057\u305f\u3002",
+            "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-173411/",
+            "count_of_issues": 6,
+            "date_added": "2026-06-25 08:28:00",
+            "date_last_updated": "2026-06-28 02:56:35",
+            "deck": null,
+            "description": "<p><strong>Proper Japanese Title</strong>: \u5a5a\u7d04\u7834\u68c4\u3055\u308c\u305f\u306e\u3067\u3001\u597d\u304d\u306b\u3059\u308b\u3053\u3068\u306b\u3057\u305f\u3002</p>",
+            "first_issue": {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-1173925/",
+              "id": 1173925,
+              "issue_number": "1",
+              "name": "Vol. 1"
+            },
+            "id": 173411,
+            "image": {
+              "icon_url": "https://comicvine.gamespot.com/a/uploads/square_avatar/11/110017/10106965-wwww.jpg",
+              "image_tags": "All Images",
+              "medium_url": "https://comicvine.gamespot.com/a/uploads/scale_medium/11/110017/10106965-wwww.jpg",
+              "original_url": "https://comicvine.gamespot.com/a/uploads/original/11/110017/10106965-wwww.jpg",
+              "screen_large_url": "https://comicvine.gamespot.com/a/uploads/screen_kubrick/11/110017/10106965-wwww.jpg",
+              "screen_url": "https://comicvine.gamespot.com/a/uploads/screen_medium/11/110017/10106965-wwww.jpg",
+              "small_url": "https://comicvine.gamespot.com/a/uploads/scale_small/11/110017/10106965-wwww.jpg",
+              "super_url": "https://comicvine.gamespot.com/a/uploads/scale_large/11/110017/10106965-wwww.jpg",
+              "thumb_url": "https://comicvine.gamespot.com/a/uploads/scale_avatar/11/110017/10106965-wwww.jpg",
+              "tiny_url": "https://comicvine.gamespot.com/a/uploads/square_mini/11/110017/10106965-wwww.jpg"
+            },
+            "last_issue": {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-1175313/",
+              "id": 1175313,
+              "issue_number": "6",
+              "name": "Vol. 6"
+            },
+            "name": "Konyaku Hakisareta Node, Suki ni Suru Koto ni Shita.",
+            "publisher": {
+              "api_detail_url": "https://comicvine.gamespot.com/api/publisher/4010-2259/",
+              "id": 2259,
+              "name": "Kodansha"
+            },
+            "site_detail_url": "https://comicvine.gamespot.com/konyaku-hakisareta-node-suki-ni-suru-koto-ni-shita/4050-173411/",
+            "start_year": "2024"
+          },
+          {
+            "aliases": "\u50be\u56fd\u60aa\u5973\u306e\u306f\u304b\u308a\u3054\u3068\uff5e\u521d\u591c\u306b\u81ea\u767d\u5264\u3092\u76db\u308b\u3068\u306f\u4f55\u4e8b\u304b\uff01\uff5e",
+            "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-173414/",
+            "count_of_issues": 3,
+            "date_added": "2026-06-25 09:44:31",
+            "date_last_updated": "2026-06-28 02:58:53",
+            "deck": null,
+            "description": "<p><strong>Proper Japanese Title</strong>: \u50be\u56fd\u60aa\u5973\u306e\u306f\u304b\u308a\u3054\u3068\uff5e\u521d\u591c\u306b\u81ea\u767d\u5264\u3092\u76db\u308b\u3068\u306f\u4f55\u4e8b\u304b\uff01\uff5e</p>",
+            "first_issue": {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-1173941/",
+              "id": 1173941,
+              "issue_number": "1",
+              "name": "Vol. 1"
+            },
+            "id": 173414,
+            "image": {
+              "icon_url": "https://comicvine.gamespot.com/a/uploads/square_avatar/11/110017/10107027-wwww.jpg",
+              "image_tags": "All Images",
+              "medium_url": "https://comicvine.gamespot.com/a/uploads/scale_medium/11/110017/10107027-wwww.jpg",
+              "original_url": "https://comicvine.gamespot.com/a/uploads/original/11/110017/10107027-wwww.jpg",
+              "screen_large_url": "https://comicvine.gamespot.com/a/uploads/screen_kubrick/11/110017/10107027-wwww.jpg",
+              "screen_url": "https://comicvine.gamespot.com/a/uploads/screen_medium/11/110017/10107027-wwww.jpg",
+              "small_url": "https://comicvine.gamespot.com/a/uploads/scale_small/11/110017/10107027-wwww.jpg",
+              "super_url": "https://comicvine.gamespot.com/a/uploads/scale_large/11/110017/10107027-wwww.jpg",
+              "thumb_url": "https://comicvine.gamespot.com/a/uploads/scale_avatar/11/110017/10107027-wwww.jpg",
+              "tiny_url": "https://comicvine.gamespot.com/a/uploads/square_mini/11/110017/10107027-wwww.jpg"
+            },
+            "last_issue": {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-1175319/",
+              "id": 1175319,
+              "issue_number": "3",
+              "name": "Vol. 3"
+            },
+            "name": "Keikoku Akujo no Hakarigoto: Shoya ni Jihakuzai wo Moru to wa Nanigoto ka!",
+            "publisher": {
+              "api_detail_url": "https://comicvine.gamespot.com/api/publisher/4010-2259/",
+              "id": 2259,
+              "name": "Kodansha"
+            },
+            "site_detail_url": "https://comicvine.gamespot.com/keikoku-akujo-no-hakarigoto-shoya-ni-jihakuzai-wo-/4050-173414/",
+            "start_year": "2025"
+          },
+          {
+            "aliases": "\u596a\u3063\u305f\u306e\u3067\u306f\u3042\u308a\u307e\u305b\u3093\u3001\u304a\u59c9\u69d8\u304c\u6368\u3066\u305f\u306e\u3067\u3059",
+            "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-173415/",
+            "count_of_issues": 2,
+            "date_added": "2026-06-25 09:55:30",
+            "date_last_updated": "2026-06-28 03:01:07",
+            "deck": null,
+            "description": "<p><strong>Proper Japanese Title</strong>: \u596a\u3063\u305f\u306e\u3067\u306f\u3042\u308a\u307e\u305b\u3093\u3001\u304a\u59c9\u69d8\u304c\u6368\u3066\u305f\u306e\u3067\u3059</p>",
+            "first_issue": {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-1173943/",
+              "id": 1173943,
+              "issue_number": "1",
+              "name": "Vol. 1"
+            },
+            "id": 173415,
+            "image": {
+              "icon_url": "https://comicvine.gamespot.com/a/uploads/square_avatar/11/110017/10107039-wwww.jpg",
+              "image_tags": "All Images",
+              "medium_url": "https://comicvine.gamespot.com/a/uploads/scale_medium/11/110017/10107039-wwww.jpg",
+              "original_url": "https://comicvine.gamespot.com/a/uploads/original/11/110017/10107039-wwww.jpg",
+              "screen_large_url": "https://comicvine.gamespot.com/a/uploads/screen_kubrick/11/110017/10107039-wwww.jpg",
+              "screen_url": "https://comicvine.gamespot.com/a/uploads/screen_medium/11/110017/10107039-wwww.jpg",
+              "small_url": "https://comicvine.gamespot.com/a/uploads/scale_small/11/110017/10107039-wwww.jpg",
+              "super_url": "https://comicvine.gamespot.com/a/uploads/scale_large/11/110017/10107039-wwww.jpg",
+              "thumb_url": "https://comicvine.gamespot.com/a/uploads/scale_avatar/11/110017/10107039-wwww.jpg",
+              "tiny_url": "https://comicvine.gamespot.com/a/uploads/square_mini/11/110017/10107039-wwww.jpg"
+            },
+            "last_issue": {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-1175323/",
+              "id": 1175323,
+              "issue_number": "2",
+              "name": "Vol. 2"
+            },
+            "name": "Ubatta Node wa Arimasen, Onee-sama ga Suteta no Desu",
+            "publisher": {
+              "api_detail_url": "https://comicvine.gamespot.com/api/publisher/4010-2259/",
+              "id": 2259,
+              "name": "Kodansha"
+            },
+            "site_detail_url": "https://comicvine.gamespot.com/ubatta-node-wa-arimasen-onee-sama-ga-suteta-no-des/4050-173415/",
+            "start_year": "2025"
+          }
+        ],
+        "status_code": 1,
+        "version": "1.0"
+      },
+      "transport_error": ""
+    }
+  },
+  "volumes_list_by_pipe_ids_default_full_shape": {
+    "endpoint": "/volumes/ filter=id:a|b|c",
+    "params_without_api_key": {
+      "filter": "id:173584|173582|173580",
+      "format": "json",
+      "limit": 5,
+      "offset": 0
+    },
+    "response": {
+      "http_status": 200,
+      "json": {
+        "error": "OK",
+        "limit": 5,
+        "number_of_page_results": 3,
+        "number_of_total_results": 3,
+        "offset": 0,
+        "results": [
+          {
+            "aliases": null,
+            "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-173580/",
+            "count_of_issues": 1,
+            "date_added": "2026-06-27 15:24:35",
+            "date_last_updated": "2026-06-27 15:25:54",
+            "deck": null,
+            "description": null,
+            "first_issue": {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-1174853/",
+              "id": 1174853,
+              "issue_number": "1",
+              "name": null
+            },
+            "id": 173580,
+            "image": {
+              "icon_url": "https://comicvine.gamespot.com/a/uploads/square_avatar/1/15776/10109422-batman_omnibus.jpg",
+              "image_tags": "All Images",
+              "medium_url": "https://comicvine.gamespot.com/a/uploads/scale_medium/1/15776/10109422-batman_omnibus.jpg",
+              "original_url": "https://comicvine.gamespot.com/a/uploads/original/1/15776/10109422-batman_omnibus.jpg",
+              "screen_large_url": "https://comicvine.gamespot.com/a/uploads/screen_kubrick/1/15776/10109422-batman_omnibus.jpg",
+              "screen_url": "https://comicvine.gamespot.com/a/uploads/screen_medium/1/15776/10109422-batman_omnibus.jpg",
+              "small_url": "https://comicvine.gamespot.com/a/uploads/scale_small/1/15776/10109422-batman_omnibus.jpg",
+              "super_url": "https://comicvine.gamespot.com/a/uploads/scale_large/1/15776/10109422-batman_omnibus.jpg",
+              "thumb_url": "https://comicvine.gamespot.com/a/uploads/scale_avatar/1/15776/10109422-batman_omnibus.jpg",
+              "tiny_url": "https://comicvine.gamespot.com/a/uploads/square_mini/1/15776/10109422-batman_omnibus.jpg"
+            },
+            "last_issue": {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-1174853/",
+              "id": 1174853,
+              "issue_number": "1",
+              "name": null
+            },
+            "name": "Batman by James Tynion IV Omnibus",
+            "publisher": null,
+            "site_detail_url": "https://comicvine.gamespot.com/batman-by-james-tynion-iv-omnibus/4050-173580/",
+            "start_year": null
+          },
+          {
+            "aliases": null,
+            "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-173582/",
+            "count_of_issues": 1,
+            "date_added": "2026-06-27 16:02:02",
+            "date_last_updated": "2026-06-27 16:02:50",
+            "deck": null,
+            "description": null,
+            "first_issue": {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-1174852/",
+              "id": 1174852,
+              "issue_number": "1",
+              "name": null
+            },
+            "id": 173582,
+            "image": {
+              "icon_url": "https://comicvine.gamespot.com/a/uploads/square_avatar/1/15776/10109465-flash_road_rebirth_omnibus.jpg",
+              "image_tags": "All Images",
+              "medium_url": "https://comicvine.gamespot.com/a/uploads/scale_medium/1/15776/10109465-flash_road_rebirth_omnibus.jpg",
+              "original_url": "https://comicvine.gamespot.com/a/uploads/original/1/15776/10109465-flash_road_rebirth_omnibus.jpg",
+              "screen_large_url": "https://comicvine.gamespot.com/a/uploads/screen_kubrick/1/15776/10109465-flash_road_rebirth_omnibus.jpg",
+              "screen_url": "https://comicvine.gamespot.com/a/uploads/screen_medium/1/15776/10109465-flash_road_rebirth_omnibus.jpg",
+              "small_url": "https://comicvine.gamespot.com/a/uploads/scale_small/1/15776/10109465-flash_road_rebirth_omnibus.jpg",
+              "super_url": "https://comicvine.gamespot.com/a/uploads/scale_large/1/15776/10109465-flash_road_rebirth_omnibus.jpg",
+              "thumb_url": "https://comicvine.gamespot.com/a/uploads/scale_avatar/1/15776/10109465-flash_road_rebirth_omnibus.jpg",
+              "tiny_url": "https://comicvine.gamespot.com/a/uploads/square_mini/1/15776/10109465-flash_road_rebirth_omnibus.jpg"
+            },
+            "last_issue": {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-1174852/",
+              "id": 1174852,
+              "issue_number": "1",
+              "name": null
+            },
+            "name": "The Flash: The Road to Rebirth Omnibus",
+            "publisher": null,
+            "site_detail_url": "https://comicvine.gamespot.com/the-flash-the-road-to-rebirth-omnibus/4050-173582/",
+            "start_year": null
+          },
+          {
+            "aliases": "\u8239\u982d\u5b89\u4e94\u90ce",
+            "api_detail_url": "https://comicvine.gamespot.com/api/volume/4050-173584/",
+            "count_of_issues": 1,
+            "date_added": "2026-06-28 00:06:58",
+            "date_last_updated": "2026-06-28 02:10:59",
+            "deck": " ",
+            "description": "<p><strong>Proper Japanese Title</strong>: \u8239\u982d\u5b89\u4e94\u90ce</p><p>Originally serialized in <a href=\"/comic-ran/4050-105867/\" data-ref-id=\"4050-105867\">Comic Ran</a>.</p>",
+            "first_issue": {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-1174850/",
+              "id": 1174850,
+              "issue_number": "1",
+              "name": null
+            },
+            "id": 173584,
+            "image": {
+              "icon_url": "https://comicvine.gamespot.com/a/uploads/square_avatar/11158/111586530/10109749-cover.jpg",
+              "image_tags": "All Images",
+              "medium_url": "https://comicvine.gamespot.com/a/uploads/scale_medium/11158/111586530/10109749-cover.jpg",
+              "original_url": "https://comicvine.gamespot.com/a/uploads/original/11158/111586530/10109749-cover.jpg",
+              "screen_large_url": "https://comicvine.gamespot.com/a/uploads/screen_kubrick/11158/111586530/10109749-cover.jpg",
+              "screen_url": "https://comicvine.gamespot.com/a/uploads/screen_medium/11158/111586530/10109749-cover.jpg",
+              "small_url": "https://comicvine.gamespot.com/a/uploads/scale_small/11158/111586530/10109749-cover.jpg",
+              "super_url": "https://comicvine.gamespot.com/a/uploads/scale_large/11158/111586530/10109749-cover.jpg",
+              "thumb_url": "https://comicvine.gamespot.com/a/uploads/scale_avatar/11158/111586530/10109749-cover.jpg",
+              "tiny_url": "https://comicvine.gamespot.com/a/uploads/square_mini/11158/111586530/10109749-cover.jpg"
+            },
+            "last_issue": {
+              "api_detail_url": "https://comicvine.gamespot.com/api/issue/4000-1174850/",
+              "id": 1174850,
+              "issue_number": "1",
+              "name": null
+            },
+            "name": "Sendou Yasugorou",
+            "publisher": {
+              "api_detail_url": "https://comicvine.gamespot.com/api/publisher/4010-4273/",
+              "id": 4273,
+              "name": "Leed Publishing Co., Ltd."
+            },
+            "site_detail_url": "https://comicvine.gamespot.com/sendou-yasugorou/4050-173584/",
+            "start_year": "2026"
+          }
+        ],
+        "status_code": 1,
+        "version": "1.0"
+      },
+      "transport_error": ""
+    }
+  }
+}

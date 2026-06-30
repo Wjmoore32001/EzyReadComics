@@ -172,6 +172,44 @@ class ComicPerson(models.Model):
         return self.name
 
 
+class ComicVineNamedEntity(models.Model):
+    comicvine_id = models.PositiveIntegerField(unique=True)
+    name = models.CharField(max_length=255)
+    api_detail_url = models.URLField(max_length=500, blank=True)
+    comicvine_url = models.URLField(max_length=500, blank=True)
+
+    class Meta:
+        abstract = True
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+
+class ComicCharacter(ComicVineNamedEntity):
+    pass
+
+
+class ComicTeam(ComicVineNamedEntity):
+    pass
+
+
+class ComicLocation(ComicVineNamedEntity):
+    pass
+
+
+class ComicConcept(ComicVineNamedEntity):
+    pass
+
+
+class ComicObject(ComicVineNamedEntity):
+    pass
+
+
+class ComicStoryArc(ComicVineNamedEntity):
+    pass
+
+
 class ComicCreditRole(models.Model):
     name = models.CharField(max_length=100, unique=True)
 
@@ -243,6 +281,216 @@ class ComicVolumePersonCredit(models.Model):
             return f"{self.volume} — {self.person} ({self.credit_count})"
 
         return f"{self.volume} — {self.person}"
+
+
+class ComicIssueRelationship(models.Model):
+    RELATION_CREDIT = "credit"
+    RELATION_FIRST_APPEARANCE = "first_appearance"
+    RELATION_DIED_IN = "died_in"
+    RELATION_DISBANDED_IN = "disbanded_in"
+
+    RELATION_TYPE_CHOICES = [
+        (RELATION_CREDIT, "Credit"),
+        (RELATION_FIRST_APPEARANCE, "First appearance"),
+        (RELATION_DIED_IN, "Died in"),
+        (RELATION_DISBANDED_IN, "Disbanded in"),
+    ]
+
+    relation_type = models.CharField(
+        max_length=30,
+        choices=RELATION_TYPE_CHOICES,
+        default=RELATION_CREDIT,
+    )
+
+    class Meta:
+        abstract = True
+
+    def get_relation_display_name(self):
+        return self.get_relation_type_display()
+
+
+class ComicIssueCharacterLink(ComicIssueRelationship):
+    issue = models.ForeignKey(
+        ComicIssue,
+        on_delete=models.CASCADE,
+        related_name="character_links",
+    )
+    character = models.ForeignKey(
+        ComicCharacter,
+        on_delete=models.CASCADE,
+        related_name="issue_links",
+    )
+
+    class Meta:
+        ordering = ["issue", "relation_type", "character"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["issue", "character", "relation_type"],
+                name="unique_issue_character_relation",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.issue} — {self.character} ({self.get_relation_display_name()})"
+
+
+class ComicIssueTeamLink(ComicIssueRelationship):
+    issue = models.ForeignKey(
+        ComicIssue,
+        on_delete=models.CASCADE,
+        related_name="team_links",
+    )
+    team = models.ForeignKey(
+        ComicTeam,
+        on_delete=models.CASCADE,
+        related_name="issue_links",
+    )
+
+    class Meta:
+        ordering = ["issue", "relation_type", "team"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["issue", "team", "relation_type"],
+                name="unique_issue_team_relation",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.issue} — {self.team} ({self.get_relation_display_name()})"
+
+
+class ComicIssueLocationLink(ComicIssueRelationship):
+    issue = models.ForeignKey(
+        ComicIssue,
+        on_delete=models.CASCADE,
+        related_name="location_links",
+    )
+    location = models.ForeignKey(
+        ComicLocation,
+        on_delete=models.CASCADE,
+        related_name="issue_links",
+    )
+
+    class Meta:
+        ordering = ["issue", "relation_type", "location"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["issue", "location", "relation_type"],
+                name="unique_issue_location_relation",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.issue} — {self.location} ({self.get_relation_display_name()})"
+
+
+class ComicIssueConceptLink(ComicIssueRelationship):
+    issue = models.ForeignKey(
+        ComicIssue,
+        on_delete=models.CASCADE,
+        related_name="concept_links",
+    )
+    concept = models.ForeignKey(
+        ComicConcept,
+        on_delete=models.CASCADE,
+        related_name="issue_links",
+    )
+
+    class Meta:
+        ordering = ["issue", "relation_type", "concept"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["issue", "concept", "relation_type"],
+                name="unique_issue_concept_relation",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.issue} — {self.concept} ({self.get_relation_display_name()})"
+
+
+class ComicIssueObjectLink(ComicIssueRelationship):
+    issue = models.ForeignKey(
+        ComicIssue,
+        on_delete=models.CASCADE,
+        related_name="object_links",
+    )
+    comic_object = models.ForeignKey(
+        ComicObject,
+        on_delete=models.CASCADE,
+        related_name="issue_links",
+    )
+
+    class Meta:
+        ordering = ["issue", "relation_type", "comic_object"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["issue", "comic_object", "relation_type"],
+                name="unique_issue_object_relation",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.issue} — {self.comic_object} ({self.get_relation_display_name()})"
+
+
+class ComicIssueStoryArcLink(ComicIssueRelationship):
+    issue = models.ForeignKey(
+        ComicIssue,
+        on_delete=models.CASCADE,
+        related_name="story_arc_links",
+    )
+    story_arc = models.ForeignKey(
+        ComicStoryArc,
+        on_delete=models.CASCADE,
+        related_name="issue_links",
+    )
+
+    class Meta:
+        ordering = ["issue", "relation_type", "story_arc"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["issue", "story_arc", "relation_type"],
+                name="unique_issue_story_arc_relation",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.issue} — {self.story_arc} ({self.get_relation_display_name()})"
+
+
+class ComicIssueAssociatedImage(models.Model):
+    issue = models.ForeignKey(
+        ComicIssue,
+        on_delete=models.CASCADE,
+        related_name="associated_images",
+    )
+    position = models.PositiveIntegerField(default=0)
+
+    caption = models.CharField(max_length=255, blank=True)
+
+    icon_url = models.URLField(max_length=500, blank=True)
+    medium_url = models.URLField(max_length=500, blank=True)
+    screen_url = models.URLField(max_length=500, blank=True)
+    screen_large_url = models.URLField(max_length=500, blank=True)
+    small_url = models.URLField(max_length=500, blank=True)
+    super_url = models.URLField(max_length=500, blank=True)
+    thumb_url = models.URLField(max_length=500, blank=True)
+    tiny_url = models.URLField(max_length=500, blank=True)
+    original_url = models.URLField(max_length=500, blank=True)
+    image_tags = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        ordering = ["issue", "position"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["issue", "position"],
+                name="unique_issue_associated_image_position",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.issue} — associated image {self.position}"
 
 
 class ComicVineDateScan(models.Model):
