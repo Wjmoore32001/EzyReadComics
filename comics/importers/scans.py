@@ -1,150 +1,175 @@
+from datetime import datetime, timedelta
+
 from django.db import transaction
 from django.utils import timezone
 
+from comics.importers.results import DateScanProgressResult
 from comics.models import ComicVineDateScan, ComicVineSyncState
 
 
 DEFAULT_SYNC_STATE_NAME = "default"
 
 
-def get_default_sync_state():
-    sync_state, _created = ComicVineSyncState.objects.get_or_create(
-        name=DEFAULT_SYNC_STATE_NAME
-    )
-
-    return sync_state
-
-
-def set_update_tracking_start_date_if_missing(start_date):
-    with transaction.atomic():
-        sync_state, _created = ComicVineSyncState.objects.select_for_update().get_or_create(
-            name=DEFAULT_SYNC_STATE_NAME
-        )
-
-        if sync_state.update_tracking_start_date:
-            return sync_state, False
-
-        sync_state.update_tracking_start_date = start_date
-        sync_state.save(update_fields=["update_tracking_start_date", "updated_at"])
-
-    return sync_state, True
-
-
-def get_or_create_date_scan(*, scan_kind, scan_date):
-    scan, _created = ComicVineDateScan.objects.get_or_create(
-        scan_kind=scan_kind,
-        scan_date=scan_date,
-    )
-
-    return scan
-
-
-def get_incomplete_date_scan(*, scan_kind, scan_date):
-    return ComicVineDateScan.objects.filter(
-        scan_kind=scan_kind,
-        scan_date=scan_date,
-        completed=False,
-    ).first()
-
-
-def start_or_resume_date_scan(*, scan_kind, scan_date):
-    return get_or_create_date_scan(scan_kind=scan_kind, scan_date=scan_date)
-
-
-def advance_date_scan_after_success(
-    *,
-    scan_id,
-    next_offset,
-    total_results,
-    completed=False,
-    notes="",
-):
-    with transaction.atomic():
-        scan = ComicVineDateScan.objects.select_for_update().get(id=scan_id)
-        scan.next_offset = next_offset
-        scan.total_results = total_results
-        scan.last_scanned_at = timezone.now()
-
-        update_fields = [
-            "next_offset",
-            "total_results",
-            "last_scanned_at",
-        ]
-
-        if notes:
-            scan.notes = notes
-            update_fields.append("notes")
-
-        if completed:
-            scan.completed = True
-            scan.completed_at = timezone.now()
-            update_fields.extend(["completed", "completed_at"])
-
-        scan.save(update_fields=update_fields)
-
-    return scan
-
-
-def mark_date_scan_complete(*, scan_id, total_results=None, notes=""):
-    with transaction.atomic():
-        scan = ComicVineDateScan.objects.select_for_update().get(id=scan_id)
-        scan.completed = True
-        scan.completed_at = timezone.now()
-        scan.last_scanned_at = timezone.now()
-
-        update_fields = [
-            "completed",
-            "completed_at",
-            "last_scanned_at",
-        ]
-
-        if total_results is not None:
-            scan.total_results = total_results
-            update_fields.append("total_results")
-
-        if notes:
-            scan.notes = notes
-            update_fields.append("notes")
-
-        scan.save(update_fields=update_fields)
-
-    return scan
-
-
-def get_next_backfill_scan_date():
-    sync_state = get_default_sync_state()
-
-    if not sync_state.update_tracking_start_date:
+def parse_scan_date(value):
+    if value is None:
         return None
 
-    latest_incomplete_scan = (
-        ComicVineDateScan.objects.filter(
-            scan_kind=ComicVineDateScan.ISSUE_DATE_ADDED,
-            completed=False,
-            scan_date__lt=sync_state.update_tracking_start_date,
+    if hasattr(value, "year") and hasattr(value, "month") and hasattr(value, "day"):
+        return value
+
+    try:
+        return datetime.strptime(str(value), "%Y-%m-%d").date()
+    except ValueError as error:
+        raise ValueError("Date must use YYYY-MM-DD format.") from error
+
+
+def get_default_current_import_start_date():
+    return timezone.localdate() - timedelta(days=1)
+
+
+def validate_date_window(start_date, end_date):
+    if start_date is None:
+        raise ValueError("start_date is required.")
+
+    if end_date is None:
+        raise ValueError("end_date is required.")
+
+    if end_date < start_date:
+        raise ValueError("end_date cannot be earlier than start_date.")
+
+
+def get_or_initialize_default_sync_state(*, start_date=None, dry_run=False):
+    effective_start_date = start_date or get_default_current_import_start_date()
+
+    state = ComicVineSyncState.objects.filter(name=DEFAULT_SYNC_STATE_NAME).first()
+
+    if state:
+        if state.update_tracking_start_date:
+            if start_date and start_date != state.update_tracking_start_date:
+                raise ValueError(
+                    "ComicVineSyncState already has update_tracking_start_date="
+                    f"{state.update_tracking_start_date}. Do not pass --start-date "
+                    "unless the sync state is empty."
+                )
+
+            return state, False, False
+
+        if dry_run:
+            state.update_tracking_start_date = effective_start_date
+            return state, False, True
+
+        state.update_tracking_start_date = effective_start_date
+        state.save(update_fields=["update_tracking_start_date", "updated_at"])
+
+        return state, False, True
+
+    if dry_run:
+        state = ComicVineSyncState(
+            name=DEFAULT_SYNC_STATE_NAME,
+            update_tracking_start_date=effective_start_date,
         )
-        .order_by("-scan_date")
-        .first()
+        return state, True, True
+
+    state = ComicVineSyncState.objects.create(
+        name=DEFAULT_SYNC_STATE_NAME,
+        update_tracking_start_date=effective_start_date,
     )
 
-    if latest_incomplete_scan:
-        return latest_incomplete_scan.scan_date
+    return state, True, True
 
-    latest_completed_scan = (
-        ComicVineDateScan.objects.filter(
-            scan_kind=ComicVineDateScan.ISSUE_DATE_ADDED,
-            completed=True,
-            scan_date__lt=sync_state.update_tracking_start_date,
+
+def get_next_incomplete_date_scan(*, scan_kind, start_date, end_date, dry_run=False):
+    validate_date_window(start_date, end_date)
+
+    current_date = start_date
+
+    while current_date <= end_date:
+        scan = ComicVineDateScan.objects.filter(
+            scan_kind=scan_kind,
+            scan_date=current_date,
+        ).first()
+
+        if scan:
+            if not scan.completed:
+                return scan, False
+
+            current_date += timedelta(days=1)
+            continue
+
+        if dry_run:
+            scan = ComicVineDateScan(
+                scan_kind=scan_kind,
+                scan_date=current_date,
+                next_offset=0,
+                total_results=0,
+                completed=False,
+            )
+            return scan, True
+
+        scan, created = ComicVineDateScan.objects.get_or_create(
+            scan_kind=scan_kind,
+            scan_date=current_date,
+            defaults={
+                "next_offset": 0,
+                "total_results": 0,
+                "completed": False,
+            },
         )
-        .order_by("scan_date")
-        .first()
+
+        if not scan.completed:
+            return scan, created
+
+        current_date += timedelta(days=1)
+
+    return None, False
+
+
+def advance_date_scan_after_page(
+    *,
+    scan,
+    starting_offset,
+    total_results,
+    page_results,
+    dry_run=False,
+):
+    total_results = int(total_results or 0)
+    page_results = int(page_results or 0)
+    ending_offset = starting_offset + page_results
+
+    completed = page_results == 0 or ending_offset >= total_results
+
+    result = DateScanProgressResult(
+        scan_kind=scan.scan_kind,
+        scan_date=scan.scan_date,
+        starting_offset=starting_offset,
+        ending_offset=ending_offset,
+        total_results=total_results,
+        page_results=page_results,
+        completed=completed,
     )
 
-    if latest_completed_scan:
-        from datetime import timedelta
+    if dry_run:
+        return result
 
-        return latest_completed_scan.scan_date - timedelta(days=1)
+    with transaction.atomic():
+        locked_scan = ComicVineDateScan.objects.select_for_update().get(id=scan.id)
 
-    from datetime import timedelta
+        locked_scan.total_results = total_results
+        locked_scan.next_offset = ending_offset
+        locked_scan.last_scanned_at = timezone.now()
+        locked_scan.completed = completed
 
-    return sync_state.update_tracking_start_date - timedelta(days=1)
+        update_fields = [
+            "total_results",
+            "next_offset",
+            "last_scanned_at",
+            "completed",
+        ]
+
+        if completed and locked_scan.completed_at is None:
+            locked_scan.completed_at = timezone.now()
+            update_fields.append("completed_at")
+
+        locked_scan.save(update_fields=update_fields)
+
+    return result
