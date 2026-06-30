@@ -1,137 +1,178 @@
 # EzyReadComics
 
-EzyReadComics is a Django web app for importing, storing, syncing, and browsing comic issue and run data from the Comic Vine API.
+EzyReadComics is a Django web application for importing, storing, syncing, and browsing comic book run and issue data from the Comic Vine API.
 
-The project currently focuses on building a reliable comic data foundation and a usable browsing interface before adding user-specific reading tools, reading-order algorithms, recommendation logic, or current-era reading guidance.
+The project is currently focused on building a reliable local comic data foundation, a usable browsing/detail interface, and a simple account system before adding larger reader-facing features such as tracking, following, reading lists, reading-order logic, recommendations, or event/character systems.
 
-## Current Focus
-
-The current project focus is:
-
-* Store comic runs and issues from Comic Vine.
-* Keep local comic data synced through dedicated management commands.
-* Hydrate issue and run records with richer Comic Vine detail data.
-* Browse stored runs and issues through a centralized Browse page.
-* Keep the project structure readable and expandable before adding accounts and reading tracking.
-
-The project does not currently attempt to build reading-order algorithms, event logic, recommendations, character pages, team pages, story arc pages, or issue-to-issue reading links.
-
-## What the App Currently Does
+## Current Project Status
 
 EzyReadComics currently provides:
 
-* A simple homepage.
-* A centralized Browse page.
-* Publisher filtering.
-* Searchable dropdowns for publisher, run, and issue filters.
-* Run browsing with start years displayed clearly.
-* Issue browsing for a selected run.
-* Comic Vine links for stored runs and issues.
-* Paginated browse results to avoid loading too much data at once.
-* Comic Vine issue importing from list endpoints.
-* Comic Vine volume/run updating from list endpoints.
-* Issue detail hydration from Comic Vine issue detail endpoints.
-* Volume/run detail hydration from Comic Vine volume detail endpoints.
-* Person and credit-role storage for issue and volume credits.
-* Local scan tracking so imports can resume safely.
-* A wrapper sync command for running the normal sync flow in order.
-* A scheduled GitHub Actions workflow for automatic syncing.
+- Comic Vine-backed comic run storage
+- Comic Vine-backed comic issue storage
+- Publisher-aware browsing
+- Searchable browse filters
+- Run and issue detail pages
+- Local Comic Vine ID visibility for debugging/import work
+- Detail hydration for richer run and issue metadata
+- Creator/person credit storage
+- Writer/artist-first credit display with expandable full credit lists
+- Resumable Comic Vine sync/backfill tracking
+- Basic user accounts
+- Optional email at signup
+- Signup bot friction through a honeypot field and simple rate limiting
+- Account page username changes
+- Account page password changes
+
+The project is still intentionally simple. It does not currently include reading-order algorithms, issue-to-issue connection logic, public user lists, recommendations, character pages, team pages, story arc pages, or event models.
 
 ## Tech Stack
 
-* Python
-* Django
-* PostgreSQL / Neon
-* Comic Vine API
-* Bootstrap
-* GitHub Actions
-* `python-dotenv`
-* `dj-database-url`
-* `requests`
+- Python
+- Django 6
+- PostgreSQL / Neon
+- Comic Vine API
+- Bootstrap
+- `requests`
+- `python-dotenv`
+- `dj-database-url`
+- `psycopg2-binary`
 
-## Main Pages
+## Main App Features
 
-```text
-/
-```
+### Comic Browsing
 
-Homepage.
+The main comic browser is available at:
 
 ```text
 /browse/
 ```
 
-Central comic browser.
-
 The Browse page supports:
 
-* publisher selection
-* run selection
-* issue selection
-* searchable dropdowns
-* automatic filter navigation
-* paginated run results
-* paginated issue results
-* Comic Vine links
+- Viewing all stored runs
+- Filtering runs by publisher
+- Selecting a run to view its issues
+- Selecting an issue within a run
+- Searchable publisher, run, and issue dropdowns
+- Paginated results
+- Comic Vine links
+- Comic Vine run/volume IDs
+- Comic Vine issue IDs
+- Comic Vine volume IDs on issue rows
 
-When no run is selected, the page shows runs. When a run is selected, the page shows issues for that run.
+When no run is selected, Browse shows runs. When a run is selected, Browse shows all issues for that run.
+
+Legacy routes are still kept so older links do not break:
 
 ```text
 /issues/
-```
-
-Legacy route kept so older links do not break. It now uses the Browse behavior.
-
-```text
 /volumes/
 ```
 
-Legacy route kept so older links do not break. It now uses the Browse behavior.
+Both legacy routes now use the Browse behavior.
 
-## Current UI Direction
+### Run Details
 
-The project uses a Bootstrap dark-mode layout with a custom dark/blue accent style.
-
-The current UI direction favors:
-
-* dark background panels
-* blue/cyan highlights for active controls
-* searchable dropdown filters
-* clear run-year display
-* table-based browsing while the data model is still evolving
-
-## Current Project Structure Notes
-
-The comics app is being organized so future features do not all pile into one file.
-
-Current important structure:
+Run detail pages are available at:
 
 ```text
-comics/
-    selectors.py
-    urls.py
-    views/
-        __init__.py
-        browse.py
-        home.py
-    templates/
-        comics/
-            base.html
-            browse.html
-            home.html
+/runs/<run_id>/
 ```
 
-`selectors.py` contains reusable database query helpers.
+Run detail pages show:
 
-`comics/views/` contains page-level view logic split by feature area.
+- Run name
+- Publisher
+- Start year
+- Comic Vine issue count
+- Locally stored issue count
+- Latest local issue store date
+- Comic Vine links
+- Comic Vine API detail links
+- First issue summary data
+- Last issue summary data
+- Local run status fields
+- Aliases
+- Deck
+- Description
+- Writer and artist credits by default
+- Expandable full credit lists
+- Expandable technical ID section
+- Paginated issue table for the run
 
-This keeps browse logic, home page logic, and later feature logic easier to maintain.
+### Issue Details
+
+Issue detail pages are available at:
+
+```text
+/issues/<issue_id>/
+```
+
+Issue detail pages show:
+
+- Issue number
+- Issue title
+- Connected run
+- Publisher
+- Store date
+- Cover date
+- Staff review flag
+- Comic Vine links
+- Comic Vine API detail links
+- Connected run metadata
+- Aliases
+- Deck
+- Description
+- Local notes
+- Writer and artist credits by default
+- Expandable full credit lists
+- Expandable technical ID section
+- All issues from the same run
+
+### Accounts
+
+Account routes are available at:
+
+```text
+/accounts/signup/
+/accounts/login/
+/accounts/logout/
+/accounts/
+```
+
+The account system currently supports:
+
+- Username/password signup
+- Optional email field at signup
+- Clear messaging that email is optional
+- No required email verification
+- Honeypot field for simple bot protection
+- Simple IP-based signup attempt rate limiting
+- Login/logout
+- Account page display
+- Username changes from the account page
+- Password changes from the account page
+
+Username changes require:
+
+- New username
+- Current password
+- Username availability check
+
+Password changes require:
+
+- Current password
+- New password
+- New password confirmation
+
+After a successful password change, the user stays logged in.
 
 ## Data Model Overview
 
-The app currently stores Comic Vine data in a relational shape instead of keeping large raw JSON payloads.
+EzyReadComics stores Comic Vine data in relational Django models instead of keeping large raw JSON blobs.
 
-### ComicVolume
+### `ComicVolume`
 
 Represents a Comic Vine volume.
 
@@ -139,67 +180,66 @@ In the app UI, volumes are generally treated as comic runs.
 
 Stored data includes:
 
-* Comic Vine volume ID
-* Volume name
-* Publisher name
-* Publisher Comic Vine ID
-* Publisher API detail URL
-* Start year
-* Count of issues
-* Comic Vine date added
-* Comic Vine date last updated
-* Comic Vine URL
-* Comic Vine API detail URL
-* Aliases
-* Deck
-* Description
-* Comic Vine image URL variants
-* Display image URL and source
-* First issue summary fields
-* Last issue summary fields
-* Detail hydration tracking timestamps
-* Local run-status fields
+- Comic Vine volume ID
+- Volume/run name
+- Publisher name
+- Publisher Comic Vine ID
+- Start year
+- Comic Vine issue count
+- Comic Vine date added
+- Comic Vine date last updated
+- Comic Vine site URL
+- Comic Vine API detail URL
+- Aliases
+- Deck
+- Description
+- Comic Vine image URL variants
+- Display image source fields
+- First issue summary fields
+- Last issue summary fields
+- Detail hydration timestamps
+- Local run-status fields
 
-### ComicIssue
+### `ComicIssue`
 
 Represents a single Comic Vine issue.
 
 Stored data includes:
 
-* Comic Vine issue ID
-* Related volume/run
-* Issue number
-* Issue title
-* Cover date
-* Store date
-* Comic Vine date added
-* Comic Vine date last updated
-* Comic Vine URL
-* Comic Vine API detail URL
-* Aliases
-* Deck
-* Description
-* Staff review flag
-* Detail hydration tracking timestamps
-* Comic Vine image URL variants
-* Local notes
+- Comic Vine issue ID
+- Related local run/volume
+- Issue number
+- Issue title
+- Store date
+- Cover date
+- Comic Vine date added
+- Comic Vine date last updated
+- Comic Vine site URL
+- Comic Vine API detail URL
+- Aliases
+- Deck
+- Description
+- Staff review flag
+- Detail hydration timestamps
+- Comic Vine image URL variants
+- Local notes
 
-### ComicPerson
+### `ComicPerson`
 
 Represents a person returned by Comic Vine credit data.
 
 Stored data includes:
 
-* Comic Vine person ID
-* Name
-* Comic Vine API detail URL
-* Comic Vine site URL
+- Comic Vine person ID
+- Name
+- Comic Vine API detail URL
+- Comic Vine site URL
 
-### ComicCreditRole
+### `ComicCreditRole`
 
-Represents a normalized issue credit role such as writer, artist, editor, or another Comic Vine role value.
+Represents a normalized issue credit role such as writer, artist, editor, penciller, colorist, letterer, or another Comic Vine role value.
 
-### ComicIssuePersonCredit
+### `ComicIssuePersonCredit`
 
 Connects an issue to a person and role.
 
@@ -209,11 +249,11 @@ Plain English:
 This person had this role on this issue.
 ```
 
-### ComicVolumePersonCredit
+### `ComicVolumePersonCredit`
 
-Connects a volume/run to a person.
+Connects a volume/run to a person from Comic Vine volume-level people data.
 
-Comic Vine volume-level people data does not provide the same role-level detail as issue credits, so volume people are stored separately from issue-role credits.
+Comic Vine volume-level people data does not provide the same role-level detail as issue credits, so volume-level people are stored separately.
 
 Plain English:
 
@@ -221,19 +261,25 @@ Plain English:
 This person is connected to this volume/run.
 ```
 
-### ComicVineDateScan
+### `ComicVineDateScan`
 
-Tracks date-based Comic Vine scans so commands can resume instead of starting over.
+Tracks date-based Comic Vine scans so sync and backfill commands can resume instead of starting over.
 
-### ComicVineSyncState
+Tracked scan kinds include:
+
+- Issue date added
+- Issue date last updated
+- Volume date last updated
+
+### `ComicVineSyncState`
 
 Stores sync-wide state, including the update tracking start date used by normal sync and backfill logic.
 
 ## Comic Vine Sync System
 
-EzyReadComics uses Django management commands to import, update, and hydrate comic data from Comic Vine.
+EzyReadComics uses Django management commands to import, update, backfill, and hydrate comic data from Comic Vine.
 
-The normal sync command is:
+The normal sync wrapper command is:
 
 ```bash
 python manage.py sync_comics
@@ -245,7 +291,7 @@ Dry run:
 python manage.py sync_comics --dry-run
 ```
 
-The wrapper command runs the normal sync commands in this order:
+The normal sync flow runs the main sync commands in order:
 
 ```text
 update_issues
@@ -257,18 +303,18 @@ hydrate_issues
 
 The individual commands are kept separate so each part can be tested and debugged on its own.
 
-## Sync Command Types
+## Sync Command Vocabulary
 
-The command names follow this vocabulary:
+The command names generally follow this vocabulary:
 
 ```text
 add      = discover and create new local rows from Comic Vine list endpoints
-update   = refresh existing/returned local rows from Comic Vine list endpoints
+update   = refresh existing or returned local rows from Comic Vine list endpoints
 hydrate  = fill richer detail fields from Comic Vine detail endpoints
-backfill = manually import older or special-case issue records
+backfill = manually import older or special-case records
 ```
 
-## Normal Sync Commands
+## Main Sync Commands
 
 ### `update_issues`
 
@@ -276,10 +322,10 @@ Scans Comic Vine issue records by `date_last_updated`.
 
 Used for:
 
-* finding changed issues
-* updating local issue list-level fields
-* creating missing local issue rows if a returned issue does not already exist
-* creating minimal local volume shells from embedded issue volume data when needed
+- Finding changed issues
+- Updating local issue list-level fields
+- Creating missing local issue rows when needed
+- Creating minimal local volume shells from embedded issue volume data when needed
 
 ### `add_issues`
 
@@ -287,10 +333,10 @@ Scans Comic Vine issue records by `date_added`.
 
 Used for:
 
-* finding newly added Comic Vine issues
-* creating local issue rows
-* creating minimal local volume shells from embedded issue volume data when needed
-* advancing resumable date scans
+- Finding newly added Comic Vine issues
+- Creating local issue rows
+- Creating minimal local volume shells from embedded issue volume data when needed
+- Advancing resumable date scans
 
 ### `update_volumes`
 
@@ -298,11 +344,11 @@ Scans Comic Vine volume records by `date_last_updated`.
 
 Used for:
 
-* updating known local volumes from the Comic Vine volume list endpoint
-* filling list-level volume fields
-* updating volume image fields when available
+- Updating known local volumes from Comic Vine volume list data
+- Filling list-level volume fields
+- Updating volume image fields when available
 
-This command does not detail-hydrate every volume. That is handled by `hydrate_volumes`.
+This command does not detail-hydrate every volume. Richer detail data is handled by `hydrate_volumes`.
 
 ### `hydrate_volumes`
 
@@ -310,11 +356,11 @@ Uses the Comic Vine volume detail endpoint.
 
 Used for:
 
-* filling richer volume fields
-* storing first issue and last issue summary fields
-* storing all Comic Vine volume image URL variants
-* syncing volume-level person credits
-* marking volume hydration attempts so empty optional fields do not cause repeat API calls forever
+- Filling richer volume/run fields
+- Storing first issue and last issue summary fields
+- Storing Comic Vine volume image URL variants
+- Syncing volume-level person credits
+- Marking hydration attempts so empty optional fields do not cause repeat API calls forever
 
 ### `hydrate_issues`
 
@@ -322,15 +368,11 @@ Uses the Comic Vine issue detail endpoint.
 
 Used for:
 
-* filling richer issue fields
-* filling store date and cover date from detail responses when available
-* storing all Comic Vine issue image URL variants
-* syncing issue-level person credits with roles
-* marking issue hydration attempts so empty optional fields do not cause repeat API calls forever
-
-## Manual Backfill Commands
-
-Manual backfill commands are intentionally not part of the normal scheduled sync.
+- Filling richer issue fields
+- Filling store date and cover date from detail responses when available
+- Storing Comic Vine issue image URL variants
+- Syncing issue-level person credits with roles
+- Marking hydration attempts so empty optional fields do not cause repeat API calls forever
 
 ### `backfill_issues`
 
@@ -348,34 +390,86 @@ Dry run:
 python manage.py backfill_issues --dry-run
 ```
 
-### Temporary current-run backfill utilities
+## Project Structure
 
-The project may also include temporary/manual commands used while building a controlled current-Marvel sandbox.
+Important project structure:
 
-These commands are not the normal sync system. They exist to help seed and test a smaller current-run dataset before expanding into broader historical data.
+```text
+EzyReadComics/
+    config/
+        settings.py
+        urls.py
 
-## Automatic Syncing
+    comics/
+        forms.py
+        models.py
+        selectors.py
+        urls.py
 
-The repo includes a GitHub Actions workflow for scheduled Comic Vine syncing.
+        views/
+            __init__.py
+            auth.py
+            browse.py
+            details.py
+            home.py
 
-The workflow:
+        templates/
+            comics/
+                base.html
+                browse.html
+                home.html
+                issue_details.html
+                run_details.html
 
-* Can be run manually from GitHub Actions.
-* Runs on a recurring cron schedule.
-* Installs project dependencies.
-* Runs `python manage.py check`.
-* Runs `python manage.py migrate --noinput`.
-* Runs `python manage.py sync_comics`.
-* Uses GitHub repository secrets for environment variables.
-* Uses workflow concurrency to avoid overlapping sync jobs.
+            registration/
+                account.html
+                login.html
+                signup.html
 
-Required GitHub secrets:
+        management/
+            commands/
 
-```env
-DATABASE_URL=your_neon_database_url
-COMICVINE_API_KEY=your_comicvine_api_key
-SECRET_KEY=your_django_secret_key
+    docs/
+        development-log.md
+        *.md
+
+    manage.py
+    requirements.txt
 ```
+
+### Important Files
+
+`comics/models.py`
+
+Stores the core local comic data model.
+
+`comics/selectors.py`
+
+Contains reusable query helpers for browse/detail pages.
+
+`comics/views/browse.py`
+
+Contains the centralized Browse page logic.
+
+`comics/views/details.py`
+
+Contains run detail and issue detail page logic.
+
+`comics/views/auth.py`
+
+Contains signup and account-management view logic.
+
+`comics/forms.py`
+
+Contains styled auth/account forms.
+
+`comics/templates/comics/base.html`
+
+Contains the shared Bootstrap layout and dark UI styling.
+
+`docs/`
+
+Contains development notes, feature history, and system-specific documentation.
 
 ## Local Setup
 
@@ -408,6 +502,13 @@ SECRET_KEY=your_django_secret_key
 DEBUG=True
 ```
 
+Optional signup rate-limit settings:
+
+```env
+SIGNUP_ATTEMPT_LIMIT=10
+SIGNUP_ATTEMPT_WINDOW_SECONDS=3600
+```
+
 Run migrations:
 
 ```bash
@@ -426,7 +527,7 @@ Start the development server:
 python manage.py runserver
 ```
 
-Open:
+Open the local site:
 
 ```text
 http://127.0.0.1:8000/
@@ -434,7 +535,7 @@ http://127.0.0.1:8000/
 
 ## Common Commands
 
-Run the app locally:
+Run the development server:
 
 ```bash
 python manage.py runserver
@@ -450,6 +551,18 @@ Run migrations:
 
 ```bash
 python manage.py migrate
+```
+
+Create migrations after model changes:
+
+```bash
+python manage.py makemigrations
+```
+
+Open the Django shell:
+
+```bash
+python manage.py shell
 ```
 
 Run the normal Comic Vine sync:
@@ -482,58 +595,129 @@ Run manual historical issue backfill:
 python manage.py backfill_issues
 ```
 
-## Project Scope
+Run manual historical issue backfill without saving changes:
 
-EzyReadComics is intentionally being built in stages.
+```bash
+python manage.py backfill_issues --dry-run
+```
 
-Currently included:
+## Environment Variables
 
-* Basic issue storage
-* Basic volume/run storage
-* Expanded Comic Vine issue and volume metadata
-* Comic Vine image URL storage
-* Centralized Browse page
-* Publisher-aware browsing
-* Searchable publisher, run, and issue filters
-* Paginated database-backed browse results
-* Comic Vine import commands
-* Comic Vine update commands
-* Comic Vine detail hydration commands
-* Person and credit-role storage
-* Sync tracking
-* Scheduled sync automation
+Required:
 
-Not currently included:
+```text
+DATABASE_URL
+COMICVINE_API_KEY
+SECRET_KEY
+```
 
-* User login/signup pages
-* User reading tracking
-* User read lists
-* Reading-order algorithms
-* Issue-to-issue reading order links
-* Event models
-* Character models
-* Team models
-* Story arc models
-* Recommendation logic
-* Issue detail pages
-* Volume/run detail pages
+Optional:
 
-Those may be added later after the core data import and browse systems are stable.
+```text
+DEBUG
+SIGNUP_ATTEMPT_LIMIT
+SIGNUP_ATTEMPT_WINDOW_SECONDS
+```
 
-## Near-Term Planned Work
+### `DATABASE_URL`
 
-Likely next steps:
+Database connection string.
 
-* Add a dedicated accounts app.
-* Add basic login, logout, and signup pages.
-* Keep admin accounts handled through Django admin.
-* Add user-specific reading tracking models later.
-* Add user controls for marking issues/runs as read, wanted, or currently reading.
+The project currently expects this to be set. Local development can use a Neon PostgreSQL connection string or another PostgreSQL database URL.
+
+### `COMICVINE_API_KEY`
+
+Comic Vine API key used by import, sync, update, backfill, and hydration commands.
+
+### `SECRET_KEY`
+
+Django secret key.
+
+### `DEBUG`
+
+Controls Django debug mode.
+
+Default:
+
+```text
+True
+```
+
+### `SIGNUP_ATTEMPT_LIMIT`
+
+Maximum signup POST attempts allowed per connection during the signup window.
+
+Default:
+
+```text
+10
+```
+
+### `SIGNUP_ATTEMPT_WINDOW_SECONDS`
+
+Signup rate-limit window in seconds.
+
+Default:
+
+```text
+3600
+```
+
+## UI Direction
+
+The current UI uses Bootstrap with a custom dark theme.
+
+The interface currently favors:
+
+- Dark panels
+- Blue/cyan highlights
+- Searchable dropdown controls
+- Table-based browsing
+- Clear Comic Vine links
+- Detail pages with practical metadata
+- Expandable technical/debug sections instead of cluttering the main page
 
 ## Documentation
 
-Detailed development notes, implementation history, and planned feature records live in the `docs/` folder.
+The README describes the current project at a high level.
 
-The numbered docs are a timeline. Older numbered docs may describe the project state at the time a feature was added, even if later docs supersede parts of that behavior.
+Detailed development notes and feature history live in:
 
-The README is meant to describe what the project is, how to run it, and what it currently supports. More specific development details should stay in the project docs.
+```text
+docs/
+```
+
+The numbered docs are historical feature/system notes. They may describe the state of the project at the time a feature was built, so they should be treated as development history rather than always-current end-user documentation.
+
+The development log should preserve project history and add new entries over time.
+
+## Current Scope
+
+EzyReadComics is being built in stages.
+
+Currently included:
+
+- Comic Vine data import and sync foundation
+- Comic run/volume storage
+- Comic issue storage
+- Creator/person credit storage
+- Detail hydration
+- Browse UI
+- Detail pages
+- Basic account system
+- Account management basics
+
+Not currently included:
+
+- Reading-order algorithms
+- Issue-to-issue reading connections
+- Event models
+- Character models
+- Team models
+- Story arc models
+- Recommendation logic
+- Public user profiles
+- Social features
+- User reading/follow tracking
+
+Those features may be added later, but the current priority is keeping the data model, import system, browsing interface, and account foundation reliable and understandable.
