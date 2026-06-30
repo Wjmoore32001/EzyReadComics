@@ -15,8 +15,21 @@
             Sign up to start using account-based EzyReadComics features as they are added.
         </p>
 
+        <div class="alert alert-info mb-4">
+            Email is optional. You can leave it blank. No verification email will be sent right now.
+        </div>
+
         <form method="post" novalidate>
             {% csrf_token %}
+
+            {% if form.website %}
+                <div class="visually-hidden" aria-hidden="true">
+                    <label for="{{ form.website.id_for_label }}">
+                        {{ form.website.label }}
+                    </label>
+                    {{ form.website }}
+                </div>
+            {% endif %}
 
             {% if form.non_field_errors %}
                 <div class="alert alert-danger">
@@ -25,23 +38,25 @@
             {% endif %}
 
             {% for field in form %}
-                <div class="mb-3">
-                    <label class="form-label" for="{{ field.id_for_label }}">
-                        {{ field.label }}
-                    </label>
+                {% if field.name != "website" %}
+                    <div class="mb-3">
+                        <label class="form-label" for="{{ field.id_for_label }}">
+                            {{ field.label }}
+                        </label>
 
-                    {{ field }}
+                        {{ field }}
 
-                    {% if field.help_text %}
-                        <div class="form-text">
-                            {{ field.help_text }}
-                        </div>
-                    {% endif %}
+                        {% if field.help_text %}
+                            <div class="form-text">
+                                {{ field.help_text }}
+                            </div>
+                        {% endif %}
 
-                    {% if field.errors %}
-                        {{ field.errors }}
-                    {% endif %}
-                </div>
+                        {% if field.errors %}
+                            {{ field.errors }}
+                        {% endif %}
+                    </div>
+                {% endif %}
             {% endfor %}
 
             <button type="submit" class="btn btn-primary w-100">
