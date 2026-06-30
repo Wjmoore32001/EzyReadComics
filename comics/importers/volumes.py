@@ -1,7 +1,8 @@
 import time
 
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import F, Q
+from django.utils import timezone
 
 from comics.comicvine.client import fetch_volumes_by_ids
 from comics.comicvine.fields import VOLUME_LIST_FIELDS
@@ -191,6 +192,7 @@ def save_volume_list_data(remote_volume, *, overwrite_existing=True, dry_run=Fal
         create_data = {
             "comicvine_id": comicvine_id,
             "name": volume_data["name"] or f"Unknown Comic Vine Volume {comicvine_id}",
+            "list_data_refreshed_at": timezone.now(),
         }
 
         for field_name in VOLUME_LIST_UPDATE_FIELDS:
@@ -200,7 +202,13 @@ def save_volume_list_data(remote_volume, *, overwrite_existing=True, dry_run=Fal
         with transaction.atomic():
             local_volume = ComicVolume.objects.create(**create_data)
 
-        return "created", local_volume, list(create_data.keys())
+        returned_fields = [
+            field_name
+            for field_name in create_data.keys()
+            if field_name != "list_data_refreshed_at"
+        ]
+
+        return "created", local_volume, returned_fields
 
     update_fields = get_volume_list_update_fields(
         local_volume=local_volume,
@@ -208,11 +216,11 @@ def save_volume_list_data(remote_volume, *, overwrite_existing=True, dry_run=Fal
         overwrite_existing=overwrite_existing,
     )
 
-    if not update_fields:
-        return "unchanged", local_volume, []
-
     if dry_run:
-        return "updated", local_volume, update_fields
+        if update_fields:
+            return "updated", local_volume, update_fields
+
+        return "unchanged", local_volume, []
 
     with transaction.atomic():
         locked_volume = ComicVolume.objects.select_for_update().get(id=local_volume.id)
@@ -222,15 +230,22 @@ def save_volume_list_data(remote_volume, *, overwrite_existing=True, dry_run=Fal
             overwrite_existing=overwrite_existing,
         )
 
-        if not update_fields:
-            return "unchanged", locked_volume, []
-
         for field_name in update_fields:
             setattr(locked_volume, field_name, volume_data[field_name])
 
-        locked_volume.save(update_fields=update_fields)
+        locked_volume.list_data_refreshed_at = timezone.now()
 
-    return "updated", locked_volume, update_fields
+        save_fields = list(update_fields)
+
+        if "list_data_refreshed_at" not in save_fields:
+            save_fields.append("list_data_refreshed_at")
+
+        locked_volume.save(update_fields=save_fields)
+
+    if update_fields:
+        return "updated", locked_volume, update_fields
+
+    return "unchanged", locked_volume, []
 
 
 def save_volumes_from_list_data(
@@ -290,21 +305,17 @@ def get_volume_list_update_fields(*, local_volume, volume_data, overwrite_existi
     return update_fields
 
 
-def get_volumes_missing_list_data_queryset():
-    missing_list_data_filter = (
-        Q(publisher="")
-        | Q(start_year="")
-        | Q(count_of_issues__isnull=True)
-        | Q(date_added__isnull=True)
-        | Q(date_last_updated__isnull=True)
-        | Q(comicvine_url="")
-        | Q(api_detail_url="")
-        | Q(first_issue_comicvine_id__isnull=True)
-        | Q(last_issue_comicvine_id__isnull=True)
-        | Q(comicvine_image_original_url="")
+def get_volumes_needing_list_data_refresh_queryset():
+    needs_refresh_filter = (
+        Q(list_data_refreshed_at__isnull=True)
+        | Q(date_last_updated__gt=F("list_data_refreshed_at"))
     )
 
-    return ComicVolume.objects.filter(missing_list_data_filter).order_by("id")
+    return ComicVolume.objects.filter(needs_refresh_filter).order_by("id")
+
+
+def get_volumes_missing_list_data_queryset():
+    return get_volumes_needing_list_data_refresh_queryset()
 
 
 def refresh_volumes_by_ids(
@@ -353,7 +364,7 @@ def refresh_missing_volume_list_data(
             comicvine_id__in=volume_ids,
         ).order_by("id")
     else:
-        volumes_queryset = get_volumes_missing_list_data_queryset()
+        volumes_queryset = get_volumes_needing_list_data_refresh_queryset()
 
     volumes_matching_selection = volumes_queryset.count()
 
@@ -416,25 +427,11 @@ def refresh_missing_volume_list_data(
                 result.volumes_not_returned_by_comicvine += 1
                 continue
 
-            volume_data = build_volume_list_data(remote_volume)
-            update_fields = get_volume_list_update_fields(
-                local_volume=local_volume,
-                volume_data=volume_data,
+            _action, _volume, saved_update_fields = save_volume_list_data(
+                remote_volume,
                 overwrite_existing=False,
+                dry_run=dry_run,
             )
-
-            if not update_fields:
-                result.volumes_unchanged += 1
-                continue
-
-            if dry_run:
-                saved_update_fields = update_fields
-            else:
-                _action, _volume, saved_update_fields = save_volume_list_data(
-                    remote_volume,
-                    overwrite_existing=False,
-                    dry_run=False,
-                )
 
             if saved_update_fields:
                 result.volumes_updated += 1
