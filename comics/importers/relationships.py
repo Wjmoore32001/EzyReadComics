@@ -126,11 +126,19 @@ def sync_issue_relationships(issue, remote_issue_detail, *, dry_run=False):
     result = RelationshipSyncResult()
 
     for relationship_config in RELATIONSHIP_FIELD_MAP:
-        remote_items = remote_issue_detail.get(relationship_config["remote_field"])
+        remote_field = relationship_config["remote_field"]
+
+        # Safety rule:
+        # If the field is missing entirely, do not delete existing local rows.
+        # If the field is present as an empty list, then Comic Vine is saying
+        # there are none, so syncing to empty is allowed.
+        if remote_field not in remote_issue_detail:
+            result.missing_remote_fields_skipped += 1
+            continue
 
         sync_result = sync_single_issue_relationship_type(
             issue=issue,
-            remote_items=remote_items,
+            remote_items=remote_issue_detail.get(remote_field),
             entity_model=relationship_config["entity_model"],
             link_model=relationship_config["link_model"],
             link_field_name=relationship_config["link_field_name"],
@@ -140,13 +148,16 @@ def sync_issue_relationships(issue, remote_issue_detail, *, dry_run=False):
 
         merge_relationship_results(result, sync_result)
 
-    image_result = sync_issue_associated_images(
-        issue=issue,
-        remote_images=remote_issue_detail.get("associated_images"),
-        dry_run=dry_run,
-    )
+    if "associated_images" in remote_issue_detail:
+        image_result = sync_issue_associated_images(
+            issue=issue,
+            remote_images=remote_issue_detail.get("associated_images"),
+            dry_run=dry_run,
+        )
 
-    merge_relationship_results(result, image_result)
+        merge_relationship_results(result, image_result)
+    else:
+        result.missing_remote_fields_skipped += 1
 
     return result
 
@@ -162,9 +173,14 @@ def sync_single_issue_relationship_type(
     dry_run=False,
 ):
     result = RelationshipSyncResult()
+
+    if remote_items is None:
+        result.missing_remote_fields_skipped += 1
+        return result
+
     desired_entity_ids = set()
 
-    for remote_item in remote_items or []:
+    for remote_item in remote_items:
         result.remote_items_seen += 1
 
         entity_id = to_optional_int(remote_item.get("id"))
@@ -204,7 +220,7 @@ def sync_single_issue_relationship_type(
                 existing_link.delete()
                 result.links_deleted += 1
 
-        for remote_item in remote_items or []:
+        for remote_item in remote_items:
             entity_id = to_optional_int(remote_item.get("id"))
 
             if entity_id is None:
@@ -214,6 +230,10 @@ def sync_single_issue_relationship_type(
                 entity_model,
                 remote_item,
             )
+
+            if entity is None:
+                result.skipped_items += 1
+                continue
 
             if entity_created:
                 result.entities_created += 1
@@ -277,13 +297,19 @@ def get_or_create_named_entity(entity_model, remote_item):
 
 def sync_issue_associated_images(issue, remote_images, *, dry_run=False):
     result = RelationshipSyncResult()
-    remote_images = remote_images or []
+
+    # Safety rule:
+    # Missing associated_images field means "do not touch existing images."
+    # Present empty list means "delete existing associated images."
+    if remote_images is None:
+        result.missing_remote_fields_skipped += 1
+        return result
 
     existing_count = ComicIssueAssociatedImage.objects.filter(issue=issue).count()
 
     if dry_run:
         result.associated_images_deleted = existing_count
-        result.associated_images_created = len(remote_images)
+        result.associated_images_created = count_usable_associated_images(remote_images)
         return result
 
     with transaction.atomic():
@@ -296,16 +322,7 @@ def sync_issue_associated_images(issue, remote_images, *, dry_run=False):
         for position, remote_image in enumerate(remote_images, start=1):
             image_data = associated_image_data_from_remote(remote_image)
 
-            if not any(
-                [
-                    image_data["original_url"],
-                    image_data["super_url"],
-                    image_data["screen_large_url"],
-                    image_data["medium_url"],
-                    image_data["small_url"],
-                    image_data["thumb_url"],
-                ]
-            ):
+            if not associated_image_is_usable(image_data):
                 result.skipped_items += 1
                 continue
 
@@ -320,6 +337,31 @@ def sync_issue_associated_images(issue, remote_images, *, dry_run=False):
     return result
 
 
+def associated_image_is_usable(image_data):
+    return any(
+        [
+            image_data["original_url"],
+            image_data["super_url"],
+            image_data["screen_large_url"],
+            image_data["medium_url"],
+            image_data["small_url"],
+            image_data["thumb_url"],
+        ]
+    )
+
+
+def count_usable_associated_images(remote_images):
+    usable_count = 0
+
+    for remote_image in remote_images:
+        image_data = associated_image_data_from_remote(remote_image)
+
+        if associated_image_is_usable(image_data):
+            usable_count += 1
+
+    return usable_count
+
+
 def merge_relationship_results(target, source):
     target.remote_items_seen += source.remote_items_seen
     target.entities_created += source.entities_created
@@ -330,3 +372,4 @@ def merge_relationship_results(target, source):
     target.associated_images_created += source.associated_images_created
     target.associated_images_deleted += source.associated_images_deleted
     target.skipped_items += source.skipped_items
+    target.missing_remote_fields_skipped += source.missing_remote_fields_skipped

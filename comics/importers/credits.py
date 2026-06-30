@@ -62,9 +62,20 @@ def get_or_create_role(role_name):
 
 def sync_issue_person_credits(issue, remote_person_credits, *, dry_run=False):
     result = CreditSyncResult()
+
+    # Safety rule:
+    # Missing field means "Comic Vine did not give us this data in the response."
+    # That must not delete existing local credits.
+    #
+    # Present empty list means "Comic Vine says there are no credits."
+    # That is allowed to sync/delete existing local credits.
+    if remote_person_credits is None:
+        result.missing_remote_fields_skipped += 1
+        return result
+
     desired_credit_keys = set()
 
-    for remote_person_credit in remote_person_credits or []:
+    for remote_person_credit in remote_person_credits:
         result.remote_items_seen += 1
 
         person_id = to_optional_int(remote_person_credit.get("id"))
@@ -106,7 +117,7 @@ def sync_issue_person_credits(issue, remote_person_credits, *, dry_run=False):
                 existing_credit.delete()
                 result.credits_deleted += 1
 
-        for remote_person_credit in remote_person_credits or []:
+        for remote_person_credit in remote_person_credits:
             person_id = to_optional_int(remote_person_credit.get("id"))
             role_names = split_comicvine_role_string(remote_person_credit.get("role"))
 
@@ -170,9 +181,17 @@ def sync_issue_person_credits(issue, remote_person_credits, *, dry_run=False):
 
 def sync_volume_person_credits(volume, remote_people, *, dry_run=False):
     result = CreditSyncResult()
+
+    # Same safety rule as issue credits.
+    # If the "people" field is missing from the volume detail response,
+    # do not assume Comic Vine means the volume has no people.
+    if remote_people is None:
+        result.missing_remote_fields_skipped += 1
+        return result
+
     desired_person_ids = set()
 
-    for remote_person in remote_people or []:
+    for remote_person in remote_people:
         result.remote_items_seen += 1
 
         person_id = to_optional_int(remote_person.get("id"))
@@ -207,7 +226,7 @@ def sync_volume_person_credits(volume, remote_people, *, dry_run=False):
                 existing_credit.delete()
                 result.credits_deleted += 1
 
-        for remote_person in remote_people or []:
+        for remote_person in remote_people:
             person_id = to_optional_int(remote_person.get("id"))
 
             if person_id is None:

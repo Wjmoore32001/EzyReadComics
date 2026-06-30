@@ -9,7 +9,8 @@ from comics.comicvine.parsing import (
     parse_comicvine_datetime,
     to_optional_int,
 )
-from comics.importers.results import IssueListSaveResult
+from comics.importers.relationships import sync_issue_associated_images
+from comics.importers.results import IssueListSaveResult, RelationshipSyncResult
 from comics.importers.volumes import get_or_create_volume_from_embedded_data
 from comics.models import ComicIssue
 
@@ -73,7 +74,7 @@ def save_issue_list_data(
     comicvine_id = to_optional_int(remote_issue.get("id"))
 
     if comicvine_id is None:
-        return "skipped", None, [], False, []
+        return "skipped", None, [], False, [], RelationshipSyncResult()
 
     volume, volume_created, volume_update_fields = get_or_create_volume_from_embedded_data(
         remote_issue.get("volume"),
@@ -86,10 +87,11 @@ def save_issue_list_data(
 
     if not local_issue:
         if not create_missing:
-            return "skipped", None, [], volume_created, volume_update_fields
+            return "skipped", None, [], volume_created, volume_update_fields, RelationshipSyncResult()
 
         if dry_run:
-            return "created", None, [], volume_created, volume_update_fields
+            image_result = build_dry_run_new_issue_associated_image_result(remote_issue)
+            return "created", None, [], volume_created, volume_update_fields, image_result
 
         create_data = {
             "comicvine_id": comicvine_id,
@@ -103,7 +105,20 @@ def save_issue_list_data(
         with transaction.atomic():
             local_issue = ComicIssue.objects.create(**create_data)
 
-        return "created", local_issue, list(create_data.keys()), volume_created, volume_update_fields
+        image_result = sync_associated_images_if_present(
+            local_issue,
+            remote_issue,
+            dry_run=False,
+        )
+
+        return (
+            "created",
+            local_issue,
+            list(create_data.keys()),
+            volume_created,
+            volume_update_fields,
+            image_result,
+        )
 
     update_fields = get_issue_list_update_fields(
         local_issue=local_issue,
@@ -112,10 +127,36 @@ def save_issue_list_data(
     )
 
     if not update_fields:
-        return "unchanged", local_issue, [], volume_created, volume_update_fields
+        image_result = sync_associated_images_if_present(
+            local_issue,
+            remote_issue,
+            dry_run=dry_run,
+        )
+
+        return (
+            "unchanged",
+            local_issue,
+            [],
+            volume_created,
+            volume_update_fields,
+            image_result,
+        )
 
     if dry_run:
-        return "updated", local_issue, update_fields, volume_created, volume_update_fields
+        image_result = sync_associated_images_if_present(
+            local_issue,
+            remote_issue,
+            dry_run=True,
+        )
+
+        return (
+            "updated",
+            local_issue,
+            update_fields,
+            volume_created,
+            volume_update_fields,
+            image_result,
+        )
 
     with transaction.atomic():
         locked_issue = ComicIssue.objects.select_for_update().get(id=local_issue.id)
@@ -126,14 +167,40 @@ def save_issue_list_data(
         )
 
         if not update_fields:
-            return "unchanged", locked_issue, [], volume_created, volume_update_fields
+            image_result = sync_associated_images_if_present(
+                locked_issue,
+                remote_issue,
+                dry_run=False,
+            )
+
+            return (
+                "unchanged",
+                locked_issue,
+                [],
+                volume_created,
+                volume_update_fields,
+                image_result,
+            )
 
         for field_name in update_fields:
             setattr(locked_issue, field_name, issue_data[field_name])
 
         locked_issue.save(update_fields=update_fields)
 
-    return "updated", locked_issue, update_fields, volume_created, volume_update_fields
+    image_result = sync_associated_images_if_present(
+        locked_issue,
+        remote_issue,
+        dry_run=False,
+    )
+
+    return (
+        "updated",
+        locked_issue,
+        update_fields,
+        volume_created,
+        volume_update_fields,
+        image_result,
+    )
 
 
 def save_issues_from_list_data(
@@ -154,6 +221,7 @@ def save_issues_from_list_data(
             update_fields,
             volume_created,
             volume_update_fields,
+            image_result,
         ) = save_issue_list_data(
             remote_issue,
             overwrite_existing=overwrite_existing,
@@ -166,6 +234,8 @@ def save_issues_from_list_data(
 
         if volume_update_fields:
             result.volumes_updated += 1
+
+        result.record_relationship_result(image_result)
 
         if action == "created":
             result.issues_created += 1
@@ -202,3 +272,54 @@ def get_issue_list_update_fields(*, local_issue, issue_data, overwrite_existing)
             update_fields.append(field_name)
 
     return update_fields
+
+
+def sync_associated_images_if_present(issue, remote_issue, *, dry_run=False):
+    if "associated_images" not in remote_issue:
+        result = RelationshipSyncResult()
+        result.missing_remote_fields_skipped += 1
+        return result
+
+    return sync_issue_associated_images(
+        issue,
+        remote_issue.get("associated_images"),
+        dry_run=dry_run,
+    )
+
+
+def build_dry_run_new_issue_associated_image_result(remote_issue):
+    result = RelationshipSyncResult()
+
+    if "associated_images" not in remote_issue:
+        result.missing_remote_fields_skipped += 1
+        return result
+
+    remote_images = remote_issue.get("associated_images")
+
+    if remote_images is None:
+        result.missing_remote_fields_skipped += 1
+        return result
+
+    # A new dry-run issue has no existing associated images to delete.
+    for remote_image in remote_images:
+        if has_usable_associated_image(remote_image):
+            result.associated_images_created += 1
+        else:
+            result.skipped_items += 1
+
+    return result
+
+
+def has_usable_associated_image(remote_image):
+    image = remote_image or {}
+
+    return any(
+        [
+            clean_text(image.get("original_url")),
+            clean_text(image.get("super_url")),
+            clean_text(image.get("screen_large_url")),
+            clean_text(image.get("medium_url")),
+            clean_text(image.get("small_url")),
+            clean_text(image.get("thumb_url")),
+        ]
+    )

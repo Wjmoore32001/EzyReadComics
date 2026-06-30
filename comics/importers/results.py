@@ -10,6 +10,12 @@ class IssueListSaveResult:
     issues_skipped: int = 0
     volumes_created: int = 0
     volumes_updated: int = 0
+
+    associated_images_created: int = 0
+    associated_images_deleted: int = 0
+    associated_images_skipped: int = 0
+    missing_remote_fields_skipped: int = 0
+
     field_update_counts: dict = field(default_factory=dict)
 
     def record_issue_fields(self, update_fields):
@@ -17,6 +23,12 @@ class IssueListSaveResult:
             self.field_update_counts[field_name] = (
                 self.field_update_counts.get(field_name, 0) + 1
             )
+
+    def record_relationship_result(self, relationship_result):
+        self.associated_images_created += relationship_result.associated_images_created
+        self.associated_images_deleted += relationship_result.associated_images_deleted
+        self.associated_images_skipped += relationship_result.skipped_items
+        self.missing_remote_fields_skipped += relationship_result.missing_remote_fields_skipped
 
 
 @dataclass
@@ -69,6 +81,7 @@ class CreditSyncResult:
     credits_deleted: int = 0
     credits_kept: int = 0
     skipped_items: int = 0
+    missing_remote_fields_skipped: int = 0
 
 
 @dataclass
@@ -82,6 +95,7 @@ class RelationshipSyncResult:
     associated_images_created: int = 0
     associated_images_deleted: int = 0
     skipped_items: int = 0
+    missing_remote_fields_skipped: int = 0
 
 
 @dataclass
