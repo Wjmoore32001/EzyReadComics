@@ -130,15 +130,25 @@ def sync_issue_relationships(issue, remote_issue_detail, *, dry_run=False):
 
         # Safety rule:
         # If the field is missing entirely, do not delete existing local rows.
-        # If the field is present as an empty list, then Comic Vine is saying
-        # there are none, so syncing to empty is allowed.
+        # That usually means the field was not requested or Comic Vine did not
+        # include it in this response.
+        #
+        # If the field is present as [] or None, Comic Vine is saying there are
+        # currently no relationships of that type. In that case exact sync is
+        # allowed to remove old local rows for that relationship type.
         if remote_field not in remote_issue_detail:
             result.missing_remote_fields_skipped += 1
             continue
 
+        remote_items = normalize_remote_item_list(remote_issue_detail.get(remote_field))
+
+        if remote_items is None:
+            result.skipped_items += 1
+            continue
+
         sync_result = sync_single_issue_relationship_type(
             issue=issue,
-            remote_items=remote_issue_detail.get(remote_field),
+            remote_items=remote_items,
             entity_model=relationship_config["entity_model"],
             link_model=relationship_config["link_model"],
             link_field_name=relationship_config["link_field_name"],
@@ -149,13 +159,17 @@ def sync_issue_relationships(issue, remote_issue_detail, *, dry_run=False):
         merge_relationship_results(result, sync_result)
 
     if "associated_images" in remote_issue_detail:
-        image_result = sync_issue_associated_images(
-            issue=issue,
-            remote_images=remote_issue_detail.get("associated_images"),
-            dry_run=dry_run,
-        )
+        remote_images = normalize_remote_item_list(remote_issue_detail.get("associated_images"))
 
-        merge_relationship_results(result, image_result)
+        if remote_images is None:
+            result.skipped_items += 1
+        else:
+            image_result = sync_issue_associated_images(
+                issue=issue,
+                remote_images=remote_images,
+                dry_run=dry_run,
+            )
+            merge_relationship_results(result, image_result)
     else:
         result.missing_remote_fields_skipped += 1
 
@@ -173,15 +187,20 @@ def sync_single_issue_relationship_type(
     dry_run=False,
 ):
     result = RelationshipSyncResult()
+    remote_items = normalize_remote_item_list(remote_items)
 
     if remote_items is None:
-        result.missing_remote_fields_skipped += 1
+        result.skipped_items += 1
         return result
 
     desired_entity_ids = set()
 
     for remote_item in remote_items:
         result.remote_items_seen += 1
+
+        if not isinstance(remote_item, dict):
+            result.skipped_items += 1
+            continue
 
         entity_id = to_optional_int(remote_item.get("id"))
 
@@ -221,6 +240,9 @@ def sync_single_issue_relationship_type(
                 result.links_deleted += 1
 
         for remote_item in remote_items:
+            if not isinstance(remote_item, dict):
+                continue
+
             entity_id = to_optional_int(remote_item.get("id"))
 
             if entity_id is None:
@@ -297,12 +319,14 @@ def get_or_create_named_entity(entity_model, remote_item):
 
 def sync_issue_associated_images(issue, remote_images, *, dry_run=False):
     result = RelationshipSyncResult()
+    remote_images = normalize_remote_item_list(remote_images)
 
     # Safety rule:
-    # Missing associated_images field means "do not touch existing images."
-    # Present empty list means "delete existing associated images."
+    # Missing associated_images should be handled by the caller by not calling
+    # this function. If this function is called with None, treat it as an empty
+    # list because the field was present and Comic Vine is saying there are none.
     if remote_images is None:
-        result.missing_remote_fields_skipped += 1
+        result.skipped_items += 1
         return result
 
     existing_count = ComicIssueAssociatedImage.objects.filter(issue=issue).count()
@@ -320,6 +344,10 @@ def sync_issue_associated_images(issue, remote_images, *, dry_run=False):
         result.associated_images_deleted = deleted_count
 
         for position, remote_image in enumerate(remote_images, start=1):
+            if not isinstance(remote_image, dict):
+                result.skipped_items += 1
+                continue
+
             image_data = associated_image_data_from_remote(remote_image)
 
             if not associated_image_is_usable(image_data):
@@ -337,6 +365,16 @@ def sync_issue_associated_images(issue, remote_images, *, dry_run=False):
     return result
 
 
+def normalize_remote_item_list(value):
+    if value is None:
+        return []
+
+    if isinstance(value, list):
+        return value
+
+    return None
+
+
 def associated_image_is_usable(image_data):
     return any(
         [
@@ -352,8 +390,15 @@ def associated_image_is_usable(image_data):
 
 def count_usable_associated_images(remote_images):
     usable_count = 0
+    remote_images = normalize_remote_item_list(remote_images)
+
+    if remote_images is None:
+        return usable_count
 
     for remote_image in remote_images:
+        if not isinstance(remote_image, dict):
+            continue
+
         image_data = associated_image_data_from_remote(remote_image)
 
         if associated_image_is_usable(image_data):
