@@ -498,11 +498,13 @@ class ComicIssueAssociatedImage(models.Model):
 class ComicVineDateScan(models.Model):
     ISSUE_DATE_ADDED = "issue_date_added"
     ISSUE_DATE_LAST_UPDATED = "issue_date_last_updated"
+    VOLUME_DATE_ADDED = "volume_date_added"
     VOLUME_DATE_LAST_UPDATED = "volume_date_last_updated"
 
     SCAN_KIND_CHOICES = [
         (ISSUE_DATE_ADDED, "Issue date added"),
         (ISSUE_DATE_LAST_UPDATED, "Issue date last updated"),
+        (VOLUME_DATE_ADDED, "Volume date added"),
         (VOLUME_DATE_LAST_UPDATED, "Volume date last updated"),
     ]
 
