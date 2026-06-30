@@ -40,8 +40,8 @@ class ComicVolume(models.Model):
 
     comicvine_id = models.PositiveIntegerField(unique=True)
 
-    name = models.CharField(max_length=255)
-    publisher = models.CharField(max_length=100, blank=True)
+    name = models.CharField(max_length=500)
+    publisher = models.CharField(max_length=255, blank=True)
     publisher_comicvine_id = models.PositiveIntegerField(null=True, blank=True)
     publisher_api_detail_url = models.URLField(max_length=500, blank=True)
 
@@ -67,7 +67,7 @@ class ComicVolume(models.Model):
     comicvine_image_thumb_url = models.URLField(max_length=500, blank=True)
     comicvine_image_tiny_url = models.URLField(max_length=500, blank=True)
     comicvine_image_original_url = models.URLField(max_length=500, blank=True)
-    comicvine_image_tags = models.CharField(max_length=255, blank=True)
+    comicvine_image_tags = models.CharField(max_length=500, blank=True)
 
     display_image_url = models.URLField(max_length=500, blank=True)
     display_image_source = models.CharField(
@@ -78,12 +78,12 @@ class ComicVolume(models.Model):
 
     first_issue_comicvine_id = models.PositiveIntegerField(null=True, blank=True)
     first_issue_number = models.CharField(max_length=50, blank=True)
-    first_issue_name = models.CharField(max_length=255, blank=True)
+    first_issue_name = models.CharField(max_length=500, blank=True)
     first_issue_api_url = models.URLField(max_length=500, blank=True)
 
     last_issue_comicvine_id = models.PositiveIntegerField(null=True, blank=True)
     last_issue_number = models.CharField(max_length=50, blank=True)
-    last_issue_name = models.CharField(max_length=255, blank=True)
+    last_issue_name = models.CharField(max_length=500, blank=True)
     last_issue_api_url = models.URLField(max_length=500, blank=True)
 
     detail_hydration_attempted_at = models.DateTimeField(null=True, blank=True)
@@ -122,7 +122,7 @@ class ComicIssue(models.Model):
     )
 
     issue_number = models.CharField(max_length=50)
-    issue_title = models.CharField(max_length=255, blank=True)
+    issue_title = models.CharField(max_length=500, blank=True)
 
     cover_date = models.DateField(null=True, blank=True)
     store_date = models.DateField(null=True, blank=True)
@@ -150,7 +150,7 @@ class ComicIssue(models.Model):
     comicvine_image_thumb_url = models.URLField(max_length=500, blank=True)
     comicvine_image_tiny_url = models.URLField(max_length=500, blank=True)
     comicvine_image_original_url = models.URLField(max_length=500, blank=True)
-    comicvine_image_tags = models.CharField(max_length=255, blank=True)
+    comicvine_image_tags = models.CharField(max_length=500, blank=True)
 
     notes = models.TextField(blank=True)
 
@@ -161,7 +161,7 @@ class ComicIssue(models.Model):
 
 class ComicPerson(models.Model):
     comicvine_id = models.PositiveIntegerField(unique=True)
-    name = models.CharField(max_length=255)
+    name = models.CharField(max_length=500)
     api_detail_url = models.URLField(max_length=500, blank=True)
     comicvine_url = models.URLField(max_length=500, blank=True)
 
@@ -174,7 +174,7 @@ class ComicPerson(models.Model):
 
 class ComicVineNamedEntity(models.Model):
     comicvine_id = models.PositiveIntegerField(unique=True)
-    name = models.CharField(max_length=255)
+    name = models.CharField(max_length=500)
     api_detail_url = models.URLField(max_length=500, blank=True)
     comicvine_url = models.URLField(max_length=500, blank=True)
 
@@ -467,7 +467,7 @@ class ComicIssueAssociatedImage(models.Model):
     )
     position = models.PositiveIntegerField(default=0)
 
-    caption = models.CharField(max_length=255, blank=True)
+    caption = models.CharField(max_length=500, blank=True)
 
     icon_url = models.URLField(max_length=500, blank=True)
     medium_url = models.URLField(max_length=500, blank=True)
@@ -478,7 +478,7 @@ class ComicIssueAssociatedImage(models.Model):
     thumb_url = models.URLField(max_length=500, blank=True)
     tiny_url = models.URLField(max_length=500, blank=True)
     original_url = models.URLField(max_length=500, blank=True)
-    image_tags = models.CharField(max_length=255, blank=True)
+    image_tags = models.CharField(max_length=500, blank=True)
 
     class Meta:
         ordering = ["issue", "position"]
