@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+
+{% block title %}Account | EzyReadComics{% endblock %}
+
+{% block content %}
+<div class="card border-secondary bg-body-tertiary mx-auto" style="max-width: 48rem;">
+    <div class="card-body p-4 p-md-5">
+        <p class="text-uppercase text-secondary fw-semibold mb-2">
+            Account
+        </p>
+
+        <h1 class="h2 fw-bold mb-3">Your account</h1>
+
+        <div class="mb-4">
+            <p class="mb-2">
+                <span class="text-secondary">Username:</span>
+                <span class="fw-semibold">{{ request.user.username }}</span>
+            </p>
+
+            <p class="mb-2">
+                <span class="text-secondary">Email:</span>
+                {% if request.user.email %}
+                    <span class="fw-semibold">{{ request.user.email }}</span>
+                    <span class="badge text-bg-secondary ms-1">Optional</span>
+                {% else %}
+                    <span class="fw-semibold">Not added</span>
+                    <span class="badge text-bg-secondary ms-1">Optional</span>
+                {% endif %}
+            </p>
+
+            <p class="mb-0">
+                <span class="text-secondary">Admin access:</span>
+                {% if request.user.is_staff %}
+                    <span class="badge text-bg-info">Enabled</span>
+                {% else %}
+                    <span class="badge text-bg-secondary">No</span>
+                {% endif %}
+            </p>
+        </div>
+
+        <div class="d-flex flex-wrap gap-2 mb-4">
+            {% if request.user.is_staff %}
+                <a href="{% url 'admin:index' %}" class="btn btn-outline-info">
+                    Open admin
+                </a>
+            {% endif %}
+
+            <form action="{% url 'logout' %}" method="post">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-outline-secondary">
+                    Log out
+                </button>
+            </form>
+        </div>
+
+        <hr class="border-secondary my-4">
+
+        <section class="mb-5">
+            <h2 class="h4 fw-bold mb-2">Change username</h2>
+
+            <p class="text-secondary mb-4">
+                Enter a new available username and confirm your current password.
+            </p>
+
+            <form method="post" novalidate>
+                {% csrf_token %}
+                <input type="hidden" name="account_action" value="change_username">
+
+                {% if username_form.non_field_errors %}
+                    <div class="alert alert-danger">
+                        {{ username_form.non_field_errors }}
+                    </div>
+                {% endif %}
+
+                {% for field in username_form %}
+                    <div class="mb-3">
+                        <label class="form-label" for="{{ field.id_for_label }}">
+                            {{ field.label }}
+                        </label>
+
+                        {{ field }}
+
+                        {% if field.help_text %}
+                            <div class="form-text">
+                                {{ field.help_text }}
+                            </div>
+                        {% endif %}
+
+                        {% if field.errors %}
+                            {{ field.errors }}
+                        {% endif %}
+                    </div>
+                {% endfor %}
+
+                <button type="submit" class="btn btn-outline-info">
+                    Update username
+                </button>
+            </form>
+        </section>
+
+        <hr class="border-secondary my-4">
+
+        <section>
+            <h2 class="h4 fw-bold mb-2">Change password</h2>
+
+            <p class="text-secondary mb-4">
+                Enter your current password, then choose a new password.
+            </p>
+
+            <form method="post" novalidate>
+                {% csrf_token %}
+                <input type="hidden" name="account_action" value="change_password">
+
+                {% if password_form.non_field_errors %}
+                    <div class="alert alert-danger">
+                        {{ password_form.non_field_errors }}
+                    </div>
+                {% endif %}
+
+                {% for field in password_form %}
+                    <div class="mb-3">
+                        <label class="form-label" for="{{ field.id_for_label }}">
+                            {{ field.label }}
+                        </label>
+
+                        {{ field }}
+
+                        {% if field.help_text %}
+                            <div class="form-text">
+                                {{ field.help_text }}
+                            </div>
+                        {% endif %}
+
+                        {% if field.errors %}
+                            {{ field.errors }}
+                        {% endif %}
+                    </div>
+                {% endfor %}
+
+                <button type="submit" class="btn btn-outline-info">
+                    Update password
+                </button>
+            </form>
+        </section>
+    </div>
+</div>
+{% endblock %}

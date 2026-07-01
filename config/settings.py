@@ -19,17 +19,11 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
 
-    # Permanent project apps.
     "accounts",
     "comicvine",
     "catalog",
     "ingestion",
     "reading",
-
-    # Temporary old mixed app.
-    # Keep this installed until its responsibilities have been moved into the
-    # permanent apps.
-    "comics",
 ]
 
 MIDDLEWARE = [
@@ -47,7 +41,7 @@ ROOT_URLCONF = "config.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        "DIRS": [BASE_DIR / "templates"],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -94,8 +88,10 @@ USE_I18N = True
 USE_TZ = True
 STATIC_URL = "static/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
 LOGIN_URL = "login"
 LOGIN_REDIRECT_URL = "account"
-LOGOUT_REDIRECT_URL = "home"
+LOGOUT_REDIRECT_URL = "login"
+
 SIGNUP_ATTEMPT_LIMIT = int(os.getenv("SIGNUP_ATTEMPT_LIMIT", "10"))
 SIGNUP_ATTEMPT_WINDOW_SECONDS = int(os.getenv("SIGNUP_ATTEMPT_WINDOW_SECONDS", "3600"))
