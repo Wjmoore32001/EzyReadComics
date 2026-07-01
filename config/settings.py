@@ -4,18 +4,12 @@ from pathlib import Path
 import dj_database_url
 from dotenv import load_dotenv
 
-
 BASE_DIR = Path(__file__).resolve().parent.parent
-
 load_dotenv(BASE_DIR / ".env")
-
-
 SECRET_KEY = os.getenv("SECRET_KEY", "django-insecure-local-dev-only-change-me")
-
 DEBUG = os.getenv("DEBUG", "True") == "True"
 
 ALLOWED_HOSTS = []
-
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -24,9 +18,19 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+
+    # Permanent project apps.
+    "accounts",
+    "comicvine",
+    "catalog",
+    "ingestion",
+    "reading",
+
+    # Temporary old mixed app.
+    # Keep this installed until its responsibilities have been moved into the
+    # permanent apps.
     "comics",
 ]
-
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
@@ -38,9 +42,7 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
-
 ROOT_URLCONF = "config.urls"
-
 
 TEMPLATES = [
     {
@@ -57,10 +59,7 @@ TEMPLATES = [
     }
 ]
 
-
 WSGI_APPLICATION = "config.wsgi.application"
-
-
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 if not DATABASE_URL:
@@ -73,7 +72,6 @@ DATABASES = {
         conn_health_checks=True,
     )
 }
-
 
 AUTH_PASSWORD_VALIDATORS = [
     {
@@ -90,26 +88,14 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-
 LANGUAGE_CODE = "en-us"
-
 TIME_ZONE = "UTC"
-
 USE_I18N = True
-
 USE_TZ = True
-
-
 STATIC_URL = "static/"
-
-
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
-
-
 LOGIN_URL = "login"
 LOGIN_REDIRECT_URL = "account"
 LOGOUT_REDIRECT_URL = "home"
-
-
 SIGNUP_ATTEMPT_LIMIT = int(os.getenv("SIGNUP_ATTEMPT_LIMIT", "10"))
 SIGNUP_ATTEMPT_WINDOW_SECONDS = int(os.getenv("SIGNUP_ATTEMPT_WINDOW_SECONDS", "3600"))
