@@ -3,6 +3,7 @@ import time
 
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
+from requests.exceptions import RequestException
 
 from comics.comicvine.client import (
     ComicVineAPIError,
@@ -25,6 +26,7 @@ from comics.models import ComicVineDateScan, ComicVineSyncState
 USER_AGENT = "EzyReadComics bulk_backfill_old_issues"
 
 DEFAULT_OLDEST_BACKFILL_DATE = date(1930, 1, 1)
+DEFAULT_API_ERROR_RETRY_DELAY = 90 * 60
 
 
 class Command(BaseCommand):
@@ -64,7 +66,7 @@ class Command(BaseCommand):
             help=(
                 "Optional maximum pages to fetch this run. "
                 "If omitted during a real run, the command keeps going until the "
-                "backfill range is caught up or Comic Vine stops it. "
+                "backfill range is caught up. "
                 "Dry runs default to 1 page."
             ),
         )
@@ -73,7 +75,26 @@ class Command(BaseCommand):
             "--request-delay",
             type=float,
             default=3.0,
-            help="Seconds to wait between API pages. Defaults to 3.",
+            help="Seconds to wait between successful API pages. Defaults to 3.",
+        )
+
+        parser.add_argument(
+            "--api-error-retry-delay",
+            type=float,
+            default=DEFAULT_API_ERROR_RETRY_DELAY,
+            help=(
+                "Seconds to pause after a Comic Vine/API/web error before retrying. "
+                "Defaults to 5400 seconds, which is 90 minutes."
+            ),
+        )
+
+        parser.add_argument(
+            "--stop-on-api-error",
+            action="store_true",
+            help=(
+                "Stop immediately on a Comic Vine/API/web error instead of pausing "
+                "and retrying. Dry runs always behave this way."
+            ),
         )
 
         parser.add_argument(
@@ -94,7 +115,11 @@ class Command(BaseCommand):
         page_size = options["page_size"]
         max_pages = options["max_pages"]
         request_delay = options["request_delay"]
+        api_error_retry_delay = options["api_error_retry_delay"]
         dry_run = options["dry_run"]
+
+        # Dry runs should never trap you in a 90-minute retry pause.
+        stop_on_api_error = options["stop_on_api_error"] or dry_run
 
         if dry_run and max_pages is None:
             max_pages = 1
@@ -106,6 +131,7 @@ class Command(BaseCommand):
             page_size=page_size,
             max_pages=max_pages,
             request_delay=request_delay,
+            api_error_retry_delay=api_error_retry_delay,
         )
 
         api_key = get_comicvine_api_key()
@@ -122,6 +148,13 @@ class Command(BaseCommand):
         else:
             self.stdout.write(f"Page cap: {max_pages}")
 
+        if stop_on_api_error:
+            self.stdout.write("API/web error handling: stop immediately")
+        else:
+            self.stdout.write(
+                f"API/web error handling: pause {api_error_retry_delay} seconds, then retry"
+            )
+
         with create_comicvine_session(USER_AGENT) as session:
             run_result = run_backfill_scan(
                 command=self,
@@ -132,17 +165,21 @@ class Command(BaseCommand):
                 page_size=page_size,
                 max_pages=max_pages,
                 request_delay=request_delay,
+                api_error_retry_delay=api_error_retry_delay,
+                stop_on_api_error=stop_on_api_error,
                 dry_run=dry_run,
             )
 
         self.stdout.write("")
         self.stdout.write(self.style.SUCCESS("Run complete."))
         self.stdout.write(f"Pages processed: {run_result['pages_processed']}")
+        self.stdout.write(f"API/web errors seen: {run_result['api_errors_seen']}")
+        self.stdout.write(f"API/web error retries: {run_result['api_error_retries']}")
 
         if dry_run:
             self.stdout.write("Dry run only. No database changes were saved.")
         elif run_result["stopped_by_api_error"]:
-            self.stdout.write("Stopped early because Comic Vine returned an API error.")
+            self.stdout.write("Stopped early because Comic Vine returned an API/web error.")
         elif run_result["caught_up"]:
             self.stdout.write("Backfill caught up through the selected date range.")
         else:
@@ -176,11 +213,15 @@ def run_backfill_scan(
     page_size,
     max_pages,
     request_delay,
+    api_error_retry_delay,
+    stop_on_api_error,
     dry_run,
 ):
     pages_processed = 0
     caught_up = False
     stopped_by_api_error = False
+    api_errors_seen = 0
+    api_error_retries = 0
 
     while max_pages is None or pages_processed < max_pages:
         scan, scan_created = get_next_backfill_date_scan(
@@ -226,17 +267,44 @@ def run_backfill_scan(
                 limit=page_size,
                 sort="date_added:asc",
             )
-        except ComicVineAPIError as error:
-            stopped_by_api_error = True
+        except (ComicVineAPIError, RequestException) as error:
+            api_errors_seen += 1
+
             command.stdout.write("")
-            command.stdout.write(command.style.ERROR("Comic Vine stopped the run."))
+            command.stdout.write(command.style.ERROR("Comic Vine/API/web error."))
             command.stdout.write(str(error))
             command.stdout.write("")
+
+            if stop_on_api_error:
+                stopped_by_api_error = True
+                command.stdout.write(
+                    "Progress from completed pages was saved. "
+                    "The current page was not marked complete. "
+                    "Run this command again later to continue."
+                )
+                break
+
+            api_error_retries += 1
+
             command.stdout.write(
                 "Progress from completed pages was saved. "
-                "Run this command again later to continue."
+                "The current page was not marked complete."
             )
-            break
+            command.stdout.write(
+                f"Pausing for {format_seconds(api_error_retry_delay)} before retrying "
+                f"date_added {scan.scan_date} at offset {starting_offset}."
+            )
+
+            sleep_if_needed(api_error_retry_delay)
+
+            command.stdout.write("")
+            command.stdout.write(
+                command.style.WARNING(
+                    "Retrying after API/web error. Press Ctrl+C to stop the command."
+                )
+            )
+
+            continue
 
         remote_issues = response_data.get("results") or []
         total_results = int(response_data.get("number_of_total_results") or 0)
@@ -297,6 +365,8 @@ def run_backfill_scan(
         "pages_processed": pages_processed,
         "caught_up": caught_up,
         "stopped_by_api_error": stopped_by_api_error,
+        "api_errors_seen": api_errors_seen,
+        "api_error_retries": api_error_retries,
     }
 
 
@@ -352,6 +422,7 @@ def validate_command_options(
     page_size,
     max_pages,
     request_delay,
+    api_error_retry_delay,
 ):
     if oldest_date is None:
         raise CommandError("--oldest-date is required.")
@@ -379,6 +450,9 @@ def validate_command_options(
 
     if request_delay < 0:
         raise CommandError("--request-delay cannot be negative.")
+
+    if api_error_retry_delay < 0:
+        raise CommandError("--api-error-retry-delay cannot be negative.")
 
 
 def process_issue_page(remote_issues):
@@ -533,6 +607,23 @@ def print_batch_summary(*, command, save_result, progress_result, dry_run):
     command.stdout.write(f"  {prefix}associated images deleted: {save_result.associated_images_deleted}")
 
 
-def sleep_if_needed(request_delay):
-    if request_delay > 0:
-        time.sleep(request_delay)
+def format_seconds(seconds):
+    seconds = int(seconds)
+    minutes = seconds // 60
+
+    if seconds == DEFAULT_API_ERROR_RETRY_DELAY:
+        return "90 minutes"
+
+    if seconds % 3600 == 0:
+        hours = seconds // 3600
+        return f"{hours} hour{'s' if hours != 1 else ''}"
+
+    if seconds % 60 == 0:
+        return f"{minutes} minute{'s' if minutes != 1 else ''}"
+
+    return f"{seconds} seconds"
+
+
+def sleep_if_needed(delay):
+    if delay > 0:
+        time.sleep(delay)
