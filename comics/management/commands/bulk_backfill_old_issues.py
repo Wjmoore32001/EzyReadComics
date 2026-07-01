@@ -2,7 +2,7 @@ from datetime import date, timedelta
 import time
 
 from django.core.management.base import BaseCommand, CommandError
-from django.db import transaction
+from django.db import close_old_connections, transaction
 from requests.exceptions import RequestException
 
 from comics.comicvine.client import (
@@ -224,6 +224,11 @@ def run_backfill_scan(
     api_error_retries = 0
 
     while max_pages is None or pages_processed < max_pages:
+        # Important for long retry sleeps.
+        # Neon/Postgres may close the idle SSL connection while the command is waiting.
+        # This forces Django to open a fresh connection before the next ORM query.
+        close_old_connections()
+
         scan, scan_created = get_next_backfill_date_scan(
             scan_kind=ComicVineDateScan.ISSUE_DATE_ADDED,
             oldest_date=oldest_date,
@@ -627,3 +632,5 @@ def format_seconds(seconds):
 def sleep_if_needed(delay):
     if delay > 0:
         time.sleep(delay)
+
+    close_old_connections()
