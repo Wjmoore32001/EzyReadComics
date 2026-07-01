@@ -164,7 +164,9 @@ def print_sync_state(
     else:
         command.stdout.write("  No ComicVineSyncState row found.")
 
-    command.stdout.write(f"  Current scan range: {format_value(start_date)} through {format_value(end_date)}")
+    command.stdout.write(
+        f"  Current scan range: {format_value(start_date)} through {format_value(end_date)}"
+    )
     command.stdout.write(f"  Backfill oldest date estimate: {backfill_oldest_date}")
 
 
@@ -332,7 +334,10 @@ def print_backfill_status(*, command, current_import_start_date, oldest_date):
     command.stdout.write(f"  Existing tracked backfill days: {status['existing_days']}")
     command.stdout.write(f"  Existing completed backfill days: {status['completed_existing_days']}")
     command.stdout.write(f"  Existing incomplete backfill days: {status['incomplete_existing_days']}")
-    command.stdout.write(f"  Contiguous completed days from current start going backward: {status['contiguous_completed_days']}")
+    command.stdout.write(
+        f"  Contiguous completed days from current start going backward: "
+        f"{status['contiguous_completed_days']}"
+    )
 
     if status["confirmed_complete_through"]:
         command.stdout.write(
