@@ -1,7 +1,8 @@
 import time
 
 from django.core.management.base import BaseCommand, CommandError
-from django.db import transaction
+from django.db import close_old_connections, transaction
+from requests.exceptions import RequestException
 
 from comics.comicvine.client import (
     ComicVineAPIError,
@@ -25,6 +26,8 @@ from comics.models import ComicVineDateScan
 
 
 USER_AGENT = "EzyReadComics bulk_import_new_issues"
+
+DEFAULT_API_ERROR_RETRY_DELAY = 90 * 60
 
 SCAN_PHASES = [
     {
@@ -72,9 +75,9 @@ class Command(BaseCommand):
             type=int,
             default=None,
             help=(
-                "Optional maximum pages to fetch for each scan type this run. "
+                "Optional maximum successful pages to fetch for each scan type this run. "
                 "If omitted during a real run, the command keeps going until all "
-                "available completed-day work is caught up or Comic Vine stops it. "
+                "available completed-day work is caught up. "
                 "Dry runs default to 1 page per scan type."
             ),
         )
@@ -83,7 +86,26 @@ class Command(BaseCommand):
             "--request-delay",
             type=float,
             default=3.0,
-            help="Seconds to wait between API pages/phases. Defaults to 3.",
+            help="Seconds to wait between successful API pages/phases. Defaults to 3.",
+        )
+
+        parser.add_argument(
+            "--api-error-retry-delay",
+            type=float,
+            default=DEFAULT_API_ERROR_RETRY_DELAY,
+            help=(
+                "Seconds to pause after a Comic Vine/API/web error before retrying. "
+                "Defaults to 5400 seconds, which is 90 minutes."
+            ),
+        )
+
+        parser.add_argument(
+            "--stop-on-api-error",
+            action="store_true",
+            help=(
+                "Stop immediately on a Comic Vine/API/web error instead of pausing "
+                "and retrying. Dry runs always behave this way."
+            ),
         )
 
         parser.add_argument(
@@ -100,7 +122,11 @@ class Command(BaseCommand):
         page_size = options["page_size"]
         max_pages = options["max_pages"]
         request_delay = options["request_delay"]
+        api_error_retry_delay = options["api_error_retry_delay"]
         dry_run = options["dry_run"]
+
+        # Dry runs should never trap you in a 90-minute retry pause.
+        stop_on_api_error = options["stop_on_api_error"] or dry_run
 
         if dry_run and max_pages is None:
             max_pages = 1
@@ -109,9 +135,12 @@ class Command(BaseCommand):
             page_size=page_size,
             max_pages=max_pages,
             request_delay=request_delay,
+            api_error_retry_delay=api_error_retry_delay,
         )
 
         api_key = get_comicvine_api_key()
+
+        close_old_connections()
 
         sync_state, state_created, state_initialized = get_or_initialize_default_sync_state(
             start_date=provided_start_date,
@@ -132,6 +161,13 @@ class Command(BaseCommand):
         else:
             self.stdout.write(f"Page cap per phase: {max_pages}")
 
+        if stop_on_api_error:
+            self.stdout.write("API/web error handling: stop immediately")
+        else:
+            self.stdout.write(
+                f"API/web error handling: pause {api_error_retry_delay} seconds, then retry"
+            )
+
         if state_created or state_initialized:
             self.stdout.write("")
             if dry_run:
@@ -148,6 +184,8 @@ class Command(BaseCommand):
                 )
 
         total_pages_processed = 0
+        total_api_errors_seen = 0
+        total_api_error_retries = 0
         stopped_by_api_error = False
         phase_results = []
 
@@ -163,33 +201,29 @@ class Command(BaseCommand):
                 )
                 self.stdout.write("#" * 80)
 
-                try:
-                    phase_result = run_scan_phase(
-                        command=self,
-                        session=session,
-                        api_key=api_key,
-                        phase=phase,
-                        start_date=start_date,
-                        end_date=end_date,
-                        page_size=page_size,
-                        max_pages=max_pages,
-                        request_delay=request_delay,
-                        dry_run=dry_run,
-                    )
-                except ComicVineAPIError as error:
-                    stopped_by_api_error = True
-                    self.stdout.write("")
-                    self.stdout.write(self.style.ERROR("Comic Vine stopped the run."))
-                    self.stdout.write(str(error))
-                    self.stdout.write("")
-                    self.stdout.write(
-                        "Progress from completed pages was saved. "
-                        "Run this command again later to continue."
-                    )
-                    break
+                phase_result = run_scan_phase(
+                    command=self,
+                    session=session,
+                    api_key=api_key,
+                    phase=phase,
+                    start_date=start_date,
+                    end_date=end_date,
+                    page_size=page_size,
+                    max_pages=max_pages,
+                    request_delay=request_delay,
+                    api_error_retry_delay=api_error_retry_delay,
+                    stop_on_api_error=stop_on_api_error,
+                    dry_run=dry_run,
+                )
 
                 phase_results.append(phase_result)
                 total_pages_processed += phase_result["pages_processed"]
+                total_api_errors_seen += phase_result["api_errors_seen"]
+                total_api_error_retries += phase_result["api_error_retries"]
+
+                if phase_result["stopped_by_api_error"]:
+                    stopped_by_api_error = True
+                    break
 
         all_phases_caught_up = (
             len(phase_results) == len(SCAN_PHASES)
@@ -199,11 +233,13 @@ class Command(BaseCommand):
         self.stdout.write("")
         self.stdout.write(self.style.SUCCESS("Run complete."))
         self.stdout.write(f"Total pages processed: {total_pages_processed}")
+        self.stdout.write(f"API/web errors seen: {total_api_errors_seen}")
+        self.stdout.write(f"API/web error retries: {total_api_error_retries}")
 
         if dry_run:
             self.stdout.write("Dry run only. No database changes were saved.")
         elif stopped_by_api_error:
-            self.stdout.write("Stopped early because Comic Vine returned an API error.")
+            self.stdout.write("Stopped early because Comic Vine returned an API/web error.")
         elif all_phases_caught_up:
             self.stdout.write("Caught up through the selected import date range.")
         else:
@@ -224,14 +260,24 @@ def run_scan_phase(
     page_size,
     max_pages,
     request_delay,
+    api_error_retry_delay,
+    stop_on_api_error,
     dry_run,
 ):
     pages_processed = 0
     caught_up = False
+    stopped_by_api_error = False
+    api_errors_seen = 0
+    api_error_retries = 0
     scan_kind = phase["scan_kind"]
     comicvine_field = phase["comicvine_field"]
 
     while max_pages is None or pages_processed < max_pages:
+        # Important for long retry sleeps.
+        # Neon/Postgres may close the idle SSL connection while the command is waiting.
+        # This forces Django to open a fresh connection before the next ORM query.
+        close_old_connections()
+
         scan, scan_created = get_next_incomplete_date_scan(
             scan_kind=scan_kind,
             start_date=start_date,
@@ -267,15 +313,54 @@ def run_scan_phase(
         command.stdout.write(f"Offset: {starting_offset}")
         command.stdout.write("=" * 80)
 
-        response_data = fetch_issues_page(
-            session,
-            api_key,
-            filter_value=build_day_filter(comicvine_field, scan.scan_date),
-            fields=ISSUE_LIST_FIELDS,
-            offset=starting_offset,
-            limit=page_size,
-            sort=f"{comicvine_field}:asc",
-        )
+        try:
+            response_data = fetch_issues_page(
+                session,
+                api_key,
+                filter_value=build_day_filter(comicvine_field, scan.scan_date),
+                fields=ISSUE_LIST_FIELDS,
+                offset=starting_offset,
+                limit=page_size,
+                sort=f"{comicvine_field}:asc",
+            )
+        except (ComicVineAPIError, RequestException) as error:
+            api_errors_seen += 1
+
+            command.stdout.write("")
+            command.stdout.write(command.style.ERROR("Comic Vine/API/web error."))
+            command.stdout.write(str(error))
+            command.stdout.write("")
+
+            if stop_on_api_error:
+                stopped_by_api_error = True
+                command.stdout.write(
+                    "Progress from completed pages was saved. "
+                    "The current page was not marked complete. "
+                    "Run this command again later to continue."
+                )
+                break
+
+            api_error_retries += 1
+
+            command.stdout.write(
+                "Progress from completed pages was saved. "
+                "The current page was not marked complete."
+            )
+            command.stdout.write(
+                f"Pausing for {format_seconds(api_error_retry_delay)} before retrying "
+                f"{comicvine_field} {scan.scan_date} at offset {starting_offset}."
+            )
+
+            sleep_if_needed(api_error_retry_delay)
+
+            command.stdout.write("")
+            command.stdout.write(
+                command.style.WARNING(
+                    "Retrying after API/web error. Press Ctrl+C to stop the command."
+                )
+            )
+
+            continue
 
         remote_issues = response_data.get("results") or []
         total_results = int(response_data.get("number_of_total_results") or 0)
@@ -337,10 +422,19 @@ def run_scan_phase(
     return {
         "pages_processed": pages_processed,
         "caught_up": caught_up,
+        "stopped_by_api_error": stopped_by_api_error,
+        "api_errors_seen": api_errors_seen,
+        "api_error_retries": api_error_retries,
     }
 
 
-def validate_command_options(*, page_size, max_pages, request_delay):
+def validate_command_options(
+    *,
+    page_size,
+    max_pages,
+    request_delay,
+    api_error_retry_delay,
+):
     if page_size < 1:
         raise CommandError("--page-size must be at least 1.")
 
@@ -352,6 +446,9 @@ def validate_command_options(*, page_size, max_pages, request_delay):
 
     if request_delay < 0:
         raise CommandError("--request-delay cannot be negative.")
+
+    if api_error_retry_delay < 0:
+        raise CommandError("--api-error-retry-delay cannot be negative.")
 
 
 def process_issue_page(remote_issues):
@@ -506,6 +603,25 @@ def print_batch_summary(*, command, save_result, progress_result, dry_run):
     command.stdout.write(f"  {prefix}associated images deleted: {save_result.associated_images_deleted}")
 
 
-def sleep_if_needed(request_delay):
-    if request_delay > 0:
-        time.sleep(request_delay)
+def format_seconds(seconds):
+    seconds = int(seconds)
+    minutes = seconds // 60
+
+    if seconds == DEFAULT_API_ERROR_RETRY_DELAY:
+        return "90 minutes"
+
+    if seconds % 3600 == 0:
+        hours = seconds // 3600
+        return f"{hours} hour{'s' if hours != 1 else ''}"
+
+    if seconds % 60 == 0:
+        return f"{minutes} minute{'s' if minutes != 1 else ''}"
+
+    return f"{seconds} seconds"
+
+
+def sleep_if_needed(delay):
+    if delay > 0:
+        time.sleep(delay)
+
+    close_old_connections()

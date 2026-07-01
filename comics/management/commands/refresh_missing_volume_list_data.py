@@ -1,6 +1,8 @@
 import time
 
 from django.core.management.base import BaseCommand, CommandError
+from django.db import close_old_connections
+from requests.exceptions import RequestException
 
 from comics.comicvine.client import (
     ComicVineAPIError,
@@ -21,6 +23,8 @@ from comics.models import ComicVolume
 
 
 USER_AGENT = "EzyReadComics refresh_missing_volume_list_data"
+
+DEFAULT_API_ERROR_RETRY_DELAY = 90 * 60
 
 
 class Command(BaseCommand):
@@ -64,7 +68,26 @@ class Command(BaseCommand):
             "--request-delay",
             type=float,
             default=3.0,
-            help="Seconds to wait between volume batches. Defaults to 3.",
+            help="Seconds to wait between successful volume batches. Defaults to 3.",
+        )
+
+        parser.add_argument(
+            "--api-error-retry-delay",
+            type=float,
+            default=DEFAULT_API_ERROR_RETRY_DELAY,
+            help=(
+                "Seconds to pause after a Comic Vine/API/web error before retrying. "
+                "Defaults to 5400 seconds, which is 90 minutes."
+            ),
+        )
+
+        parser.add_argument(
+            "--stop-on-api-error",
+            action="store_true",
+            help=(
+                "Stop immediately on a Comic Vine/API/web error instead of pausing "
+                "and retrying. Dry runs always behave this way."
+            ),
         )
 
         parser.add_argument(
@@ -79,7 +102,11 @@ class Command(BaseCommand):
         volume_limit = options["volume_limit"]
         volume_ids = parse_volume_ids(options["volume_ids"])
         request_delay = options["request_delay"]
+        api_error_retry_delay = options["api_error_retry_delay"]
         dry_run = options["dry_run"]
+
+        # Dry runs should never trap you in a 90-minute retry pause.
+        stop_on_api_error = options["stop_on_api_error"] or dry_run
 
         if dry_run and max_batches is None:
             max_batches = 1
@@ -89,9 +116,12 @@ class Command(BaseCommand):
             max_batches=max_batches,
             volume_limit=volume_limit,
             request_delay=request_delay,
+            api_error_retry_delay=api_error_retry_delay,
         )
 
         api_key = get_comicvine_api_key()
+
+        close_old_connections()
 
         local_volumes = get_selected_volumes(
             volume_ids=volume_ids,
@@ -124,6 +154,13 @@ class Command(BaseCommand):
         else:
             self.stdout.write(f"Batch cap: {max_batches}")
 
+        if stop_on_api_error:
+            self.stdout.write("API/web error handling: stop immediately")
+        else:
+            self.stdout.write(
+                f"API/web error handling: pause {api_error_retry_delay} seconds, then retry"
+            )
+
         if not batches:
             self.stdout.write("")
             self.stdout.write(self.style.SUCCESS("No volumes selected."))
@@ -131,9 +168,17 @@ class Command(BaseCommand):
 
         total_result = build_empty_result()
         stopped_by_api_error = False
+        api_errors_seen = 0
+        api_error_retries = 0
+        batch_index = 0
 
         with create_comicvine_session(USER_AGENT) as session:
-            for batch_number, local_volume_batch in enumerate(batches, start=1):
+            while batch_index < len(batches):
+                close_old_connections()
+
+                local_volume_batch = batches[batch_index]
+                batch_number = batch_index + 1
+
                 if batch_number > 1:
                     sleep_if_needed(request_delay)
 
@@ -150,17 +195,45 @@ class Command(BaseCommand):
                         local_volume_batch=local_volume_batch,
                         dry_run=dry_run,
                     )
-                except ComicVineAPIError as error:
-                    stopped_by_api_error = True
+                except (ComicVineAPIError, RequestException) as error:
+                    api_errors_seen += 1
+
                     self.stdout.write("")
-                    self.stdout.write(self.style.ERROR("Comic Vine stopped the run."))
+                    self.stdout.write(self.style.ERROR("Comic Vine/API/web error."))
                     self.stdout.write(str(error))
                     self.stdout.write("")
+
+                    if stop_on_api_error:
+                        stopped_by_api_error = True
+                        self.stdout.write(
+                            "Progress from completed batches was saved. "
+                            "The current batch was not marked complete. "
+                            "Run this command again later to continue."
+                        )
+                        break
+
+                    api_error_retries += 1
+
                     self.stdout.write(
                         "Progress from completed batches was saved. "
-                        "Run this command again later to continue."
+                        "The current batch was not marked complete."
                     )
-                    break
+                    self.stdout.write(
+                        f"Pausing for {format_seconds(api_error_retry_delay)} before retrying "
+                        f"volume batch {batch_number}."
+                    )
+
+                    sleep_if_needed(api_error_retry_delay)
+
+                    self.stdout.write("")
+                    self.stdout.write(
+                        self.style.WARNING(
+                            "Retrying after API/web error. Press Ctrl+C to stop the command."
+                        )
+                    )
+
+                    # Do not advance batch_index. Retry the same batch.
+                    continue
 
                 merge_result(total_result, batch_result)
 
@@ -176,6 +249,8 @@ class Command(BaseCommand):
                     dry_run=dry_run,
                 )
 
+                batch_index += 1
+
         self.stdout.write("")
         self.stdout.write(self.style.SUCCESS("Run complete."))
         print_total_summary(
@@ -183,14 +258,17 @@ class Command(BaseCommand):
             result=total_result,
             dry_run=dry_run,
         )
+        self.stdout.write(f"API/web errors seen: {api_errors_seen}")
+        self.stdout.write(f"API/web error retries: {api_error_retries}")
 
         if dry_run:
             self.stdout.write("Dry run only. No database changes were saved.")
         elif stopped_by_api_error:
-            self.stdout.write("Stopped early because Comic Vine returned an API error.")
+            self.stdout.write("Stopped early because Comic Vine returned an API/web error.")
         elif max_batches is not None and len(batches) >= max_batches:
             self.stdout.write("Stopped at the batch cap. Run again to continue.")
         else:
+            close_old_connections()
             remaining_count = get_matching_volume_count(volume_ids=volume_ids)
 
             if volume_ids:
@@ -442,34 +520,47 @@ def print_total_summary(*, command, result, dry_run):
             f"  Unexpected volumes returned: {result['unexpected_volumes_returned']}"
         )
 
+    if result["field_update_counts"]:
+        command.stdout.write("")
+        command.stdout.write("Field update counts:")
 
-def parse_volume_ids(value):
-    if not value:
+        for field_name, count in sorted(result["field_update_counts"].items()):
+            command.stdout.write(f"  {field_name}: {count}")
+
+
+def parse_volume_ids(raw_value):
+    if not raw_value:
         return []
 
     volume_ids = []
 
-    for raw_value in value.split(","):
-        raw_value = raw_value.strip()
+    for raw_id in raw_value.split(","):
+        raw_id = raw_id.strip()
 
-        if not raw_value:
+        if not raw_id:
             continue
 
         try:
-            volume_id = int(raw_value)
+            volume_id = int(raw_id)
         except ValueError as error:
-            raise CommandError("--volume-ids must contain plain integer IDs.") from error
+            raise CommandError(f"Invalid volume ID: {raw_id}") from error
 
         if volume_id < 1:
-            raise CommandError("--volume-ids must contain positive integer IDs.")
+            raise CommandError(f"Volume ID must be greater than 0: {volume_id}")
 
-        if volume_id not in volume_ids:
-            volume_ids.append(volume_id)
+        volume_ids.append(volume_id)
 
     return volume_ids
 
 
-def validate_command_options(*, batch_size, max_batches, volume_limit, request_delay):
+def validate_command_options(
+    *,
+    batch_size,
+    max_batches,
+    volume_limit,
+    request_delay,
+    api_error_retry_delay,
+):
     if batch_size < 1:
         raise CommandError("--batch-size must be at least 1.")
 
@@ -485,7 +576,29 @@ def validate_command_options(*, batch_size, max_batches, volume_limit, request_d
     if request_delay < 0:
         raise CommandError("--request-delay cannot be negative.")
 
+    if api_error_retry_delay < 0:
+        raise CommandError("--api-error-retry-delay cannot be negative.")
 
-def sleep_if_needed(request_delay):
-    if request_delay > 0:
-        time.sleep(request_delay)
+
+def format_seconds(seconds):
+    seconds = int(seconds)
+    minutes = seconds // 60
+
+    if seconds == DEFAULT_API_ERROR_RETRY_DELAY:
+        return "90 minutes"
+
+    if seconds % 3600 == 0:
+        hours = seconds // 3600
+        return f"{hours} hour{'s' if hours != 1 else ''}"
+
+    if seconds % 60 == 0:
+        return f"{minutes} minute{'s' if minutes != 1 else ''}"
+
+    return f"{seconds} seconds"
+
+
+def sleep_if_needed(delay):
+    if delay > 0:
+        time.sleep(delay)
+
+    close_old_connections()
