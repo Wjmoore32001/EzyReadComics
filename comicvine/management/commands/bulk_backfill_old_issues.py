@@ -1,3 +1,4 @@
+from datetime import date, timedelta
 import time
 
 from django.core.management.base import BaseCommand, CommandError
@@ -12,55 +13,43 @@ from comicvine.api.client import (
 )
 from comicvine.api.fields import ISSUE_LIST_FIELDS
 from comicvine.api.parsing import build_day_filter, clean_text
-from comicvine.models import ComicVineDateScan
+from comicvine.models import ComicVineDateScan, ComicVineSyncState
 from comicvine.services.sync.issues import save_issue_list_data
 from comicvine.services.sync.results import IssueListSaveResult
 from comicvine.services.sync.scans import (
+    DEFAULT_SYNC_STATE_NAME,
     advance_date_scan_after_page,
-    get_default_current_import_start_date,
-    get_next_incomplete_date_scan,
-    get_or_initialize_default_sync_state,
     parse_scan_date,
-    validate_date_window,
 )
 
 
-USER_AGENT = "EzyReadComics bulk_import_new_issues"
+USER_AGENT = "EzyReadComics bulk_backfill_old_issues"
 
+DEFAULT_OLDEST_BACKFILL_DATE = date(1930, 1, 1)
 DEFAULT_API_ERROR_RETRY_DELAY = 90 * 60
-
-SCAN_PHASES = [
-    {
-        "title": "Issues added on Comic Vine",
-        "scan_kind": ComicVineDateScan.ISSUE_DATE_ADDED,
-        "comicvine_field": "date_added",
-    },
-    {
-        "title": "Issues updated on Comic Vine",
-        "scan_kind": ComicVineDateScan.ISSUE_DATE_LAST_UPDATED,
-        "comicvine_field": "date_last_updated",
-    },
-]
 
 
 class Command(BaseCommand):
     help = (
-        "Import current Comic Vine issues using completed date_added and "
-        "date_last_updated days."
+        "Backfill older Comic Vine issues using completed historical date_added days. "
+        "This does not call detail endpoints or hydrate credits."
     )
 
     def add_arguments(self, parser):
         parser.add_argument(
-            "--start-date",
+            "--oldest-date",
             help=(
-                "YYYY-MM-DD. Only used when ComicVineSyncState has no "
-                "update_tracking_start_date yet. Defaults to yesterday."
+                "YYYY-MM-DD. Oldest date_added day to backfill. "
+                "Defaults to 1930-01-01."
             ),
         )
 
         parser.add_argument(
-            "--end-date",
-            help="YYYY-MM-DD. Defaults to yesterday so only completed days are scanned.",
+            "--newest-date",
+            help=(
+                "YYYY-MM-DD. Newest date_added day to backfill. "
+                "Defaults to the day before ComicVineSyncState.update_tracking_start_date."
+            ),
         )
 
         parser.add_argument(
@@ -75,10 +64,10 @@ class Command(BaseCommand):
             type=int,
             default=None,
             help=(
-                "Optional maximum successful pages to fetch for each scan type this run. "
-                "If omitted during a real run, the command keeps going until all "
-                "available completed-day work is caught up. "
-                "Dry runs default to 1 page per scan type."
+                "Optional maximum pages to fetch this run. "
+                "If omitted during a real run, the command keeps going until the "
+                "backfill range is caught up. "
+                "Dry runs default to 1 page."
             ),
         )
 
@@ -86,7 +75,7 @@ class Command(BaseCommand):
             "--request-delay",
             type=float,
             default=3.0,
-            help="Seconds to wait between successful API pages/phases. Defaults to 3.",
+            help="Seconds to wait between successful API pages. Defaults to 3.",
         )
 
         parser.add_argument(
@@ -115,9 +104,13 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        provided_start_date = parse_scan_date(options["start_date"])
-        default_completed_day = get_default_current_import_start_date()
-        end_date = parse_scan_date(options["end_date"]) or default_completed_day
+        sync_state = get_existing_sync_state()
+
+        current_import_start_date = sync_state.update_tracking_start_date
+        default_newest_date = current_import_start_date - timedelta(days=1)
+
+        oldest_date = parse_scan_date(options["oldest_date"]) or DEFAULT_OLDEST_BACKFILL_DATE
+        newest_date = parse_scan_date(options["newest_date"]) or default_newest_date
 
         page_size = options["page_size"]
         max_pages = options["max_pages"]
@@ -131,6 +124,9 @@ class Command(BaseCommand):
             max_pages = 1
 
         validate_command_options(
+            oldest_date=oldest_date,
+            newest_date=newest_date,
+            current_import_start_date=current_import_start_date,
             page_size=page_size,
             max_pages=max_pages,
             request_delay=request_delay,
@@ -139,26 +135,17 @@ class Command(BaseCommand):
 
         api_key = get_comicvine_api_key()
 
-        close_old_connections()
-
-        sync_state, state_created, state_initialized = get_or_initialize_default_sync_state(
-            start_date=provided_start_date,
-            dry_run=dry_run,
-        )
-
-        start_date = sync_state.update_tracking_start_date
-        validate_date_window(start_date, end_date)
-
         self.stdout.write("")
-        self.stdout.write(self.style.SUCCESS("Bulk import current Comic Vine issues"))
+        self.stdout.write(self.style.SUCCESS("Bulk backfill older Comic Vine issues"))
         self.stdout.write(f"Mode: {'dry run' if dry_run else 'writing to database'}")
-        self.stdout.write(f"Import date range: {start_date} through {end_date}")
+        self.stdout.write(f"Backfill date range: {oldest_date} through {newest_date}")
+        self.stdout.write(f"Current import starts at: {current_import_start_date}")
         self.stdout.write(f"Page size: {page_size}")
 
         if max_pages is None:
-            self.stdout.write("Page cap per phase: no limit")
+            self.stdout.write("Page cap: no limit")
         else:
-            self.stdout.write(f"Page cap per phase: {max_pages}")
+            self.stdout.write(f"Page cap: {max_pages}")
 
         if stop_on_api_error:
             self.stdout.write("API/web error handling: stop immediately")
@@ -167,96 +154,61 @@ class Command(BaseCommand):
                 f"API/web error handling: pause {api_error_retry_delay} seconds, then retry"
             )
 
-        if state_created or state_initialized:
-            self.stdout.write("")
-
-            if dry_run:
-                self.stdout.write(
-                    self.style.WARNING(
-                        f"Import start date would be initialized to {start_date}."
-                    )
-                )
-            else:
-                self.stdout.write(
-                    self.style.WARNING(
-                        f"Import start date initialized to {start_date}."
-                    )
-                )
-
-        total_pages_processed = 0
-        total_api_errors_seen = 0
-        total_api_error_retries = 0
-        stopped_by_api_error = False
-        phase_results = []
-
         with create_comicvine_session(USER_AGENT) as session:
-            for phase_index, phase in enumerate(SCAN_PHASES, start=1):
-                if phase_index > 1:
-                    sleep_if_needed(request_delay)
-
-                self.stdout.write("")
-                self.stdout.write("#" * 80)
-                self.stdout.write(
-                    f"Phase {phase_index} of {len(SCAN_PHASES)}: {phase['title']}"
-                )
-                self.stdout.write("#" * 80)
-
-                phase_result = run_scan_phase(
-                    command=self,
-                    session=session,
-                    api_key=api_key,
-                    phase=phase,
-                    start_date=start_date,
-                    end_date=end_date,
-                    page_size=page_size,
-                    max_pages=max_pages,
-                    request_delay=request_delay,
-                    api_error_retry_delay=api_error_retry_delay,
-                    stop_on_api_error=stop_on_api_error,
-                    dry_run=dry_run,
-                )
-
-                phase_results.append(phase_result)
-                total_pages_processed += phase_result["pages_processed"]
-                total_api_errors_seen += phase_result["api_errors_seen"]
-                total_api_error_retries += phase_result["api_error_retries"]
-
-                if phase_result["stopped_by_api_error"]:
-                    stopped_by_api_error = True
-                    break
-
-        all_phases_caught_up = (
-            len(phase_results) == len(SCAN_PHASES)
-            and all(phase_result["caught_up"] for phase_result in phase_results)
-        )
+            run_result = run_backfill_scan(
+                command=self,
+                session=session,
+                api_key=api_key,
+                oldest_date=oldest_date,
+                newest_date=newest_date,
+                page_size=page_size,
+                max_pages=max_pages,
+                request_delay=request_delay,
+                api_error_retry_delay=api_error_retry_delay,
+                stop_on_api_error=stop_on_api_error,
+                dry_run=dry_run,
+            )
 
         self.stdout.write("")
         self.stdout.write(self.style.SUCCESS("Run complete."))
-        self.stdout.write(f"Total pages processed: {total_pages_processed}")
-        self.stdout.write(f"API/web errors seen: {total_api_errors_seen}")
-        self.stdout.write(f"API/web error retries: {total_api_error_retries}")
+        self.stdout.write(f"Pages processed: {run_result['pages_processed']}")
+        self.stdout.write(f"API/web errors seen: {run_result['api_errors_seen']}")
+        self.stdout.write(f"API/web error retries: {run_result['api_error_retries']}")
 
         if dry_run:
             self.stdout.write("Dry run only. No database changes were saved.")
-        elif stopped_by_api_error:
+        elif run_result["stopped_by_api_error"]:
             self.stdout.write("Stopped early because Comic Vine returned an API/web error.")
-        elif all_phases_caught_up:
-            self.stdout.write("Caught up through the selected import date range.")
+        elif run_result["caught_up"]:
+            self.stdout.write("Backfill caught up through the selected date range.")
         else:
             self.stdout.write(
-                "Stopped at the page cap before all scans were confirmed complete. "
+                "Stopped at the page cap before the backfill range was confirmed complete. "
                 "Run again to continue."
             )
 
 
-def run_scan_phase(
+def get_existing_sync_state():
+    sync_state = ComicVineSyncState.objects.filter(
+        name=DEFAULT_SYNC_STATE_NAME,
+    ).first()
+
+    if not sync_state or not sync_state.update_tracking_start_date:
+        raise CommandError(
+            "ComicVineSyncState.update_tracking_start_date is missing. "
+            "Run bulk_import_new_issues first so backfill knows where current importing starts."
+        )
+
+    return sync_state
+
+
+def run_backfill_scan(
     *,
     command,
     session,
     api_key,
-    phase,
-    start_date,
-    end_date,
+    oldest_date,
+    newest_date,
     page_size,
     max_pages,
     request_delay,
@@ -269,16 +221,14 @@ def run_scan_phase(
     stopped_by_api_error = False
     api_errors_seen = 0
     api_error_retries = 0
-    scan_kind = phase["scan_kind"]
-    comicvine_field = phase["comicvine_field"]
 
     while max_pages is None or pages_processed < max_pages:
         close_old_connections()
 
-        scan, scan_created = get_next_incomplete_date_scan(
-            scan_kind=scan_kind,
-            start_date=start_date,
-            end_date=end_date,
+        scan, scan_created = get_next_backfill_date_scan(
+            scan_kind=ComicVineDateScan.ISSUE_DATE_ADDED,
+            oldest_date=oldest_date,
+            newest_date=newest_date,
             dry_run=dry_run,
         )
 
@@ -286,9 +236,7 @@ def run_scan_phase(
             caught_up = True
             command.stdout.write("")
             command.stdout.write(
-                command.style.SUCCESS(
-                    f"No incomplete {comicvine_field} scans remain."
-                )
+                command.style.SUCCESS("No incomplete backfill date_added scans remain.")
             )
             break
 
@@ -296,9 +244,9 @@ def run_scan_phase(
             command.stdout.write("")
             command.stdout.write(
                 command.style.WARNING(
-                    f"Scan progress would be created for {comicvine_field} {scan.scan_date}."
+                    f"Backfill progress would be created for date_added {scan.scan_date}."
                     if dry_run
-                    else f"Scan progress created for {comicvine_field} {scan.scan_date}."
+                    else f"Backfill progress created for date_added {scan.scan_date}."
                 )
             )
 
@@ -306,7 +254,7 @@ def run_scan_phase(
 
         command.stdout.write("")
         command.stdout.write("=" * 80)
-        command.stdout.write(f"Scanning {comicvine_field}: {scan.scan_date}")
+        command.stdout.write(f"Backfilling date_added: {scan.scan_date}")
         command.stdout.write(f"Offset: {starting_offset}")
         command.stdout.write("=" * 80)
 
@@ -314,11 +262,11 @@ def run_scan_phase(
             response_data = fetch_issues_page(
                 session,
                 api_key,
-                filter_value=build_day_filter(comicvine_field, scan.scan_date),
+                filter_value=build_day_filter("date_added", scan.scan_date),
                 fields=ISSUE_LIST_FIELDS,
                 offset=starting_offset,
                 limit=page_size,
-                sort=f"{comicvine_field}:asc",
+                sort="date_added:asc",
             )
         except (ComicVineAPIError, RequestException) as error:
             api_errors_seen += 1
@@ -345,7 +293,7 @@ def run_scan_phase(
             )
             command.stdout.write(
                 f"Pausing for {format_seconds(api_error_retry_delay)} before retrying "
-                f"{comicvine_field} {scan.scan_date} at offset {starting_offset}."
+                f"date_added {scan.scan_date} at offset {starting_offset}."
             )
 
             sleep_if_needed(api_error_retry_delay)
@@ -401,15 +349,13 @@ def run_scan_phase(
         if progress_result.completed:
             command.stdout.write("")
             command.stdout.write(
-                command.style.SUCCESS(
-                    f"Completed {comicvine_field}: {scan.scan_date}"
-                )
+                command.style.SUCCESS(f"Completed date_added: {scan.scan_date}")
             )
         else:
             command.stdout.write("")
             command.stdout.write(
                 command.style.WARNING(
-                    f"{comicvine_field} date not complete yet. "
+                    f"date_added date not complete yet. "
                     f"Next offset: {progress_result.ending_offset}"
                 )
             )
@@ -425,13 +371,75 @@ def run_scan_phase(
     }
 
 
+def get_next_backfill_date_scan(*, scan_kind, oldest_date, newest_date, dry_run=False):
+    current_date = newest_date
+
+    while current_date >= oldest_date:
+        scan = ComicVineDateScan.objects.filter(
+            scan_kind=scan_kind,
+            scan_date=current_date,
+        ).first()
+
+        if scan:
+            if not scan.completed:
+                return scan, False
+
+            current_date -= timedelta(days=1)
+            continue
+
+        if dry_run:
+            scan = ComicVineDateScan(
+                scan_kind=scan_kind,
+                scan_date=current_date,
+                next_offset=0,
+                total_results=0,
+                completed=False,
+            )
+            return scan, True
+
+        scan, created = ComicVineDateScan.objects.get_or_create(
+            scan_kind=scan_kind,
+            scan_date=current_date,
+            defaults={
+                "next_offset": 0,
+                "total_results": 0,
+                "completed": False,
+            },
+        )
+
+        if not scan.completed:
+            return scan, created
+
+        current_date -= timedelta(days=1)
+
+    return None, False
+
+
 def validate_command_options(
     *,
+    oldest_date,
+    newest_date,
+    current_import_start_date,
     page_size,
     max_pages,
     request_delay,
     api_error_retry_delay,
 ):
+    if oldest_date is None:
+        raise CommandError("--oldest-date is required.")
+
+    if newest_date is None:
+        raise CommandError("--newest-date is required.")
+
+    if oldest_date > newest_date:
+        raise CommandError("--oldest-date cannot be later than --newest-date.")
+
+    if newest_date >= current_import_start_date:
+        raise CommandError(
+            "--newest-date must be earlier than the current import start date. "
+            "This prevents backfill from overlapping the current import command."
+        )
+
     if page_size < 1:
         raise CommandError("--page-size must be at least 1.")
 
