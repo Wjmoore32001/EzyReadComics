@@ -140,6 +140,9 @@ class ComicVolume(ImageUrlFields):
     title = models.CharField(max_length=500)
     volume_number = models.CharField(max_length=50, blank=True)
 
+    first_issue_number = models.CharField(max_length=50, blank=True)
+    last_issue_number = models.CharField(max_length=50, blank=True)
+
     release_date = models.DateField(null=True, blank=True)
     issue_count = models.PositiveIntegerField(null=True, blank=True)
 
