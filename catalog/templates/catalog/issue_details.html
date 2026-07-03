@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+
+{% block title %}{{ issue }} - EzyReadComics{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+    <a href="{% url 'catalog:browse' %}?run={{ issue.run.id }}" class="btn btn-outline-secondary btn-sm mb-3">
+        Back to run browse
+    </a>
+
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
+        <div>
+            <p class="text-primary fw-semibold mb-2">Issue</p>
+            <h1 class="mb-1">
+                {{ issue.run.title }} #{{ issue.issue_number }}
+            </h1>
+
+            {% if issue.title %}
+                <p class="lead text-secondary mb-0">{{ issue.title }}</p>
+            {% else %}
+                <p class="lead text-secondary mb-0">No issue title entered</p>
+            {% endif %}
+        </div>
+
+        <a href="/admin/catalog/comicissue/{{ issue.id }}/change/" class="btn btn-outline-light">
+            Edit in admin
+        </a>
+    </div>
+</div>
+
+<div class="card border-primary mb-4">
+    <div class="table-responsive">
+        <table class="table table-dark table-hover align-middle mb-0">
+            <thead>
+            <tr>
+                <th>Type</th>
+                <th>Name</th>
+                <th>Info</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr
+                class="clickable-row"
+                data-row-url="{% url 'catalog:run_details' issue.run.id %}"
+            >
+                <td>
+                    <span class="badge text-bg-primary">Run</span>
+                </td>
+                <td>
+                    <a href="{% url 'catalog:run_details' issue.run.id %}">
+                        {{ issue.run }}
+                    </a>
+                </td>
+                <td class="text-secondary">
+                    {{ issue.run.publisher.name }}
+                </td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-md-4">
+        <div class="card border-secondary h-100">
+            <div class="card-body">
+                <div class="small-muted">Publisher</div>
+                <div class="h5 mb-0">{{ issue.run.publisher.name }}</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card border-secondary h-100">
+            <div class="card-body">
+                <div class="small-muted">Store date</div>
+                <div class="h5 mb-0">{{ issue.store_date|date:"Y-m-d"|default:"—" }}</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card border-secondary h-100">
+            <div class="card-body">
+                <div class="small-muted">Cover date</div>
+                <div class="h5 mb-0">{{ issue.cover_date|date:"Y-m-d"|default:"—" }}</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if issue.description %}
+    <div class="card border-secondary mb-4">
+        <div class="card-body">
+            <h2 class="h4">Description</h2>
+            <p class="description-block mb-0">{{ issue.description }}</p>
+        </div>
+    </div>
+{% endif %}
+
+{% if default_credits %}
+    <div class="card border-secondary mb-4">
+        <div class="card-body">
+            <h2 class="h4">Main credits</h2>
+
+            <div class="table-responsive">
+                <table class="table table-dark align-middle mb-0">
+                    <thead>
+                    <tr>
+                        <th>Role</th>
+                        <th>Person</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    {% for credit in default_credits %}
+                        <tr>
+                            <td>{{ credit.role.name }}</td>
+                            <td>{{ credit.person.name }}</td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            {% if all_credits|length > default_credits|length %}
+                <details class="mt-3">
+                    <summary>Show all credits</summary>
+                    <div class="table-responsive mt-3">
+                        <table class="table table-dark align-middle mb-0">
+                            <thead>
+                            <tr>
+                                <th>Role</th>
+                                <th>Person</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            {% for credit in all_credits %}
+                                <tr>
+                                    <td>{{ credit.role.name }}</td>
+                                    <td>{{ credit.person.name }}</td>
+                                </tr>
+                            {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </details>
+            {% endif %}
+        </div>
+    </div>
+{% endif %}
+
+<div>
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 class="h4 mb-0">Collected in</h2>
+        <span class="badge text-bg-secondary">{{ collected_in|length }}</span>
+    </div>
+
+    <div class="card border-secondary">
+        <div class="table-responsive">
+            <table class="table table-dark table-hover align-middle mb-0">
+                <thead>
+                <tr>
+                    <th>Volume</th>
+                    <th>Issue order</th>
+                    <th>Release date</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for link in collected_in %}
+                    <tr
+                        class="clickable-row"
+                        data-row-url="{% url 'catalog:volume_details' link.volume.id %}"
+                    >
+                        <td>
+                            <a href="{% url 'catalog:volume_details' link.volume.id %}">
+                                {{ link.volume }}
+                            </a>
+                        </td>
+                        <td>{{ link.issue_order|default:"—" }}</td>
+                        <td>{{ link.volume.release_date|date:"Y-m-d"|default:"—" }}</td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <td colspan="3" class="text-secondary">
+                            This issue has not been linked to a collected volume yet.
+                        </td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
