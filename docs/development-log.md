@@ -1,815 +1,114 @@
 # Development Log
-## 2026-06-29 — Hardened Comic Vine Commands and Added Alternating Local Runner
 
-Improved the Comic Vine management commands for safer reruns, fewer repeated HTTP connection setups, and better protection against partial writes.
+A concise history of EzyReadComics development.
 
-Commands updated:
-
-```text
-add_issues.py
-update_issues.py
-update_volumes.py
-hydrate_volumes.py
-hydrate_issues.py
-backfill_issues.py
-
-## 2026-06-29 — Added Central Browse Page and Split Comics Views
-
-Replaced the temporary separate issue and volume browsing pages with a centralized Browse page.
-
-Before this change, the project had separate pages for:
-
-```text
-/issues/
-/volumes/
-```
-
-Those pages were useful for confirming that imported data could be displayed, but they were not the right long-term browsing structure.
-
-The new central browsing route is:
-
-```text
-/browse/
-```
-
-The old routes are still kept so links do not break:
-
-```text
-/issues/
-/volumes/
-```
-
-They now use the new Browse behavior instead of remaining separate UI tabs.
-
-Browse behavior:
-
-* Publisher filter is available first.
-* Run filter becomes useful after a publisher is selected.
-* Issue filter becomes useful after a run is selected.
-* Searchable dropdowns are used for publisher, run, and issue selection.
-* Runs display their start year so repeated run names stay clear.
-* Browse results are paginated.
-* Selecting a run changes the result table from runs to issues.
-* Selecting an issue narrows the result table to that issue.
-* Comic Vine links remain available for runs and issues.
-
-The UI now treats Comic Vine volumes as user-facing comic runs.
-
-For example:
-
-```text
-X-Men (2024)
-```
-
-is displayed as a run, even though the database model remains `ComicVolume`.
-
-Code organization also changed.
-
-The old single file was removed:
-
-```text
-comics/views.py
-```
-
-It was replaced with a package:
-
-```text
-comics/views/
-    __init__.py
-    browse.py
-    home.py
-```
-
-A new selector module was added:
-
-```text
-comics/selectors.py
-```
-
-Purpose of `selectors.py`:
-
-* keep reusable database queries out of view files
-* provide publisher, run, and issue query helpers
-* make future current-era and user-reading features easier to build without duplicating query logic
-
-Templates updated:
-
-```text
-comics/templates/comics/base.html
-comics/templates/comics/home.html
-comics/templates/comics/browse.html
-```
-
-Templates removed:
-
-```text
-comics/templates/comics/issues.html
-comics/templates/comics/volumes.html
-```
-
-The shared base template also received a stronger dark/blue visual direction.
-
-Current UI style direction:
-
-* dark panels
-* cyan/blue active controls
-* searchable dropdowns
-* clear table layouts
-* visible hover/active states
-* no large all-issues dropdown by default
-
-This change does not add user accounts, read tracking, reading-order logic, or detail pages. It is a frontend and structure cleanup step before building accounts and user-specific reading features.
-
-## 2026-06-28 — Added Searchable Publisher Dropdowns
-
-Updated the publisher filters on the issue and volume pages.
-
-Before this change, both pages used a normal publisher `<select>` dropdown.
-
-That worked, but the publisher list was getting long enough that scrolling through it was becoming annoying.
-
-The issue and volume pages now use Bootstrap dropdown controls with a search input inside the dropdown.
-
-Behavior:
-
-* The dropdown still filters by the same `publisher` GET parameter.
-* Typing in the search box filters the visible publisher options immediately.
-* Selecting a publisher submits the form.
-* The selected publisher is shown on the dropdown button.
-* The clear button still returns the page to all publishers.
-
-Pages updated:
-
-```text
-/issues/
-/volumes/
-```
-
-No backend changes were needed because the existing views already supported publisher filtering through `request.GET["publisher"]`.
-
-## 2026-06-28 — Added Scheduled GitHub Action for Comic Vine Sync
-
-Added a GitHub Actions workflow for automatic Comic Vine syncing.
-
-Workflow file:
-
-```text
-.github/workflows/sheduled_sync_comics.yml
-```
-
-The workflow can run in two ways:
-
-* manually through `workflow_dispatch`
-* automatically through scheduled cron runs
-
-The schedule currently runs twice every three-hour window:
-
-```yaml
-- cron: "17 0-23/3 * * *"
-- cron: "47 1-23/3 * * *"
-```
-
-The workflow uses concurrency control:
-
-```yaml
-concurrency:
-  group: comicvine-sync
-  cancel-in-progress: false
-```
-
-This prevents overlapping Comic Vine sync jobs from running at the same time.
-
-Workflow steps:
-
-1. Check out the repository.
-2. Set up Python 3.13.
-3. Install dependencies from `requirements.txt`.
-4. Run Django checks.
-5. Run the full Comic Vine sync command.
-
-The workflow command is:
-
-```bash
-python manage.py sync_comics
-```
-
-Required GitHub secrets:
-
-```env
-DATABASE_URL=your_neon_database_url
-COMICVINE_API_KEY=your_comicvine_api_key
-SECRET_KEY=your_django_secret_key
-```
-
-The workflow sets:
-
-```env
-DEBUG=False
-```
-
-for the GitHub Actions environment.
-
-## 2026-06-28 — Added `sync_comics.py`
-
-Added the `sync_comics.py` management command.
-
-Purpose:
-
-* Run the Comic Vine sync commands in the recommended order.
-* Provide one command for normal full sync runs.
-* Support dry runs across the full sync sequence.
-* Stop clearly if any command in the sequence fails.
-
-Current command order:
-
-```text
-update_issues
-add_issues
-update_volumes
-add_volumes
-backfill_issues
-```
-
-Run with:
-
-```bash
-python manage.py sync_comics
-```
-
-Dry run:
-
-```bash
-python manage.py sync_comics --dry-run
-```
-
-This replaced the previous idea that the command wrapper was a future step.
-
-The individual commands still exist and can still be run separately when testing or debugging, but `sync_comics.py` is now the main command for full sync runs.
-
-## 2026-06-28 — Corrected GitHub Action Sync Command Name
-
-Corrected the GitHub Actions workflow to run the actual wrapper command name.
-
-Old workflow command:
-
-```bash
-python manage.py sync_comicvine
-```
-
-Correct workflow command:
-
-```bash
-python manage.py sync_comics
-```
-
-The project does not have a command named `sync_comicvine.py`.
-
-The wrapper command file is:
-
-```text
-comics/management/commands/sync_comics.py
-```
-
-## 2026-06-28 — Adjusted `add_volumes.py` Incomplete-Volume Criteria
-
-Updated the volume detail filler so a missing publisher alone does not keep a volume in the incomplete-volume queue forever.
-
-Problem:
-
-Some Comic Vine volume records may not have publisher data.
-
-If `add_volumes.py` treated an empty local publisher field as enough to mark a volume incomplete, then those volumes could be requested again and again even when Comic Vine had no publisher value to provide.
-
-That could waste API calls and fill the volume detail queue with records that cannot be completed further.
-
-Updated incomplete-volume criteria:
-
-```text
-name is missing
-date_added is missing
-date_last_updated is missing
-comicvine_url is missing
-```
-
-Publisher is still stored when Comic Vine provides it.
-
-Publisher is no longer used by itself as a reason to repeatedly fetch a volume detail record.
-
-The default `--volume-limit` is currently 100.
-
-## 2026-06-28 — Comic Vine Import System Split into Dedicated Commands
-
-Reworked the Comic Vine import system into separate management commands with clearer responsibilities.
-
-The current commands are:
-
-```text
-update_issues.py
-    Updates issue records by date_last_updated.
-
-add_issues.py
-    Adds new issue records by date_added inside the current sync window.
-
-update_volumes.py
-    Updates known volume records by date_last_updated.
-
-add_volumes.py
-    Fills missing details for local volumes.
-
-backfill_issues.py
-    Adds older issue records by date_added before the current sync window.
-```
-
-This replaced the earlier assumption that one issue update scan could reliably cover both new issue discovery and issue updates.
-
-The new system separates new issue discovery from existing issue updates.
-
-## 2026-06-28 — Added `update_issues.py`
-
-Added the `update_issues.py` management command.
-
-Purpose:
-
-* Scan Comic Vine `/issues` by `date_last_updated`
-* Start at yesterday
-* Work backward to `update_tracking_start_date`
-* Update existing local issues only if Comic Vine has a newer `date_last_updated`
-* Create a missing issue if Comic Vine returns an updated issue that does not exist locally
-* Create or link minimal local `ComicVolume` rows from issue response volume data
-
-Important behavior:
-
-* Does not scan today
-* Does not overwrite local issue data unless the remote `date_last_updated` is newer
-* Does not make separate volume detail API calls
-* Uses `ComicVineDateScan.ISSUE_DATE_LAST_UPDATED`
-
-This command is for issue edits and updates.
-
-## 2026-06-28 — Added `add_issues.py`
-
-Added the `add_issues.py` management command.
-
-Purpose:
-
-* Scan Comic Vine `/issues` by `date_added`
-* Start at yesterday
-* Work backward to `update_tracking_start_date`
-* Create missing local issues
-* Skip existing issues completely
-* Create or link minimal local `ComicVolume` rows from issue response volume data
-
-Important behavior:
-
-* Does not scan today
-* Does not overwrite existing issues
-* Does not make separate volume detail API calls
-* Uses `ComicVineDateScan.ISSUE_DATE_ADDED`
-
-This command exists because new Comic Vine issue records should be discovered through `date_added`, not assumed to appear in `date_last_updated` scans.
-
-## 2026-06-28 — Added `update_volumes.py`
-
-Added the `update_volumes.py` management command.
-
-Purpose:
-
-* Scan Comic Vine `/volumes` by `date_last_updated`
-* Start at yesterday
-* Work backward to `update_tracking_start_date`
-* Update existing local volumes only if Comic Vine has a newer `date_last_updated`
-* Skip unknown volumes
-
-Important behavior:
-
-* Does not scan today
-* Does not create unrelated unknown volumes
-* Uses `ComicVineDateScan.VOLUME_DATE_LAST_UPDATED`
-
-This command keeps known local volumes current without importing every updated volume from Comic Vine.
-
-## 2026-06-28 — Added `add_volumes.py`
-
-Added the `add_volumes.py` management command.
-
-Purpose:
-
-* Find local `ComicVolume` rows missing useful details
-* Fetch Comic Vine volume detail records for those incomplete local volumes
-* Fill available missing publisher, date added, date last updated, name, and URL data
-
-Important behavior:
-
-* Database-driven instead of date-scan-driven
-* Does not use `ComicVineDateScan`
-* Avoids repeated date-scan work because the database itself acts as the queue
-* Uses a per-run volume limit
-* Supports dry runs
-
-This command is the volume detail filler/hydrator.
-
-Later, the incomplete-volume criteria were adjusted so a missing publisher alone does not cause repeated volume detail requests.
-
-## 2026-06-28 — Corrected `backfill_issues.py`
-
-Corrected the historical issue backfill command to scan by `date_added`, not `date_last_updated`.
-
-Purpose:
-
-* Scan Comic Vine `/issues` by `date_added`
-* Start at the day before `update_tracking_start_date`
-* Work backward into older Comic Vine records
-* Create missing local issues
-* Skip existing issues completely
-* Create or link minimal local volume rows from issue response volume data
-
-Important behavior:
-
-* Does not overwrite existing issues
-* Does not make separate volume detail API calls
-* Uses `ComicVineDateScan.ISSUE_DATE_ADDED`
-
-This keeps the current issue adder and historical backfill aligned around issue discovery by `date_added`.
-
-## 2026-06-28 — Reduced Unnecessary Comic Vine API Calls
-
-Changed issue import/update commands so they no longer make one volume detail request per issue.
-
-Issue commands now create or link minimal local volumes using the volume object already included in the Comic Vine issue response.
-
-Missing volume details are filled later by `add_volumes.py`.
-
-This keeps issue importing cheaper and prevents repeated volume detail calls.
-
-## 2026-06-28 — Confirmed Current Recommended Run Order
-
-Confirmed the intended order for the individual sync commands.
-
-Manual command order:
-
-```bash
-python manage.py update_issues
-python manage.py add_issues
-python manage.py update_volumes
-python manage.py add_volumes
-python manage.py backfill_issues
-```
-
-Reasoning:
-
-1. `update_issues.py` catches issue edits.
-2. `add_issues.py` catches newly added issues.
-3. `update_volumes.py` refreshes known volume edits.
-4. `add_volumes.py` fills missing details for local volumes.
-5. `backfill_issues.py` spends leftover API usage on older historical issues.
-
-This order is now wrapped by:
-
-```bash
-python manage.py sync_comics
-```
-
-## 2026-06-28 — Comic Vine Sync Tracking Updated
-
-Added scan-kind support to `ComicVineDateScan`.
-
-Current scan kinds:
-
-```text
-issue_date_added
-issue_date_last_updated
-volume_date_last_updated
-```
-
-The scan kind lets multiple commands scan the same calendar date without conflicting with each other.
-
-For example:
-
-* `add_issues.py` can scan issues by `date_added`
-* `update_issues.py` can scan issues by `date_last_updated`
-* `update_volumes.py` can scan volumes by `date_last_updated`
-
-Each scan type tracks its own offset and completion state.
-
-## 2026-06-28 — Added `ComicVineSyncState`
-
-Added `ComicVineSyncState` to track global Comic Vine sync state.
-
-The main field is:
-
-```text
-update_tracking_start_date
-```
-
-This marks the beginning of the current sync window.
-
-Current sync commands scan from yesterday backward to this date.
-
-Historical backfill starts before this date and works backward.
-
-This separates global sync configuration from per-date scan progress.
-
-## 2026-06-28 — Added Scan Progress Output
-
-Updated Comic Vine scan commands to print clearer progress information for each date scan.
-
-The terminal output now shows:
-
-* total candidates for the scanned date
-* offset before the batch
-* requested batch size
-* candidates returned in the batch
-* expected checked count after the batch
-* expected remaining count after the batch
-
-This makes it easier to understand whether a date is finished, partially finished, or still has more records to scan.
-
-## 2026-06-28 — Added Basic Issue and Volume Pages
-
-Added simple issue and volume list pages.
-
-Issue page:
-
-* Shows stored issues
-* Orders by newest `store_date`
-* Includes publisher, volume, issue number, title, cover date, and Comic Vine link
-* Supports publisher filtering
-
-Volume page:
-
-* Shows stored volumes
-* Orders by latest related issue `store_date`
-* Includes publisher, volume name, stored issue count, and Comic Vine link
-* Supports publisher filtering
-
-These pages are intentionally simple and exist to confirm imported data is visible.
-
-Publisher filtering was later upgraded from normal dropdowns to searchable dropdowns.
-
-## 2026-06-28 — Added Volume List Page
-
-Added a dedicated volume list page at:
-
-```text
-/volumes/
-```
-
-The page displays stored `ComicVolume` records and shows how many local issues are connected to each volume.
-
-The page helps check whether issue imports are correctly creating and linking volumes.
-
-## 2026-06-28 — Added Issue List Page
-
-Added a dedicated issue list page at:
-
-```text
-/issues/
-```
-
-The page displays stored `ComicIssue` records.
-
-The issue table includes basic issue data such as:
-
-* store date
-* publisher
-* volume
-* issue number
-* issue title
-* cover date
-* Comic Vine link
-
-This page is the first simple way to visually confirm that Comic Vine issue data is being imported correctly.
-
-## 2026-06-28 — Added Publisher Filtering
-
-Added publisher filtering to the issue and volume pages.
-
-The publisher list is generated from publishers currently stored in the database.
-
-This allows the project to filter records by publisher without assuming every imported record belongs to one publisher.
-
-For example, future Marvel-specific views or filters can use publisher data instead of assuming all records are Marvel.
-
-Publisher filtering was later improved with searchable dropdowns.
-
-## 2026-06-28 — Updated Volume Model
-
-Added `ComicVolume` as its own model.
-
-Current purpose:
-
-* Store Comic Vine volume ID
-* Store volume name
-* Store publisher
-* Store Comic Vine date added
-* Store Comic Vine date last updated
-* Store Comic Vine URL
-* Allow issues to link to volumes through a foreign key
-
-This made the data structure cleaner than storing all volume data directly on each issue.
-
-## 2026-06-28 — Updated Issue Model
-
-Updated `ComicIssue` to support the Comic Vine import system.
-
-Current issue fields include:
-
-* Comic Vine issue ID
-* volume foreign key
-* issue number
-* issue title
-* Comic Vine date added
-* Comic Vine date last updated
-* cover date
-* store date
-* Comic Vine URL
-* image URL
-* notes
-
-The model remains intentionally simple.
-
-It still does not include reading-order connections, events, creators, characters, or story arcs.
-
-## 2026-06-28 — Publisher Field Kept Flexible
-
-Confirmed that the project should not assume Marvel as the default publisher.
-
-The `publisher` field belongs on `ComicVolume`.
-
-Publisher should remain flexible so the database can store records from any publisher.
-
-Future Marvel-specific views or filters should use:
-
-```text
-publisher = "Marvel"
-```
-
-rather than assuming all imported records are Marvel.
-
-## 2026-06-28 — Comic Vine API Chosen as Source
-
-Confirmed Comic Vine as the source for comic issue and volume data.
-
-The project uses:
-
-```text
-COMICVINE_API_KEY
-```
-
-from the `.env` file or GitHub repository secrets.
-
-The near-term goal is to populate the database with issue and volume records from Comic Vine and display them simply.
-
-No reading-order algorithm is being built yet.
-
-## 2026-06-28 — Neon/PostgreSQL Connected
-
-Connected the Django project to the Neon PostgreSQL database.
-
-The database connection is handled through environment variables, including:
-
-```text
-DATABASE_URL
-```
-
-This allows the app to use a real PostgreSQL database instead of local SQLite for the main project data.
-
-## 2026-06-28 — Environment Variables Added
-
-Added `.env` support for project secrets and database configuration.
-
-Important environment variables include:
-
-```env
-DATABASE_URL=your_neon_database_url
-COMICVINE_API_KEY=your_comicvine_api_key
-SECRET_KEY=your_django_secret_key
-DEBUG=True
-```
-
-This keeps secrets and local configuration out of the codebase.
-
-GitHub Actions also uses repository secrets for:
-
-```env
-DATABASE_URL
-COMICVINE_API_KEY
-SECRET_KEY
-```
-
-## 2026-06-28 — Django App Structure Created
-
-Created the basic Django project/app structure.
-
-The comics app is responsible for the comic-related models, views, templates, and management commands.
-
-The project now has a foundation for:
-
-* models
-* migrations
-* views
-* templates
-* management commands
-* database-backed pages
-
-## 2026-06-28 — Bootstrap Dark Layout Added
-
-Added a shared Bootstrap-based layout.
-
-The shared base template gives the project a consistent page structure.
-
-The layout includes navigation between the main pages, including:
-
-* home
-* issues
-* volumes
-
-The visual design is intentionally simple while the backend import system is still being built.
-
-## 2026-06-28 — Homepage Added
-
-Added a simple homepage at:
-
-```text
-/
-```
-
-The homepage gives the Django project a basic landing page before the issue and volume pages are expanded further.
-
-## 2026-06-28 — Project Restarted with Simpler Scope
-
-Restarted the EzyReadComics data model with a simpler scope.
-
-The current goal is to import and display basic comic issue and volume data first.
-
-Explicitly postponed:
-
-* reading-order logic
-* issue-to-issue connections
-* event structure
-* character data
-* creator data
-* story arcs
-* complex recommendation logic
-
-The project will evolve gradually as the data needs become clearer.
-
-## 2026-06-28 — Git/GitHub Project Setup
-
-Set up the project with Git/GitHub.
-
-Repository:
-
-```text
-https://github.com/Wjmoore32001/EzyReadComics
-```
-
-The project is being developed incrementally with documentation updates before commits when possible.
+The README explains the current product goal and current project state. This file only tracks major development milestones.
 
 ## Current Status
 
-The project currently has:
+EzyReadComics is a Django web app being built to help readers find comic runs, understand where to start, browse useful comic information, and eventually track their own reading.
 
-* Django project structure
-* comics app
-* Neon/PostgreSQL connection
-* `.env` configuration
-* GitHub Actions secret support
-* Comic Vine API key support
-* simple homepage
-* centralized Browse page
-* legacy `/issues/` and `/volumes/` routes pointing to Browse behavior
-* searchable publisher dropdown
-* searchable run dropdown
-* searchable issue dropdown
-* paginated run browsing
-* paginated issue browsing
-* dark/blue Bootstrap-based UI direction
-* split comics view package
-* reusable comics selector helpers
-* `ComicIssue` model
-* `ComicVolume` model
-* `ComicPerson` model
-* `ComicCreditRole` model
-* `ComicIssuePersonCredit` model
-* `ComicVolumePersonCredit` model
-* `ComicVineDateScan` model
-* `ComicVineSyncState` model
-* current issue updater
-* current issue adder
-* current volume updater
-* volume detail hydration
-* issue detail hydration
-* historical issue backfill command
-* full sync wrapper command
-* scheduled GitHub Actions sync workflow
+Current project areas:
 
-The import system is split into safer, smaller commands.
+- `accounts` handles signup, login, logout, account settings, username changes, and password changes.
+- `comicvine` stores source data imported from Comic Vine.
+- `catalog` stores confirmed app-facing comic data.
+- `ingestion` exists as a future review/staging layer between source data and confirmed catalog data.
+- `reading` exists for future user reading-tracking features.
+- The site currently has catalog home, browse, run details, issue details, and collected-volume details pages.
+- Comic Vine backfill/import work is ongoing.
+- User reading tracking and recommendation features are not built yet.
 
-The normal full-sync entry point is now:
+## Timeline
 
-```bash
-python manage.py sync_comics
-```
+### 2026-07-03
 
-The next likely step is to add a dedicated accounts app with basic login, logout, and signup pages before building user-specific reading tracking.
+- Added the current catalog homepage.
+- Added the current catalog browse page.
+- Added catalog run details pages.
+- Added catalog issue details pages.
+- Added catalog collected-volume details pages.
+- Updated the browse UI to use the darker comic-library style.
+- Added searchable filters for publisher, run, and collected volume.
+- Updated browse behavior so run and volume filters can be used without selecting a publisher first.
+- Added row-click behavior for browse and details tables.
+- Removed duplicate underlined links from table rows.
+- Added clear controls for all filters, run filter, and collected-volume filter.
+- Added initial manual catalog test data for the current Fantastic Four run:
+  - `Fantastic Four (2025)`
+  - `Fantastic Four Vol. 1: Save Everyone`
+  - Fantastic Four issues #1-13
+  - collected-volume links for issues #1-5
+
+### 2026-07-01
+
+- Moved the project into the permanent app structure:
+  - `accounts`
+  - `comicvine`
+  - `catalog`
+  - `ingestion`
+  - `reading`
+- Established `comicvine` as the source-data layer.
+- Established `catalog` as the confirmed app-facing data layer.
+- Established `ingestion` as the future candidate/review layer.
+- Kept `reading` reserved for future reading-tracking features.
+- Removed the old temporary `comics` app from the active project structure.
+
+### 2026-06-30
+
+- Expanded Comic Vine volume and issue storage.
+- Added safer hydration/backfill behavior for Comic Vine data.
+- Added retry handling for Comic Vine requests.
+- Improved command behavior around API limits, timeouts, and partial runs.
+- Added progress reporting for source-data hydration.
+- Reviewed and adjusted model direction toward confirmed data instead of fully automated app-facing imports.
+
+### 2026-06-29
+
+- Added account pages.
+- Added signup.
+- Added login and logout.
+- Added optional email during signup.
+- Added signup rate limiting.
+- Added a honeypot field to reduce bot signups.
+- Added account page support for username changes.
+- Added account page support for password changes.
+- Added username availability validation.
+- Added a database hydration/progress command for checking stored volume and issue hydration status.
+- Added browse table columns for Comic Vine IDs during the earlier source-data browsing phase.
+
+### 2026-06-28
+
+- Connected the project to Neon/PostgreSQL through `DATABASE_URL`.
+- Added `.env` support for local configuration.
+- Added Comic Vine API key support.
+- Added Comic Vine issue source models.
+- Added Comic Vine volume source models.
+- Added Comic Vine person/credit source models.
+- Added Comic Vine scan tracking.
+- Added Comic Vine sync state tracking.
+- Added commands for Comic Vine issue discovery, issue updating, volume updating, volume hydration, and historical backfill.
+- Added the `sync_comics` wrapper command.
+- Added the scheduled GitHub Actions workflow for Comic Vine syncing.
+- Added the first basic homepage.
+- Added the first basic issue and volume browsing pages.
+- Added publisher filtering.
+- Added searchable dropdown filtering.
+- Added the first Bootstrap dark UI direction.
+
+### 2026-06-24 to 2026-06-27
+
+- Restarted the project with a simpler scope.
+- Chose Comic Vine as the main source for comic metadata.
+- Chose Django as the web framework.
+- Chose PostgreSQL/Neon as the main database.
+- Decided to avoid reading-order algorithms, recommendation logic, character models, event models, and story-arc models until the core data and browsing experience are stable.
+
+## Next Major Goals
+
+- Finish cleaning the README.
+- Remove or retire the numbered docs.
+- Keep Comic Vine source-data backfills running.
+- Continue manually testing confirmed catalog data.
+- Refine catalog models based on real manual entries.
+- Add user reading-tracking features when the catalog structure feels stable.
