@@ -11,16 +11,182 @@
     >
 
     <style>
+        :root {
+            --erc-bg: #090b12;
+            --erc-surface: #121620;
+            --erc-surface-soft: #171c28;
+            --erc-border: #303849;
+            --erc-border-soft: #252c3a;
+            --erc-text-muted: #9ca7ba;
+            --erc-accent: #4cc9f0;
+            --erc-accent-soft: rgba(76, 201, 240, 0.14);
+            --erc-accent-strong: #72ddf7;
+            --erc-purple: #8b5cf6;
+            --erc-purple-soft: rgba(139, 92, 246, 0.16);
+        }
+
+        body {
+            background:
+                radial-gradient(circle at top left, rgba(76, 201, 240, 0.10), transparent 28rem),
+                radial-gradient(circle at top right, rgba(139, 92, 246, 0.12), transparent 30rem),
+                var(--erc-bg);
+            min-height: 100vh;
+        }
+
+        a {
+            text-decoration: none;
+        }
+
+        .navbar {
+            background: rgba(18, 22, 32, 0.92) !important;
+            backdrop-filter: blur(12px);
+        }
+
+        .navbar-brand {
+            letter-spacing: 0.02em;
+        }
+
+        .erc-navbar-mark {
+            color: var(--erc-accent);
+        }
+
+        .erc-page-kicker {
+            color: var(--erc-accent);
+            font-size: 0.78rem;
+            font-weight: 700;
+            letter-spacing: 0.13em;
+            text-transform: uppercase;
+        }
+
+        .erc-muted {
+            color: var(--erc-text-muted);
+        }
+
+        .erc-panel {
+            background: linear-gradient(180deg, var(--erc-surface-soft), var(--erc-surface));
+            border: 1px solid var(--erc-border);
+            box-shadow: 0 1rem 2.5rem rgba(0, 0, 0, 0.22);
+        }
+
+        .erc-panel-flat {
+            background: var(--erc-surface);
+            border: 1px solid var(--erc-border);
+        }
+
+        .erc-filter-button {
+            border-color: var(--erc-border);
+            color: #d7deeb;
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .erc-filter-button:hover,
+        .erc-filter-button:focus {
+            border-color: var(--erc-accent);
+            color: #ffffff;
+            background: var(--erc-accent-soft);
+        }
+
+        .erc-filter-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.45rem;
+            border: 1px solid var(--erc-border);
+            border-radius: 999px;
+            padding: 0.4rem 0.72rem;
+            background: rgba(255, 255, 255, 0.035);
+            color: #dfe7f5;
+            font-size: 0.875rem;
+        }
+
+        .erc-filter-chip-label {
+            color: var(--erc-accent-strong);
+            font-weight: 700;
+            text-transform: uppercase;
+            font-size: 0.68rem;
+            letter-spacing: 0.08em;
+        }
+
+        .erc-selected-row {
+            display: grid;
+            grid-template-columns: auto 1fr auto;
+            gap: 1rem;
+            align-items: center;
+            padding: 0.95rem 1rem;
+            border: 1px solid var(--erc-border-soft);
+            background: rgba(255, 255, 255, 0.025);
+            border-radius: 0.9rem;
+            cursor: pointer;
+            transition: 140ms ease-in-out;
+        }
+
+        .erc-selected-row:hover,
+        .clickable-row:hover {
+            background: var(--erc-accent-soft) !important;
+        }
+
+        .erc-selected-type {
+            border-radius: 999px;
+            background: var(--erc-purple-soft);
+            color: #c4b5fd;
+            border: 1px solid rgba(139, 92, 246, 0.45);
+            padding: 0.35rem 0.6rem;
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .erc-selected-arrow {
+            color: var(--erc-accent);
+            font-size: 1.2rem;
+        }
+
+        .searchable-dropdown .dropdown-menu {
+            width: 100%;
+            background: #121620;
+            border-color: var(--erc-border);
+            box-shadow: 0 1rem 2rem rgba(0, 0, 0, 0.35);
+        }
+
+        .searchable-dropdown .dropdown-item {
+            color: #d7deeb;
+        }
+
+        .searchable-dropdown .dropdown-item:hover {
+            background: var(--erc-accent-soft);
+            color: #ffffff;
+        }
+
+        .searchable-dropdown .dropdown-item.active {
+            background: linear-gradient(90deg, rgba(76, 201, 240, 0.26), rgba(139, 92, 246, 0.22));
+            color: #ffffff;
+        }
+
+        .table {
+            --bs-table-bg: transparent;
+            --bs-table-striped-bg: rgba(255, 255, 255, 0.02);
+            --bs-table-hover-bg: var(--erc-accent-soft);
+            border-color: var(--erc-border-soft);
+        }
+
+        .table thead th {
+            color: var(--erc-text-muted);
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            border-bottom-color: var(--erc-border);
+        }
+
+        .table tbody td {
+            border-color: var(--erc-border-soft);
+        }
+
         .clickable-row {
             cursor: pointer;
         }
 
-        .clickable-row:hover {
-            --bs-table-bg: rgba(255, 255, 255, 0.06);
-        }
-
         .small-muted {
-            color: var(--bs-secondary-color);
+            color: var(--erc-text-muted);
             font-size: 0.875rem;
         }
 
@@ -30,10 +196,10 @@
     </style>
 </head>
 <body>
-<nav class="navbar navbar-expand-lg border-bottom border-secondary bg-body-tertiary">
+<nav class="navbar navbar-expand-lg border-bottom border-secondary">
     <div class="container">
         <a href="{% url 'catalog:home' %}" class="navbar-brand fw-bold">
-            EzyReadComics
+            <span class="erc-navbar-mark">Ezy</span>ReadComics
         </a>
 
         <button
@@ -105,15 +271,26 @@
     src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
 ></script>
 <script>
+document.addEventListener("DOMContentLoaded", function () {
     document.querySelectorAll("[data-row-url]").forEach((row) => {
         row.addEventListener("click", (event) => {
-            if (event.target.closest("a, button, input, select, textarea")) {
+            if (event.target.closest("a, button, input, select, textarea, label")) {
                 return;
             }
 
             window.location.href = row.dataset.rowUrl;
         });
+
+        row.addEventListener("keydown", (event) => {
+            if (event.key !== "Enter" && event.key !== " ") {
+                return;
+            }
+
+            event.preventDefault();
+            window.location.href = row.dataset.rowUrl;
+        });
     });
+});
 </script>
 </body>
 </html>

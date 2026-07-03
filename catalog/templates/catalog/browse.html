@@ -3,298 +3,750 @@
 {% block title %}Browse - EzyReadComics{% endblock %}
 
 {% block content %}
-<div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
-    <div>
-        <h1 class="mb-1">Browse catalog</h1>
-        <p class="text-secondary mb-0">
-            Browse manually confirmed catalog data by publisher, run, and collected volume.
-        </p>
+<div class="d-flex flex-column gap-4">
+    <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-end gap-3">
+        <div>
+            <p class="erc-page-kicker mb-2">Comic Library</p>
+            <h1 class="display-6 fw-bold mb-1">Browse</h1>
+            <p class="erc-muted mb-0">
+                Browse manually confirmed catalog data by publisher, run, and collected volume.
+            </p>
+        </div>
+
+        <a href="/admin/" class="btn btn-outline-light">
+            Add data in admin
+        </a>
     </div>
 
-    <a href="/admin/" class="btn btn-outline-light">
-        Add data in admin
-    </a>
-</div>
-
-<div class="card border-secondary mb-4">
-    <div class="card-body">
-        <form id="browse-filter-form" method="get" action="{% url 'catalog:browse' %}">
+    <section class="card erc-panel">
+        <div class="card-body">
             <div class="row g-3 align-items-end">
-                <div class="col-md-4">
-                    <label for="publisher" class="form-label">Publisher</label>
-                    <select id="publisher" name="publisher" class="form-select">
-                        <option value="">All publishers</option>
-                        {% for publisher in publishers %}
-                            <option
-                                value="{{ publisher.id }}"
-                                {% if selected_publisher_id == publisher.id %}selected{% endif %}
+                <div class="col-12 col-lg-4">
+                    <label class="form-label erc-muted" for="publisher-search-browse">
+                        Publisher
+                    </label>
+
+                    <div class="dropdown searchable-dropdown">
+                        <button
+                            class="btn erc-filter-button dropdown-toggle text-start w-100"
+                            type="button"
+                            id="publisher-dropdown-browse"
+                            data-bs-toggle="dropdown"
+                            data-bs-auto-close="outside"
+                            aria-expanded="false"
+                        >
+                            {% if selected_publisher %}
+                                {{ selected_publisher.name }}
+                            {% else %}
+                                All publishers
+                            {% endif %}
+                        </button>
+
+                        <div class="dropdown-menu p-2" aria-labelledby="publisher-dropdown-browse">
+                            <input
+                                type="search"
+                                id="publisher-search-browse"
+                                class="form-control mb-2"
+                                placeholder="Search publishers..."
+                                autocomplete="off"
+                                data-dropdown-search
                             >
-                                {{ publisher.name }}
-                            </option>
-                        {% endfor %}
-                    </select>
+
+                            <a
+                                href="{% url 'catalog:browse' %}"
+                                class="dropdown-item rounded {% if not selected_publisher %}active{% endif %}"
+                                data-dropdown-option
+                                data-search-label="All publishers"
+                            >
+                                All publishers
+                            </a>
+
+                            <div class="dropdown-divider"></div>
+
+                            <div data-dropdown-options style="max-height: 18rem; overflow-y: auto;">
+                                {% for publisher in publishers %}
+                                    <a
+                                        href="{% url 'catalog:browse' %}?publisher={{ publisher.id }}"
+                                        class="dropdown-item rounded {% if selected_publisher_id == publisher.id %}active{% endif %}"
+                                        data-dropdown-option
+                                        data-search-label="{{ publisher.name }}"
+                                    >
+                                        <span class="fw-semibold">{{ publisher.name }}</span>
+                                        <span class="erc-muted">
+                                            · {{ publisher.run_total }} runs
+                                            · {{ publisher.volume_total }} volumes
+                                        </span>
+                                    </a>
+                                {% endfor %}
+                            </div>
+
+                            <p class="dropdown-item-text erc-muted mb-0 d-none" data-no-results>
+                                No matching publishers.
+                            </p>
+                        </div>
+                    </div>
                 </div>
 
-                <div class="col-md-4">
-                    <label for="run" class="form-label">Run</label>
-                    <select id="run" name="run" class="form-select">
-                        <option value="">All runs</option>
-                        {% for run in run_options %}
-                            <option
-                                value="{{ run.id }}"
-                                {% if selected_run_id == run.id %}selected{% endif %}
+                <div class="col-12 col-lg-4">
+                    <label class="form-label erc-muted" for="run-search-browse">
+                        Run
+                    </label>
+
+                    <div class="dropdown searchable-dropdown" data-sort-runs="true">
+                        <button
+                            class="btn erc-filter-button dropdown-toggle text-start w-100"
+                            type="button"
+                            id="run-dropdown-browse"
+                            data-bs-toggle="dropdown"
+                            data-bs-auto-close="outside"
+                            aria-expanded="false"
+                        >
+                            {% if selected_run %}
+                                {% if selected_run.start_year %}
+                                    {{ selected_run.start_year }} —
+                                {% endif %}
+                                {{ selected_run.title }}
+                            {% elif selected_publisher %}
+                                All {{ selected_publisher.name }} runs
+                            {% else %}
+                                All runs
+                            {% endif %}
+                        </button>
+
+                        <div class="dropdown-menu p-2" aria-labelledby="run-dropdown-browse">
+                            <input
+                                type="search"
+                                id="run-search-browse"
+                                class="form-control mb-2"
+                                placeholder="Search runs..."
+                                autocomplete="off"
+                                data-dropdown-search
                             >
-                                {{ run.publisher.name }} — {{ run }}
-                            </option>
-                        {% endfor %}
-                    </select>
+
+                            {% if selected_publisher %}
+                                <a
+                                    href="{% url 'catalog:browse' %}?publisher={{ selected_publisher.id }}"
+                                    class="dropdown-item rounded {% if not selected_run %}active{% endif %}"
+                                    data-dropdown-option
+                                    data-search-label="All runs"
+                                >
+                                    All {{ selected_publisher.name }} runs
+                                </a>
+                            {% else %}
+                                <a
+                                    href="{% url 'catalog:browse' %}"
+                                    class="dropdown-item rounded {% if not selected_run %}active{% endif %}"
+                                    data-dropdown-option
+                                    data-search-label="All runs"
+                                >
+                                    All runs
+                                </a>
+                            {% endif %}
+
+                            <div class="dropdown-divider"></div>
+
+                            <div data-dropdown-options style="max-height: 22rem; overflow-y: auto;">
+                                {% for run in run_options %}
+                                    <a
+                                        href="{% url 'catalog:browse' %}?run={{ run.id }}"
+                                        class="dropdown-item rounded {% if selected_run_id == run.id %}active{% endif %}"
+                                        data-dropdown-option
+                                        data-search-label="{{ run.title }} {{ run.start_year }} {{ run.publisher.name }}"
+                                        data-run-name="{{ run.title }}"
+                                        data-run-year="{{ run.start_year }}"
+                                    >
+                                        <span class="fw-semibold">
+                                            {% if run.start_year %}
+                                                {{ run.start_year }}
+                                            {% else %}
+                                                Unknown year
+                                            {% endif %}
+                                        </span>
+                                        —
+                                        {{ run.title }}
+
+                                        <span class="erc-muted">
+                                            · {{ run.publisher.name }}
+                                            {% if run.issue_count %}
+                                                · {{ run.issue_count }} issues
+                                            {% else %}
+                                                · issue count unknown
+                                            {% endif %}
+                                        </span>
+                                    </a>
+                                {% endfor %}
+                            </div>
+
+                            <p class="dropdown-item-text erc-muted mb-0 d-none" data-no-results>
+                                No matching runs.
+                            </p>
+                        </div>
+                    </div>
                 </div>
 
-                <div class="col-md-4">
-                    <label for="volume" class="form-label">Collected volume</label>
-                    <select id="volume" name="volume" class="form-select">
-                        <option value="">All volumes</option>
-                        {% for volume in volume_options %}
-                            <option
-                                value="{{ volume.id }}"
-                                {% if selected_volume_id == volume.id %}selected{% endif %}
-                            >
-                                {{ volume.publisher.name }} — {{ volume }}
-                            </option>
-                        {% endfor %}
-                    </select>
-                </div>
+                <div class="col-12 col-lg-4">
+                    <label class="form-label erc-muted" for="volume-search-browse">
+                        Collected volume
+                    </label>
 
-                <div class="col-12">
-                    <a href="{% url 'catalog:browse' %}" class="btn btn-outline-secondary">
+                    <div class="dropdown searchable-dropdown">
+                        <button
+                            class="btn erc-filter-button dropdown-toggle text-start w-100"
+                            type="button"
+                            id="volume-dropdown-browse"
+                            data-bs-toggle="dropdown"
+                            data-bs-auto-close="outside"
+                            aria-expanded="false"
+                        >
+                            {% if selected_volume %}
+                                {{ selected_volume }}
+                            {% elif selected_run %}
+                                All volumes in this run
+                            {% elif selected_publisher %}
+                                All {{ selected_publisher.name }} volumes
+                            {% else %}
+                                All volumes
+                            {% endif %}
+                        </button>
+
+                        <div class="dropdown-menu p-2" aria-labelledby="volume-dropdown-browse">
+                            <input
+                                type="search"
+                                id="volume-search-browse"
+                                class="form-control mb-2"
+                                placeholder="Search volumes..."
+                                autocomplete="off"
+                                data-dropdown-search
+                            >
+
+                            {% if selected_run %}
+                                <a
+                                    href="{% url 'catalog:browse' %}?run={{ selected_run.id }}"
+                                    class="dropdown-item rounded {% if not selected_volume %}active{% endif %}"
+                                    data-dropdown-option
+                                    data-search-label="All volumes"
+                                >
+                                    All volumes in this run
+                                </a>
+                            {% elif selected_publisher %}
+                                <a
+                                    href="{% url 'catalog:browse' %}?publisher={{ selected_publisher.id }}"
+                                    class="dropdown-item rounded {% if not selected_volume %}active{% endif %}"
+                                    data-dropdown-option
+                                    data-search-label="All volumes"
+                                >
+                                    All {{ selected_publisher.name }} volumes
+                                </a>
+                            {% else %}
+                                <a
+                                    href="{% url 'catalog:browse' %}"
+                                    class="dropdown-item rounded {% if not selected_volume %}active{% endif %}"
+                                    data-dropdown-option
+                                    data-search-label="All volumes"
+                                >
+                                    All volumes
+                                </a>
+                            {% endif %}
+
+                            <div class="dropdown-divider"></div>
+
+                            <div data-dropdown-options style="max-height: 22rem; overflow-y: auto;">
+                                {% for volume in volume_options %}
+                                    <a
+                                        href="{% url 'catalog:browse' %}?volume={{ volume.id }}"
+                                        class="dropdown-item rounded {% if selected_volume_id == volume.id %}active{% endif %}"
+                                        data-dropdown-option
+                                        data-search-label="{{ volume.title }} {{ volume.run.title }} {{ volume.volume_number }} {{ volume.publisher.name }}"
+                                    >
+                                        <span class="fw-semibold">{{ volume }}</span>
+                                        <span class="erc-muted">
+                                            · {{ volume.publisher.name }}
+                                            · {{ volume.run }}
+                                            {% if volume.issue_count %}
+                                                · {{ volume.issue_count }} issues
+                                            {% endif %}
+                                        </span>
+                                    </a>
+                                {% endfor %}
+                            </div>
+
+                            <p class="dropdown-item-text erc-muted mb-0 d-none" data-no-results>
+                                No matching volumes.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {% if selected_publisher or selected_run or selected_volume %}
+                <div class="d-flex flex-wrap gap-2 mt-3">
+                    <a href="{% url 'catalog:browse' %}" class="btn btn-sm btn-outline-secondary">
                         Clear filters
                     </a>
+
+                    {% if selected_run %}
+                        <a
+                            href="{% if selected_publisher %}{% url 'catalog:browse' %}?publisher={{ selected_publisher.id }}{% else %}{% url 'catalog:browse' %}{% endif %}"
+                            class="btn btn-sm btn-outline-secondary"
+                        >
+                            Clear run
+                        </a>
+                    {% endif %}
+
+                    {% if selected_volume %}
+                        <a
+                            href="{% if selected_run %}{% url 'catalog:browse' %}?run={{ selected_run.id }}{% elif selected_publisher %}{% url 'catalog:browse' %}?publisher={{ selected_publisher.id }}{% else %}{% url 'catalog:browse' %}{% endif %}"
+                            class="btn btn-sm btn-outline-secondary"
+                        >
+                            Clear collected volume
+                        </a>
+                    {% endif %}
+
+                    {% if selected_publisher %}
+                        <span class="erc-filter-chip">
+                            <span class="erc-filter-chip-label">Publisher</span>
+                            {{ selected_publisher.name }}
+                        </span>
+                    {% endif %}
+
+                    {% if selected_run %}
+                        <span class="erc-filter-chip">
+                            <span class="erc-filter-chip-label">Run</span>
+                            {{ selected_run }}
+                        </span>
+                    {% endif %}
+
+                    {% if selected_volume %}
+                        <span class="erc-filter-chip">
+                            <span class="erc-filter-chip-label">Volume</span>
+                            {{ selected_volume }}
+                        </span>
+                    {% endif %}
+                </div>
+            {% endif %}
+        </div>
+    </section>
+
+    <section>
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-end gap-2 mb-3">
+            <div>
+                <p class="erc-page-kicker mb-1">
+                    {% if selected_run %}
+                        Selected run
+                    {% else %}
+                        Runs
+                    {% endif %}
+                </p>
+                <h2 class="h4 fw-bold mb-0">
+                    {% if selected_run %}
+                        {{ selected_run }}
+                    {% else %}
+                        Comic runs
+                    {% endif %}
+                </h2>
+            </div>
+
+            <p class="erc-muted mb-0">
+                {{ runs|length }} result{% if runs|length != 1 %}s{% endif %}
+            </p>
+        </div>
+
+        <div class="card erc-panel-flat">
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-dark table-hover align-middle mb-0">
+                        <thead>
+                        <tr>
+                            <th scope="col">Year</th>
+                            <th scope="col">Run</th>
+                            <th scope="col">Publisher</th>
+                            <th scope="col">Status</th>
+                            <th scope="col">Issues</th>
+                            <th scope="col">First issue date</th>
+                        </tr>
+                        </thead>
+
+                        <tbody>
+                        {% for run in runs %}
+                            <tr
+                                class="clickable-row"
+                                data-row-url="{% url 'catalog:run_details' run.id %}"
+                                tabindex="0"
+                                aria-label="Open run details for {{ run }}"
+                            >
+                                <td>
+                                    {% if run.start_year %}
+                                        {{ run.start_year }}
+                                    {% else %}
+                                        <span class="erc-muted">Unknown</span>
+                                    {% endif %}
+                                </td>
+
+                                <td class="fw-semibold">{{ run.title }}</td>
+                                <td>{{ run.publisher.name }}</td>
+                                <td>{{ run.get_status_display }}</td>
+
+                                <td>
+                                    {% if run.issue_count %}
+                                        {{ run.issue_count }}
+                                    {% else %}
+                                        <span class="erc-muted">Unknown</span>
+                                    {% endif %}
+                                </td>
+
+                                <td>
+                                    {% if run.first_issue_date %}
+                                        {{ run.first_issue_date|date:"Y-m-d" }}
+                                    {% else %}
+                                        <span class="erc-muted">Unknown</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% empty %}
+                            <tr>
+                                <td colspan="6" class="text-center erc-muted py-4">
+                                    No runs match this filter.
+                                </td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
                 </div>
             </div>
-        </form>
-    </div>
-</div>
+        </div>
+    </section>
 
-{% if selected_items %}
-    <div class="mb-4">
-        <h2 class="h4 mb-3">Selected</h2>
+    <section>
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-end gap-2 mb-3">
+            <div>
+                <p class="erc-page-kicker mb-1">
+                    {% if selected_volume %}
+                        Selected volume
+                    {% else %}
+                        Collected editions
+                    {% endif %}
+                </p>
+                <h2 class="h4 fw-bold mb-0">
+                    {% if selected_volume %}
+                        {{ selected_volume }}
+                    {% else %}
+                        Volumes
+                    {% endif %}
+                </h2>
+            </div>
 
-        <div class="card border-primary">
-            <div class="table-responsive">
-                <table class="table table-dark table-hover align-middle mb-0">
-                    <thead>
-                    <tr>
-                        <th>Type</th>
-                        <th>Name</th>
-                        <th>Info</th>
-                    </tr>
-                    </thead>
-                    <tbody>
-                    {% for item in selected_items %}
-                        <tr class="clickable-row" data-row-url="{{ item.url }}">
-                            <td>
-                                <span class="badge text-bg-primary">
-                                    {{ item.type }}
-                                </span>
-                            </td>
-                            <td>
-                                <a href="{{ item.url }}">
-                                    {{ item.title }}
-                                </a>
-                            </td>
-                            <td class="text-secondary">
-                                {{ item.subtitle }}
-                            </td>
+            <p class="erc-muted mb-0">
+                {{ volumes|length }} result{% if volumes|length != 1 %}s{% endif %}
+            </p>
+        </div>
+
+        <div class="card erc-panel-flat">
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-dark table-hover align-middle mb-0">
+                        <thead>
+                        <tr>
+                            <th scope="col">Volume</th>
+                            <th scope="col">Run</th>
+                            <th scope="col">Publisher</th>
+                            <th scope="col">Issue Range</th>
+                            <th scope="col">Issue Count</th>
+                            <th scope="col">Release Date</th>
                         </tr>
-                    {% endfor %}
-                    </tbody>
-                </table>
+                        </thead>
+
+                        <tbody>
+                        {% for volume in volumes %}
+                            <tr
+                                class="clickable-row"
+                                data-row-url="{% url 'catalog:volume_details' volume.id %}"
+                                tabindex="0"
+                                aria-label="Open volume details for {{ volume }}"
+                            >
+                                <td class="fw-semibold">{{ volume }}</td>
+                                <td>{{ volume.run }}</td>
+                                <td>{{ volume.publisher.name }}</td>
+
+                                <td>
+                                    {% if volume.first_issue_number or volume.last_issue_number %}
+                                        #{{ volume.first_issue_number|default:"?" }}–{{ volume.last_issue_number|default:"?" }}
+                                    {% else %}
+                                        <span class="erc-muted">Unknown</span>
+                                    {% endif %}
+                                </td>
+
+                                <td>
+                                    {% if volume.issue_count %}
+                                        {{ volume.issue_count }}
+                                    {% else %}
+                                        <span class="erc-muted">Unknown</span>
+                                    {% endif %}
+                                </td>
+
+                                <td>
+                                    {% if volume.release_date %}
+                                        {{ volume.release_date|date:"Y-m-d" }}
+                                    {% else %}
+                                        <span class="erc-muted">Unknown</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% empty %}
+                            <tr>
+                                <td colspan="6" class="text-center erc-muted py-4">
+                                    No collected volumes match this filter.
+                                </td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
-    </div>
-{% endif %}
+    </section>
 
-<div class="mb-4">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h2 class="h4 mb-0">Runs</h2>
-        <span class="badge text-bg-secondary">{{ runs|length }}</span>
-    </div>
+    <section>
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-end gap-2 mb-3">
+            <div>
+                <p class="erc-page-kicker mb-1">Single issues</p>
+                <h2 class="h4 fw-bold mb-0">Issues</h2>
+            </div>
 
-    <div class="card border-secondary">
-        <div class="table-responsive">
-            <table class="table table-dark table-hover align-middle mb-0">
-                <thead>
-                <tr>
-                    <th>Run</th>
-                    <th>Publisher</th>
-                    <th>Start year</th>
-                    <th>Status</th>
-                    <th>Issues</th>
-                    <th>First issue date</th>
-                </tr>
-                </thead>
-                <tbody>
-                {% for run in runs %}
-                    <tr
-                        class="clickable-row"
-                        data-row-url="{% url 'catalog:run_details' run.id %}"
-                    >
-                        <td>
-                            <a href="{% url 'catalog:run_details' run.id %}">
-                                {{ run.title }}
-                            </a>
-                        </td>
-                        <td>{{ run.publisher.name }}</td>
-                        <td>{{ run.start_year|default:"—" }}</td>
-                        <td>{{ run.get_status_display }}</td>
-                        <td>{{ run.issue_count|default:"—" }}</td>
-                        <td>{{ run.first_issue_date|date:"Y-m-d"|default:"—" }}</td>
-                    </tr>
-                {% empty %}
-                    <tr>
-                        <td colspan="6" class="text-secondary">
-                            No runs match this filter.
-                        </td>
-                    </tr>
-                {% endfor %}
-                </tbody>
-            </table>
+            <p class="erc-muted mb-0">
+                {{ issues|length }} result{% if issues|length != 1 %}s{% endif %}
+            </p>
         </div>
-    </div>
-</div>
 
-<div class="mb-4">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h2 class="h4 mb-0">Collected volumes</h2>
-        <span class="badge text-bg-secondary">{{ volumes|length }}</span>
-    </div>
+        <div class="card erc-panel-flat">
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-dark table-hover align-middle mb-0">
+                        <thead>
+                        <tr>
+                            <th scope="col">Year</th>
+                            <th scope="col">Run</th>
+                            <th scope="col">Issue</th>
+                            <th scope="col">Title</th>
+                            <th scope="col">Store Date</th>
+                            <th scope="col">Cover Date</th>
+                        </tr>
+                        </thead>
 
-    <div class="card border-secondary">
-        <div class="table-responsive">
-            <table class="table table-dark table-hover align-middle mb-0">
-                <thead>
-                <tr>
-                    <th>Volume</th>
-                    <th>Run</th>
-                    <th>Publisher</th>
-                    <th>Issue range</th>
-                    <th>Issue count</th>
-                    <th>Release date</th>
-                </tr>
-                </thead>
-                <tbody>
-                {% for volume in volumes %}
-                    <tr
-                        class="clickable-row"
-                        data-row-url="{% url 'catalog:volume_details' volume.id %}"
-                    >
-                        <td>
-                            <a href="{% url 'catalog:volume_details' volume.id %}">
-                                {{ volume }}
-                            </a>
-                        </td>
-                        <td>
-                            <a href="{% url 'catalog:run_details' volume.run.id %}">
-                                {{ volume.run }}
-                            </a>
-                        </td>
-                        <td>{{ volume.publisher.name }}</td>
-                        <td>
-                            {% if volume.first_issue_number or volume.last_issue_number %}
-                                #{{ volume.first_issue_number|default:"?" }}–{{ volume.last_issue_number|default:"?" }}
-                            {% else %}
-                                —
-                            {% endif %}
-                        </td>
-                        <td>{{ volume.issue_count|default:"—" }}</td>
-                        <td>{{ volume.release_date|date:"Y-m-d"|default:"—" }}</td>
-                    </tr>
-                {% empty %}
-                    <tr>
-                        <td colspan="6" class="text-secondary">
-                            No collected volumes match this filter.
-                        </td>
-                    </tr>
-                {% endfor %}
-                </tbody>
-            </table>
+                        <tbody>
+                        {% for issue in issues %}
+                            <tr
+                                class="clickable-row"
+                                data-row-url="{% url 'catalog:issue_details' issue.id %}"
+                                tabindex="0"
+                                aria-label="Open issue details for issue {{ issue.issue_number }}"
+                            >
+                                <td>
+                                    {% if issue.run.start_year %}
+                                        {{ issue.run.start_year }}
+                                    {% else %}
+                                        <span class="erc-muted">Unknown</span>
+                                    {% endif %}
+                                </td>
+
+                                <td class="fw-semibold">{{ issue.run }}</td>
+                                <td>#{{ issue.issue_number }}</td>
+
+                                <td>
+                                    {% if issue.title %}
+                                        {{ issue.title }}
+                                    {% else %}
+                                        <span class="erc-muted">Untitled</span>
+                                    {% endif %}
+                                </td>
+
+                                <td>
+                                    {% if issue.store_date %}
+                                        {{ issue.store_date|date:"Y-m-d" }}
+                                    {% else %}
+                                        <span class="erc-muted">Unknown</span>
+                                    {% endif %}
+                                </td>
+
+                                <td>
+                                    {% if issue.cover_date %}
+                                        {{ issue.cover_date|date:"Y-m-d" }}
+                                    {% else %}
+                                        <span class="erc-muted">Unknown</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% empty %}
+                            <tr>
+                                <td colspan="6" class="text-center erc-muted py-4">
+                                    No issues match this filter.
+                                </td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
-    </div>
-</div>
-
-<div>
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h2 class="h4 mb-0">Issues</h2>
-        <span class="badge text-bg-secondary">{{ issues|length }}</span>
-    </div>
-
-    <div class="card border-secondary">
-        <div class="table-responsive">
-            <table class="table table-dark table-hover align-middle mb-0">
-                <thead>
-                <tr>
-                    <th>Issue</th>
-                    <th>Run</th>
-                    <th>Publisher</th>
-                    <th>Store date</th>
-                    <th>Cover date</th>
-                </tr>
-                </thead>
-                <tbody>
-                {% for issue in issues %}
-                    <tr
-                        class="clickable-row"
-                        data-row-url="{% url 'catalog:issue_details' issue.id %}"
-                    >
-                        <td>
-                            <a href="{% url 'catalog:issue_details' issue.id %}">
-                                #{{ issue.issue_number }}
-                                {% if issue.title %}
-                                    — {{ issue.title }}
-                                {% endif %}
-                            </a>
-                        </td>
-                        <td>
-                            <a href="{% url 'catalog:run_details' issue.run.id %}">
-                                {{ issue.run }}
-                            </a>
-                        </td>
-                        <td>{{ issue.run.publisher.name }}</td>
-                        <td>{{ issue.store_date|date:"Y-m-d"|default:"—" }}</td>
-                        <td>{{ issue.cover_date|date:"Y-m-d"|default:"—" }}</td>
-                    </tr>
-                {% empty %}
-                    <tr>
-                        <td colspan="5" class="text-secondary">
-                            No issues match this filter.
-                        </td>
-                    </tr>
-                {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    </div>
+    </section>
 </div>
 
 <script>
-    const browseFilterForm = document.querySelector("#browse-filter-form");
-    const publisherSelect = document.querySelector("#publisher");
-    const runSelect = document.querySelector("#run");
-    const volumeSelect = document.querySelector("#volume");
+document.addEventListener("DOMContentLoaded", function () {
+    const dropdowns = Array.from(document.querySelectorAll(".searchable-dropdown"));
 
-    publisherSelect.addEventListener("change", () => {
-        runSelect.value = "";
-        volumeSelect.value = "";
-        browseFilterForm.submit();
-    });
+    function normalizeSearchValue(value) {
+        return String(value || "")
+            .toLowerCase()
+            .replaceAll("&", "and")
+            .replaceAll("’", "'")
+            .replaceAll("‘", "'")
+            .replaceAll("–", "-")
+            .replaceAll("—", "-")
+            .replace(/[^a-z0-9]+/g, "");
+    }
 
-    runSelect.addEventListener("change", () => {
-        volumeSelect.value = "";
-        browseFilterForm.submit();
-    });
+    function getOptionScore(option, rawSearchValue) {
+        const searchValue = normalizeSearchValue(rawSearchValue);
+        const runName = normalizeSearchValue(option.dataset.runName || "");
+        const label = normalizeSearchValue(option.dataset.searchLabel || option.textContent || "");
+        const year = parseInt(option.dataset.runYear || "0", 10) || 0;
 
-    volumeSelect.addEventListener("change", () => {
-        browseFilterForm.submit();
+        if (!searchValue) {
+            return {
+                score: 0,
+                year: year,
+            };
+        }
+
+        if (runName === searchValue) {
+            return {
+                score: 1000,
+                year: year,
+            };
+        }
+
+        if (runName.startsWith(searchValue)) {
+            return {
+                score: 800,
+                year: year,
+            };
+        }
+
+        if (label.startsWith(searchValue)) {
+            return {
+                score: 700,
+                year: year,
+            };
+        }
+
+        if (runName.includes(searchValue)) {
+            return {
+                score: 500,
+                year: year,
+            };
+        }
+
+        if (label.includes(searchValue)) {
+            return {
+                score: 400,
+                year: year,
+            };
+        }
+
+        return {
+            score: 0,
+            year: year,
+        };
+    }
+
+    dropdowns.forEach(function (dropdown) {
+        const searchInput = dropdown.querySelector("[data-dropdown-search]");
+        const optionsContainer = dropdown.querySelector("[data-dropdown-options]");
+        const noResultsMessage = dropdown.querySelector("[data-no-results]");
+        const dropdownButton = dropdown.querySelector("[data-bs-toggle='dropdown']");
+
+        if (!searchInput || !optionsContainer || !dropdownButton) {
+            return;
+        }
+
+        const options = Array.from(optionsContainer.querySelectorAll("[data-dropdown-option]"));
+
+        options.forEach(function (option, index) {
+            option.dataset.originalIndex = String(index);
+        });
+
+        function restoreOriginalOrder() {
+            options
+                .slice()
+                .sort(function (left, right) {
+                    return Number(left.dataset.originalIndex) - Number(right.dataset.originalIndex);
+                })
+                .forEach(function (option) {
+                    optionsContainer.appendChild(option);
+                });
+        }
+
+        function sortRunOptions(visibleOptions, searchValue) {
+            visibleOptions
+                .slice()
+                .sort(function (left, right) {
+                    const leftScore = getOptionScore(left, searchValue);
+                    const rightScore = getOptionScore(right, searchValue);
+
+                    if (rightScore.score !== leftScore.score) {
+                        return rightScore.score - leftScore.score;
+                    }
+
+                    if (rightScore.year !== leftScore.year) {
+                        return rightScore.year - leftScore.year;
+                    }
+
+                    return Number(left.dataset.originalIndex) - Number(right.dataset.originalIndex);
+                })
+                .forEach(function (option) {
+                    optionsContainer.appendChild(option);
+                });
+        }
+
+        function filterOptions() {
+            const rawSearchValue = searchInput.value.trim();
+            const normalizedSearchValue = normalizeSearchValue(rawSearchValue);
+            let visibleOptions = [];
+
+            options.forEach(function (option) {
+                const rawLabel = option.dataset.searchLabel || option.textContent || "";
+                const normalizedLabel = normalizeSearchValue(rawLabel);
+                const shouldShow = !normalizedSearchValue || normalizedLabel.includes(normalizedSearchValue);
+
+                option.classList.toggle("d-none", !shouldShow);
+
+                if (shouldShow) {
+                    visibleOptions.push(option);
+                }
+            });
+
+            if (dropdown.dataset.sortRuns === "true" && rawSearchValue) {
+                sortRunOptions(visibleOptions, rawSearchValue);
+            } else {
+                restoreOriginalOrder();
+            }
+
+            if (noResultsMessage) {
+                noResultsMessage.classList.toggle("d-none", visibleOptions.length !== 0);
+            }
+        }
+
+        searchInput.addEventListener("input", filterOptions);
+
+        searchInput.addEventListener("click", function (event) {
+            event.stopPropagation();
+        });
+
+        dropdownButton.addEventListener("shown.bs.dropdown", function () {
+            searchInput.focus();
+            searchInput.select();
+        });
     });
+});
 </script>
 {% endblock %}
