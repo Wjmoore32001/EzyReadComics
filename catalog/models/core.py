@@ -154,11 +154,36 @@ class ComicVolume(ImageUrlFields):
     class Meta:
         ordering = ["publisher__name", "run", "volume_number", "release_date", "title"]
 
-    def __str__(self):
-        if self.volume_number:
-            return f"{self.title} Vol. {self.volume_number}"
+    @property
+    def display_title(self):
+        run_title = self.run.title.strip() if self.run_id and self.run else ""
+        volume_title = self.title.strip()
+        volume_number = self.volume_number.strip()
 
-        return self.title
+        if not run_title:
+            return volume_title
+
+        normalized_run_title = run_title.casefold()
+        normalized_volume_title = volume_title.casefold()
+
+        if normalized_volume_title.startswith(f"{normalized_run_title} vol"):
+            return volume_title
+
+        if normalized_volume_title == normalized_run_title:
+            volume_title = ""
+
+        display_title = run_title
+
+        if volume_number:
+            display_title = f"{display_title} Vol. {volume_number}"
+
+        if volume_title:
+            display_title = f"{display_title}: {volume_title}"
+
+        return display_title
+
+    def __str__(self):
+        return self.display_title
 
 
 class ComicVolumeIssue(models.Model):
