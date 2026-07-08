@@ -363,6 +363,7 @@
                             <th scope="col">Status</th>
                             <th scope="col">Issues</th>
                             <th scope="col">First issue date</th>
+                            <th scope="col">Latest issue date</th>
                         </tr>
                         </thead>
 
@@ -401,10 +402,18 @@
                                         <span class="erc-muted">Unknown</span>
                                     {% endif %}
                                 </td>
+
+                                <td>
+                                    {% if run.last_issue_date %}
+                                        {{ run.last_issue_date|date:"Y-m-d" }}
+                                    {% else %}
+                                        <span class="erc-muted">Unknown</span>
+                                    {% endif %}
+                                </td>
                             </tr>
                         {% empty %}
                             <tr>
-                                <td colspan="6" class="text-center erc-muted py-4">
+                                <td colspan="7" class="text-center erc-muted py-4">
                                     No runs match this filter.
                                 </td>
                             </tr>
