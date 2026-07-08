@@ -137,7 +137,7 @@ class ComicVolume(ImageUrlFields):
         related_name="volumes",
     )
 
-    title = models.CharField(max_length=500)
+    title = models.CharField(max_length=500, blank=True)
     volume_number = models.CharField(max_length=50, blank=True)
 
     first_issue_number = models.CharField(max_length=50, blank=True)
