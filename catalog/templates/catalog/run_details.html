@@ -17,6 +17,26 @@
         </div>
 
         <div class="d-flex flex-wrap gap-2">
+            {% if request.user.is_authenticated %}
+                {% if is_following_run %}
+                    <form action="{% url 'reading:unfollow_run' run.id %}" method="post">
+                        {% csrf_token %}
+                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                        <button type="submit" class="btn btn-outline-secondary">
+                            Following
+                        </button>
+                    </form>
+                {% else %}
+                    <form action="{% url 'reading:follow_run' run.id %}" method="post">
+                        {% csrf_token %}
+                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                        <button type="submit" class="btn btn-primary">
+                            Follow run
+                        </button>
+                    </form>
+                {% endif %}
+            {% endif %}
+
             <a href="{% url 'catalog:browse' %}?run={{ run.id }}" class="btn btn-outline-secondary">
                 Back to browse
             </a>

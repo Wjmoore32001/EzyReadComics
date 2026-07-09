@@ -229,6 +229,10 @@
 
             <div class="d-flex gap-2">
                 {% if request.user.is_authenticated %}
+                    <a href="{% url 'reading:my_comics' %}" class="btn btn-outline-light btn-sm">
+                        My Comics
+                    </a>
+
                     <a href="{% url 'account' %}" class="btn btn-outline-light btn-sm">
                         Account
                     </a>

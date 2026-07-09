@@ -1,0 +1,285 @@
+{% extends "base.html" %}
+
+{% block title %}My Comics - EzyReadComics{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-column gap-4">
+    <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-end gap-3">
+        <div>
+            <p class="erc-page-kicker mb-2">Reading Tracking</p>
+            <h1 class="display-6 fw-bold mb-1">My Comics</h1>
+            <p class="erc-muted mb-0">
+                Follow runs and track your volume and issue reading status.
+            </p>
+        </div>
+
+        <div>
+            <a href="{% url 'catalog:browse' %}" class="btn btn-outline-light">
+                Browse comics
+            </a>
+        </div>
+    </div>
+
+    <section>
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-end gap-2 mb-3">
+            <div>
+                <p class="erc-page-kicker mb-1">Followed runs</p>
+                <h2 class="h4 fw-bold mb-0">Runs you follow</h2>
+            </div>
+
+            <p class="erc-muted mb-0">
+                {{ followed_runs|length }} result{% if followed_runs|length != 1 %}s{% endif %}
+            </p>
+        </div>
+
+        <div class="card erc-panel-flat">
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-dark table-hover align-middle mb-0">
+                        <thead>
+                        <tr>
+                            <th scope="col">Run</th>
+                            <th scope="col">Publisher</th>
+                            <th scope="col">Status</th>
+                            <th scope="col">Issues</th>
+                            <th scope="col">Followed</th>
+                            <th scope="col" class="text-end">Action</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        {% for followed_run in followed_runs %}
+                            <tr>
+                                <td class="fw-semibold">
+                                    <a href="{% url 'catalog:run_details' followed_run.run.id %}">
+                                        {{ followed_run.run }}
+                                    </a>
+                                </td>
+                                <td>{{ followed_run.run.publisher.name }}</td>
+                                <td>{{ followed_run.run.get_status_display }}</td>
+                                <td>
+                                    {% if followed_run.run.issue_count %}
+                                        {{ followed_run.run.issue_count }}
+                                    {% else %}
+                                        <span class="erc-muted">Unknown</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ followed_run.followed_at|date:"Y-m-d" }}</td>
+                                <td class="text-end">
+                                    <form
+                                        action="{% url 'reading:unfollow_run' followed_run.run.id %}"
+                                        method="post"
+                                        class="d-inline"
+                                    >
+                                        {% csrf_token %}
+                                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                        <button type="submit" class="btn btn-outline-secondary btn-sm">
+                                            Unfollow
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                        {% empty %}
+                            <tr>
+                                <td colspan="6" class="text-center erc-muted py-4">
+                                    You are not following any runs yet.
+                                </td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section>
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-end gap-2 mb-3">
+            <div>
+                <p class="erc-page-kicker mb-1">Volume progress</p>
+                <h2 class="h4 fw-bold mb-0">Saved volume statuses</h2>
+            </div>
+
+            <p class="erc-muted mb-0">
+                {{ volume_progress|length }} result{% if volume_progress|length != 1 %}s{% endif %}
+            </p>
+        </div>
+
+        <div class="card erc-panel-flat">
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-dark table-hover align-middle mb-0">
+                        <thead>
+                        <tr>
+                            <th scope="col">Volume</th>
+                            <th scope="col">Run</th>
+                            <th scope="col">Release Date</th>
+                            <th scope="col">Status</th>
+                            <th scope="col">Updated</th>
+                            <th scope="col" class="text-end">Action</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        {% for progress in volume_progress %}
+                            <tr>
+                                <td class="fw-semibold">
+                                    <a href="{% url 'catalog:volume_details' progress.volume.id %}">
+                                        {{ progress.volume }}
+                                    </a>
+                                </td>
+                                <td>
+                                    <a href="{% url 'catalog:run_details' progress.volume.run.id %}">
+                                        {{ progress.volume.run }}
+                                    </a>
+                                </td>
+                                <td>
+                                    {% if progress.volume.release_date %}
+                                        {{ progress.volume.release_date|date:"Y-m-d" }}
+                                    {% else %}
+                                        <span class="erc-muted">Unknown</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <form
+                                        action="{% url 'reading:set_volume_status' progress.volume.id %}"
+                                        method="post"
+                                        class="d-flex gap-2"
+                                    >
+                                        {% csrf_token %}
+                                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                        <select name="status" class="form-select form-select-sm">
+                                            {% for value, label in volume_status_choices %}
+                                                <option value="{{ value }}" {% if progress.status == value %}selected{% endif %}>
+                                                    {{ label }}
+                                                </option>
+                                            {% endfor %}
+                                        </select>
+                                        <button type="submit" class="btn btn-outline-light btn-sm">
+                                            Update
+                                        </button>
+                                    </form>
+                                </td>
+                                <td>{{ progress.updated_at|date:"Y-m-d" }}</td>
+                                <td class="text-end">
+                                    <form
+                                        action="{% url 'reading:remove_volume_status' progress.volume.id %}"
+                                        method="post"
+                                        class="d-inline"
+                                    >
+                                        {% csrf_token %}
+                                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                        <button type="submit" class="btn btn-outline-secondary btn-sm">
+                                            Remove
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                        {% empty %}
+                            <tr>
+                                <td colspan="6" class="text-center erc-muted py-4">
+                                    You have not saved any volume statuses yet.
+                                </td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section>
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-end gap-2 mb-3">
+            <div>
+                <p class="erc-page-kicker mb-1">Issue progress</p>
+                <h2 class="h4 fw-bold mb-0">Saved issue statuses</h2>
+            </div>
+
+            <p class="erc-muted mb-0">
+                {{ issue_progress|length }} result{% if issue_progress|length != 1 %}s{% endif %}
+            </p>
+        </div>
+
+        <div class="card erc-panel-flat">
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-dark table-hover align-middle mb-0">
+                        <thead>
+                        <tr>
+                            <th scope="col">Issue</th>
+                            <th scope="col">Title</th>
+                            <th scope="col">Run</th>
+                            <th scope="col">Status</th>
+                            <th scope="col">Updated</th>
+                            <th scope="col" class="text-end">Action</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        {% for progress in issue_progress %}
+                            <tr>
+                                <td class="fw-semibold">
+                                    <a href="{% url 'catalog:issue_details' progress.issue.id %}">
+                                        #{{ progress.issue.issue_number }}
+                                    </a>
+                                </td>
+                                <td>
+                                    {% if progress.issue.title %}
+                                        {{ progress.issue.title }}
+                                    {% else %}
+                                        <span class="erc-muted">Untitled</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <a href="{% url 'catalog:run_details' progress.issue.run.id %}">
+                                        {{ progress.issue.run }}
+                                    </a>
+                                </td>
+                                <td>
+                                    <form
+                                        action="{% url 'reading:set_issue_status' progress.issue.id %}"
+                                        method="post"
+                                        class="d-flex gap-2"
+                                    >
+                                        {% csrf_token %}
+                                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                        <select name="status" class="form-select form-select-sm">
+                                            {% for value, label in issue_status_choices %}
+                                                <option value="{{ value }}" {% if progress.status == value %}selected{% endif %}>
+                                                    {{ label }}
+                                                </option>
+                                            {% endfor %}
+                                        </select>
+                                        <button type="submit" class="btn btn-outline-light btn-sm">
+                                            Update
+                                        </button>
+                                    </form>
+                                </td>
+                                <td>{{ progress.updated_at|date:"Y-m-d" }}</td>
+                                <td class="text-end">
+                                    <form
+                                        action="{% url 'reading:remove_issue_status' progress.issue.id %}"
+                                        method="post"
+                                        class="d-inline"
+                                    >
+                                        {% csrf_token %}
+                                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                        <button type="submit" class="btn btn-outline-secondary btn-sm">
+                                            Remove
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                        {% empty %}
+                            <tr>
+                                <td colspan="6" class="text-center erc-muted py-4">
+                                    You have not saved any issue statuses yet.
+                                </td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </section>
+</div>
+{% endblock %}

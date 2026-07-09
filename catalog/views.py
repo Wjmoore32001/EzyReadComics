@@ -11,6 +11,7 @@ from catalog.models import (
     ComicVolume,
     ComicVolumeIssue,
 )
+from reading.models import FollowedRun, IssueProgress, VolumeProgress
 
 
 def home(request):
@@ -176,12 +177,21 @@ def run_details(request, pk):
     )
     all_credits = run.credits.select_related("person", "role")
 
+    is_following_run = False
+
+    if request.user.is_authenticated:
+        is_following_run = FollowedRun.objects.filter(
+            user=request.user,
+            run=run,
+        ).exists()
+
     context = {
         "run": run,
         "issues": issues,
         "volumes": volumes,
         "default_credits": default_credits,
         "all_credits": all_credits,
+        "is_following_run": is_following_run,
     }
 
     return render(request, "catalog/run_details.html", context)
@@ -214,11 +224,27 @@ def issue_details(request, pk):
     )
     all_credits = issue.credits.select_related("person", "role")
 
+    current_issue_progress = None
+    is_following_run = False
+
+    if request.user.is_authenticated:
+        current_issue_progress = IssueProgress.objects.filter(
+            user=request.user,
+            issue=issue,
+        ).first()
+        is_following_run = FollowedRun.objects.filter(
+            user=request.user,
+            run=issue.run,
+        ).exists()
+
     context = {
         "issue": issue,
         "collected_in": collected_in,
         "default_credits": default_credits,
         "all_credits": all_credits,
+        "current_issue_progress": current_issue_progress,
+        "issue_status_choices": IssueProgress.STATUS_CHOICES,
+        "is_following_run": is_following_run,
     }
 
     return render(request, "catalog/issue_details.html", context)
@@ -251,11 +277,27 @@ def volume_details(request, pk):
     )
     all_credits = volume.credits.select_related("person", "role")
 
+    current_volume_progress = None
+    is_following_run = False
+
+    if request.user.is_authenticated:
+        current_volume_progress = VolumeProgress.objects.filter(
+            user=request.user,
+            volume=volume,
+        ).first()
+        is_following_run = FollowedRun.objects.filter(
+            user=request.user,
+            run=volume.run,
+        ).exists()
+
     context = {
         "volume": volume,
         "volume_issues": volume_issues,
         "default_credits": default_credits,
         "all_credits": all_credits,
+        "current_volume_progress": current_volume_progress,
+        "volume_status_choices": VolumeProgress.STATUS_CHOICES,
+        "is_following_run": is_following_run,
     }
 
     return render(request, "catalog/volume_details.html", context)
