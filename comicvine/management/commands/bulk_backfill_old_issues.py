@@ -25,7 +25,7 @@ from comicvine.services.sync.scans import (
 
 USER_AGENT = "EzyReadComics bulk_backfill_old_issues"
 
-DEFAULT_OLDEST_BACKFILL_DATE = date(1930, 1, 1)
+DEFAULT_OLDEST_BACKFILL_DATE = date(2005, 1, 1)
 DEFAULT_API_ERROR_RETRY_DELAY = 90 * 60
 
 
