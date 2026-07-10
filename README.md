@@ -1,6 +1,6 @@
 # EzyReadComics
 
-EzyReadComics is a Django web app for helping comic readers figure out what to read, where to start, and how to keep track of their comic reading.
+EzyReadComics is a Django web app for helping comic readers figure out what to read, where to start, browse comic information, and track their comic reading.
 
 The long-term goal is to make comics easier to approach by combining curated comic run information, collected-volume information, issue data, user reading progress, and practical starting-point guidance.
 
@@ -16,8 +16,9 @@ The current version is focused on building the foundation for:
 - Collected-volume browsing
 - Comic detail pages
 - User accounts
+- User comic tracking
 - Comic Vine source-data imports
-- Future reading tracking
+- Future starting-point guidance
 
 The app currently supports a manually curated catalog experience while Comic Vine source data continues to be imported and backfilled in the background.
 
@@ -74,6 +75,8 @@ Run pages currently show:
 - Related collected volumes
 - Issues in the run
 
+Logged-in users can also follow or unfollow the run from the run detail page.
+
 ### Issue Details
 
 Issue detail pages show information about a single comic issue.
@@ -95,6 +98,14 @@ Issue pages currently show:
 - Expandable full credits
 - Collected volumes that include the issue
 
+Logged-in users can track an issue with one of these statuses:
+
+- Planned to read
+- Reading
+- Read
+
+Saving an issue status also follows the issue's parent run.
+
 ### Collected Volume Details
 
 Collected-volume detail pages show information about a collected edition or trade-style volume.
@@ -115,6 +126,36 @@ Volume pages currently show:
 - Main credits
 - Expandable full credits
 - Issues collected in the volume
+
+Logged-in users can track a volume with one of these statuses:
+
+- Planned to read
+- Reading
+- Read
+
+Saving a volume status also follows the volume's parent run.
+
+If a logged-in user marks a volume as read, the app also marks the issues linked to that volume as read for that user.
+
+### My Comics
+
+The My Comics page is the user's personal tracking page.
+
+Route:
+
+    /my-comics/
+
+The page is only available to logged-in users.
+
+My Comics currently shows:
+
+- Followed runs
+- Saved volume statuses
+- Saved issue statuses
+
+Users can update or remove saved volume and issue statuses from this page.
+
+Removing a volume status does not remove issue statuses. This avoids accidental progress loss after a volume has already marked linked issues as read.
 
 ### Accounts
 
@@ -160,6 +201,26 @@ Main catalog models:
 
 The public catalog pages read from this layer.
 
+### Reading Data
+
+The `reading` app stores user-specific comic tracking data.
+
+Main reading models:
+
+- `FollowedRun`
+- `IssueProgress`
+- `VolumeProgress`
+
+Current reading behavior:
+
+- A user can follow a comic run.
+- A user can save issue progress.
+- A user can save volume progress.
+- Saving issue or volume progress automatically follows the parent run.
+- Marking a volume as read also marks the linked issues inside that volume as read.
+- Removing a followed run does not delete issue or volume progress.
+- Removing a volume status does not delete issue progress.
+
 ### Comic Vine Source Data
 
 The `comicvine` app stores imported Comic Vine data.
@@ -187,17 +248,6 @@ Current Comic Vine source data includes:
 The `ingestion` app is reserved for future review/staging workflows between source data and confirmed catalog data.
 
 The goal is to avoid pushing uncertain source-data relationships directly into the confirmed catalog.
-
-### Reading
-
-The `reading` app is reserved for future user reading-tracking features.
-
-Planned reading features include:
-
-- Tracking what a user is reading
-- Tracking completed issues or volumes
-- Saving runs to read later
-- Supporting personalized reading progress
 
 ## Tech Stack
 
@@ -240,6 +290,13 @@ Planned reading features include:
         ingestion/
 
         reading/
+            admin.py
+            forms.py
+            models.py
+            urls.py
+            views.py
+            migrations/
+            templates/reading/
 
         templates/
             base.html
@@ -318,13 +375,13 @@ Run Django checks:
 
     python manage.py check
 
-Run migrations:
-
-    python manage.py migrate
-
 Create migrations after model changes:
 
     python manage.py makemigrations
+
+Run migrations:
+
+    python manage.py migrate
 
 Run the development server:
 
@@ -358,50 +415,11 @@ Run issue hydration:
 
     python manage.py hydrate_issues
 
-Run historical issue backfill:
+## Current Development Notes
 
-    python manage.py backfill_issues
+The current app direction is intentionally simple:
 
-Run historical issue backfill without saving changes:
-
-    python manage.py backfill_issues --dry-run
-
-## Current Development Focus
-
-The current development focus is:
-
-- Keep improving the confirmed catalog structure
-- Continue testing manual catalog entry with real comic runs
-- Keep Comic Vine source-data backfills running
-- Refine browse and detail pages around real catalog usage
-- Build reading tracking once the catalog model feels stable
-- Add reader-facing guidance for where to start
-
-## Product Direction
-
-EzyReadComics is being built around a simple reader problem:
-
-Comics are hard to start because runs, issue numbers, collected editions, reboots, and reading paths can be confusing.
-
-The project aims to make that easier by eventually answering questions like:
-
-- What is this run?
-- Where does it start?
-- What issues are in it?
-- What collected volumes contain those issues?
-- Is this a good place to begin?
-- What am I currently reading?
-- What should I read next?
-
-The current foundation is focused on clean catalog data, useful browsing, and detail pages before adding recommendation or reading-tracking logic.
-
-## Documentation
-
-The main project documentation is:
-
-    README.md
-    docs/development-log.md
-
-The README describes the current project.
-
-The development log tracks major project milestones over time.
+- Keep confirmed catalog data separate from Comic Vine source data.
+- Keep uncertain source-data relationships out of the public catalog until reviewed.
+- Keep reading tracking user-specific.
+- Avoid recommendation logic, reading-order algorithms, events, characters, creators, and story-arc features until the core catalog and tracking experience is stable.

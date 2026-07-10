@@ -74,7 +74,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "--request-delay",
             type=float,
-            default=3.0,
+            default=0.0,
             help="Seconds to wait between successful API pages. Defaults to 3.",
         )
 

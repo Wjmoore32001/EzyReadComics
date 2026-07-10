@@ -6,7 +6,7 @@ The README explains the current product goal and current project state. This fil
 
 ## Current Status
 
-EzyReadComics is a Django web app being built to help readers find comic runs, understand where to start, browse useful comic information, and eventually track their own reading.
+EzyReadComics is a Django web app being built to help readers find comic runs, understand where to start, browse useful comic information, and track their own reading.
 
 Current project areas:
 
@@ -14,12 +14,42 @@ Current project areas:
 - `comicvine` stores source data imported from Comic Vine.
 - `catalog` stores confirmed app-facing comic data.
 - `ingestion` exists as a future review/staging layer between source data and confirmed catalog data.
-- `reading` exists for future user reading-tracking features.
-- The site currently has catalog home, browse, run details, issue details, and collected-volume details pages.
+- `reading` stores user-specific comic tracking data.
+- The site currently has catalog home, browse, run details, issue details, collected-volume details, and My Comics pages.
 - Comic Vine backfill/import work is ongoing.
-- User reading tracking and recommendation features are not built yet.
+- Recommendation logic, reading-order algorithms, character features, creator features, event features, and story-arc features are not built yet.
 
 ## Timeline
+
+### 2026-07-08
+
+- Added the first user reading-tracking system.
+- Added the logged-in `My Comics` navigation tab.
+- Added the `/my-comics/` page.
+- Added followed-run tracking through `FollowedRun`.
+- Added issue reading-status tracking through `IssueProgress`.
+- Added volume reading-status tracking through `VolumeProgress`.
+- Added reading statuses:
+  - Planned to read
+  - Reading
+  - Read
+- Added run follow and unfollow actions.
+- Added issue status save/remove actions.
+- Added volume status save/remove actions.
+- Added tracking controls to run detail pages.
+- Added tracking controls to issue detail pages.
+- Added tracking controls to collected-volume detail pages.
+- Added My Comics tables for:
+  - Followed runs
+  - Saved volume statuses
+  - Saved issue statuses
+- Saving an issue status now follows the issue's parent run.
+- Saving a volume status now follows the volume's parent run.
+- Marking a volume as read now marks the linked issues inside that volume as read for the same user.
+- Kept deletion behavior conservative:
+  - Unfollowing a run does not delete issue or volume progress.
+  - Removing a volume status does not delete issue progress.
+- Added admin support for reading-tracking models.
 
 ### 2026-07-03
 
@@ -51,7 +81,7 @@ Current project areas:
 - Established `comicvine` as the source-data layer.
 - Established `catalog` as the confirmed app-facing data layer.
 - Established `ingestion` as the future candidate/review layer.
-- Kept `reading` reserved for future reading-tracking features.
+- Reserved `reading` for user reading-tracking features.
 - Removed the old temporary `comics` app from the active project structure.
 
 ### 2026-06-30
@@ -106,9 +136,9 @@ Current project areas:
 
 ## Next Major Goals
 
-- Finish cleaning the README.
-- Remove or retire the numbered docs.
+- Test the new My Comics tracking flow with real catalog entries.
 - Keep Comic Vine source-data backfills running.
 - Continue manually testing confirmed catalog data.
 - Refine catalog models based on real manual entries.
-- Add user reading-tracking features when the catalog structure feels stable.
+- Add a review/staging workflow in `ingestion` when source-to-catalog promotion becomes necessary.
+- Improve My Comics filtering once there is enough tracked user data to justify it.
