@@ -74,17 +74,18 @@ def browse(request):
 
     run_options = ComicRun.objects.select_related("publisher").order_by(
         "publisher__name",
+        "-start_year",
+        "-first_issue_date",
         "title",
-        "start_year",
     )
     volume_options = ComicVolume.objects.select_related(
         "publisher",
         "run",
     ).order_by(
         "publisher__name",
+        "-release_date",
         "run__title",
         "volume_number",
-        "release_date",
         "title",
     )
 
@@ -97,20 +98,22 @@ def browse(request):
 
     runs = ComicRun.objects.select_related("publisher").order_by(
         "publisher__name",
+        "-start_year",
+        "-first_issue_date",
         "title",
-        "start_year",
     )
     volumes = ComicVolume.objects.select_related("publisher", "run").order_by(
         "publisher__name",
+        "-release_date",
         "run__title",
         "volume_number",
-        "release_date",
         "title",
     )
     issues = ComicIssue.objects.select_related("run", "run__publisher").order_by(
         "run__publisher__name",
+        "-store_date",
+        "-cover_date",
         "run__title",
-        "store_date",
         "issue_number",
     )
 

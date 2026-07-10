@@ -16,7 +16,7 @@ from ingestion.models import (
 
 
 PUBLISHER_NAME = "Marvel"
-ANALYSIS_VERSION = 1
+ANALYSIS_VERSION = 2
 
 
 @dataclass
@@ -137,8 +137,8 @@ class AnalysisResult:
 
 class Command(BaseCommand):
     help = (
-        "Analyze local Marvel Comic Vine volumes into ingestion groups, candidates, "
-        "and deterministic containment relationships."
+        "Analyze local Marvel Comic Vine volumes into ingestion groups using exact "
+        "source volume-name matching first, then date containment."
     )
 
     def add_arguments(self, parser):
@@ -185,6 +185,8 @@ class Command(BaseCommand):
         self.stdout.write("Source: local ComicVineVolume and ComicVineIssue rows")
         self.stdout.write("Publisher: Marvel")
         self.stdout.write("Comic Vine API calls: none")
+        self.stdout.write("Relationship rule: exact/simple ComicVineVolume.name match first")
+        self.stdout.write("Date rule: strict containment inside same-name group")
 
         if comicvine_volume_ids:
             self.stdout.write(
@@ -297,7 +299,7 @@ def build_volume_facts(volume):
     if not title:
         title = f"Unknown Comic Vine Volume {volume.comicvine_id}"
 
-    normalized_title = normalize_marvel_title(
+    normalized_title = normalize_volume_name_for_exact_grouping(
         title,
         fallback_id=volume.comicvine_id,
     )
@@ -680,7 +682,7 @@ def find_containment_decisions(volume_facts_list):
                         date_type=possible_run.source_date_type,
                         reason=(
                             "Source date range is strictly contained inside another "
-                            "Marvel source volume with the same normalized title."
+                            "Marvel source volume with the exact same source volume name."
                         ),
                     )
                 )
@@ -790,7 +792,7 @@ def invalidate_stale_algorithm_containments(*, group, current_pair_keys):
         containment.status = MarvelVolumeContainment.STATUS_INVALIDATED_BY_SOURCE_CHANGE
         containment.source_changed_at = now
         containment.determination_reason = (
-            "This relationship was not confirmed by the latest deterministic analysis."
+            "This relationship was not confirmed by the latest exact-name analysis."
         )
         containment.save(
             update_fields=[
@@ -839,6 +841,7 @@ def classify_group_candidates(
 
         classification = classify_candidate(
             facts=facts,
+            group_facts=group_facts,
             parent_ids=parent_ids,
             child_ids=child_ids,
         )
@@ -856,7 +859,7 @@ def classify_group_candidates(
     return counts
 
 
-def classify_candidate(*, facts, parent_ids, child_ids):
+def classify_candidate(*, facts, group_facts, parent_ids, child_ids):
     if not has_usable_date_range(facts):
         return {
             "suggested_kind": ComicVineVolumeCandidate.KIND_UNKNOWN,
@@ -874,7 +877,8 @@ def classify_candidate(*, facts, parent_ids, child_ids):
             "catalog_status": ComicVineVolumeCandidate.CATALOG_STATUS_BLOCKED,
             "determination_source": ComicVineVolumeCandidate.DETERMINATION_SOURCE_ALGORITHM,
             "analysis_reason": (
-                "This source range is strictly contained by multiple possible run sources."
+                "This source range is strictly contained by multiple possible run sources "
+                "with the exact same source volume name."
             ),
             "count_key": "conflicts",
         }
@@ -888,7 +892,8 @@ def classify_candidate(*, facts, parent_ids, child_ids):
             "catalog_status": ComicVineVolumeCandidate.CATALOG_STATUS_READY_TO_APPLY,
             "determination_source": ComicVineVolumeCandidate.DETERMINATION_SOURCE_ALGORITHM,
             "analysis_reason": (
-                "This source range is strictly contained inside one broader source range."
+                "This source range is strictly contained inside one broader source range "
+                "with the exact same source volume name."
             ),
             "count_key": "confirmed_collected_volumes",
         }
@@ -900,7 +905,21 @@ def classify_candidate(*, facts, parent_ids, child_ids):
             "catalog_status": ComicVineVolumeCandidate.CATALOG_STATUS_READY_TO_APPLY,
             "determination_source": ComicVineVolumeCandidate.DETERMINATION_SOURCE_ALGORITHM,
             "analysis_reason": (
-                "This source range strictly contains one or more related source ranges."
+                "This source range strictly contains one or more related source ranges "
+                "with the exact same source volume name."
+            ),
+            "count_key": "confirmed_runs",
+        }
+
+    if group_facts.source_volume_count > 1 and facts.source_issue_count > 1:
+        return {
+            "suggested_kind": ComicVineVolumeCandidate.KIND_RUN,
+            "analysis_status": ComicVineVolumeCandidate.ANALYSIS_STATUS_CONFIRMED_RUN,
+            "catalog_status": ComicVineVolumeCandidate.CATALOG_STATUS_READY_TO_APPLY,
+            "determination_source": ComicVineVolumeCandidate.DETERMINATION_SOURCE_ALGORITHM,
+            "analysis_reason": (
+                "This source shares an exact source volume name with other records and "
+                "has multiple issues, so it is treated as a run source."
             ),
             "count_key": "confirmed_runs",
         }
@@ -911,8 +930,8 @@ def classify_candidate(*, facts, parent_ids, child_ids):
         "catalog_status": ComicVineVolumeCandidate.CATALOG_STATUS_NOT_READY,
         "determination_source": ComicVineVolumeCandidate.DETERMINATION_SOURCE_ALGORITHM,
         "analysis_reason": (
-            "A usable issue date range exists, but no strict containment relationship "
-            "was found."
+            "A usable issue date range exists, but no exact-name strict containment "
+            "relationship was found."
         ),
         "count_key": "unresolved",
     }
@@ -982,7 +1001,11 @@ def update_group_analysis_status(
     elif containment_decisions:
         analysis_status = MarvelIngestionGroup.ANALYSIS_STATUS_CONFIRMED
         catalog_status = MarvelIngestionGroup.CATALOG_STATUS_READY_TO_APPLY
-        reason = "At least one strict containment relationship was confirmed by rule."
+        reason = "At least one exact-name strict containment relationship was confirmed."
+    elif candidate_status_counts["confirmed_runs"]:
+        analysis_status = MarvelIngestionGroup.ANALYSIS_STATUS_CONFIRMED
+        catalog_status = MarvelIngestionGroup.CATALOG_STATUS_READY_TO_APPLY
+        reason = "One or more exact-name grouped run sources were confirmed."
     elif (
         candidate_status_counts["insufficient_data"]
         and not candidate_status_counts["unresolved"]
@@ -993,7 +1016,7 @@ def update_group_analysis_status(
     else:
         analysis_status = MarvelIngestionGroup.ANALYSIS_STATUS_UNRESOLVED
         catalog_status = MarvelIngestionGroup.CATALOG_STATUS_NOT_READY
-        reason = "No strict containment relationship was confirmed for this group."
+        reason = "No exact-name strict containment relationship was confirmed for this group."
 
     update_fields = []
 
@@ -1029,37 +1052,14 @@ def has_usable_date_range(facts):
     )
 
 
-def normalize_marvel_title(title, *, fallback_id):
+def normalize_volume_name_for_exact_grouping(title, *, fallback_id):
     title = clean_title(title)
 
     if not title:
         title = f"Unknown Comic Vine Volume {fallback_id}"
 
     title = title.casefold()
-
-    title = re.sub(r"\([^)]*\)", " ", title)
-    title = re.sub(r"\[[^]]*\]", " ", title)
-
     title = title.replace("&", " and ")
-
-    title = strip_from_first_match(
-        title,
-        [
-            r"\bvol\.?\s+\d+\b",
-            r"\bvolume\s+\d+\b",
-            r"\btpb\b",
-            r"\btrade paperback\b",
-            r"\bhardcover\b",
-            r"\bomnibus\b",
-            r"\bcomplete collection\b",
-            r"\bepic collection\b",
-            r"\bmodern era epic collection\b",
-            r"\bmasterworks\b",
-        ],
-    )
-
-    title = strip_creator_collection_suffix(title)
-
     title = re.sub(r"[^a-z0-9]+", " ", title)
     title = re.sub(r"\s+", " ", title).strip()
 
@@ -1070,31 +1070,6 @@ def normalize_marvel_title(title, *, fallback_id):
         return f"unknown comic vine volume {fallback_id}"
 
     return title
-
-
-def strip_from_first_match(title, patterns):
-    match_indexes = []
-
-    for pattern in patterns:
-        match = re.search(pattern, title)
-
-        if match:
-            match_indexes.append(match.start())
-
-    if not match_indexes:
-        return title
-
-    return title[: min(match_indexes)].strip()
-
-
-def strip_creator_collection_suffix(title):
-    if " by " not in title:
-        return title
-
-    if " vol" not in title and " volume" not in title:
-        return title
-
-    return title.split(" by ", 1)[0].strip()
 
 
 def clean_title(value):
