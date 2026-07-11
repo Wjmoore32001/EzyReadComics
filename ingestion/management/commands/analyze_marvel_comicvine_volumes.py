@@ -3,7 +3,6 @@ import re
 from dataclasses import dataclass, field
 from datetime import date
 from html import unescape
-from statistics import median
 
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
@@ -18,24 +17,13 @@ from ingestion.models import ComicVineVolumeCandidate
 PUBLISHER_NAME = "Marvel"
 ANALYSIS_VERSION = 4
 
-COLLECTING_PATTERN = re.compile(r"\b(?:collects|collecting)\b", re.IGNORECASE)
-EDITION_ISSUE_TITLE_PATTERN = re.compile(
-    r"^(?:vol(?:ume)?\.?\s*\d+|tpb\b|trade paperback\b|hardcover\b|hc\b|omnibus\b)",
-    re.IGNORECASE,
-)
-EDITION_VOLUME_NAME_PATTERN = re.compile(
-    r"\b(?:omnibus|epic collection|masterworks|complete collection|"
-    r"trade paperback|graphic novel|treasury edition)\b",
+VOLUME_MARKER_TITLE_PATTERN = re.compile(
+    r"^\s*(?:volume\b|vol(?:\.|\b))",
     re.IGNORECASE,
 )
 STANDARD_ISSUE_NUMBER_PATTERN = re.compile(
     r"^#?\s*(?P<number>\d+)(?:[A-Za-z]+|\.[A-Za-z0-9]+)?$"
 )
-
-MAX_SERIAL_MEDIAN_GAP_DAYS = 75
-MIN_SERIAL_COVER_LEAD_DAYS = 21
-MAX_SERIAL_COVER_LEAD_DAYS = 120
-MIN_COVER_LEAD_RATIO = 0.60
 
 
 @dataclass
@@ -58,26 +46,8 @@ class VolumeFacts:
     duplicate_issue_numbers: list[str]
     standard_issue_numbers: list[int]
     longest_number_streak: int
-    median_release_gap_days: float | None
-    paired_date_count: int
-    cover_lead_count: int
-    near_same_date_count: int
-    collecting_issue_count: int
-    nonblank_issue_title_count: int
-    edition_issue_title_count: int
-    edition_volume_name: bool
-
-    @property
-    def cover_lead_ratio(self):
-        if not self.paired_date_count:
-            return 0.0
-        return self.cover_lead_count / self.paired_date_count
-
-    @property
-    def near_same_date_ratio(self):
-        if not self.paired_date_count:
-            return 0.0
-        return self.near_same_date_count / self.paired_date_count
+    volume_marker_issue_count: int
+    volume_marker_issue_titles: list[str]
 
 
 @dataclass(frozen=True)
@@ -116,8 +86,9 @@ class AnalysisResult:
 
 class Command(BaseCommand):
     help = (
-        "Classify local Marvel Comic Vine volumes as confirmed serial runs or "
-        "not-confirmed sources. Collected volumes are not analyzed or created."
+        "Classify local Marvel Comic Vine volumes as confirmed issue-bearing "
+        "runs or unresolved/not-confirmed sources. Collected volumes are not "
+        "classified, analyzed, or created."
     )
 
     def add_arguments(self, parser):
@@ -176,18 +147,19 @@ class Command(BaseCommand):
         self.stdout.write("")
         self.stdout.write(self.style.SUCCESS("Analyze Marvel Comic Vine runs"))
         self.stdout.write(f"Mode: {'dry run' if dry_run else 'save candidates'}")
-        self.stdout.write("Source: local ComicVineVolume and ComicVineIssue rows")
+        self.stdout.write("Source: local ComicVineVolume and attached ComicVineIssue rows")
         self.stdout.write("Comic Vine API calls: none")
         self.stdout.write("Catalog writes: none")
-        self.stdout.write("Collected-volume analysis and writes: none")
+        self.stdout.write("Collected-volume classification, analysis, and writes: none")
         self.stdout.write(
-            "Run rule: complete unique issue data, sequential numbering, serial "
-            "release cadence, and serial cover-date lead"
+            "Run rule: at least two attached local issues, no child issue title "
+            "starting with Vol./Volume, and safe issue IDs/numbers"
         )
         self.stdout.write(
-            "Exclusion rule: explicit Collects/Collecting text or edition-style "
-            "Comic Vine issue/volume metadata"
+            "Unresolved rule: any attached child issue title starting with Vol./Volume "
+            "is treated as unsafe/unknown and is not applied as a run"
         )
+        self.stdout.write("Comic Vine count_of_issues threshold: not used")
         self.stdout.write("Title/date overlap rule: not used")
         self.stdout.write(f"Selected source volumes: {len(selected_volumes)}")
 
@@ -301,32 +273,12 @@ def build_volume_facts(volume):
             is not None
         }
     )
-    release_dates = sorted(
-        issue.store_date or issue.cover_date
-        for issue in issues
-        if issue.store_date or issue.cover_date
-    )
-    positive_gaps = [
-        (current - previous).days
-        for previous, current in zip(release_dates, release_dates[1:])
-        if current > previous
-    ]
-    paired_issues = [
-        issue for issue in issues if issue.store_date and issue.cover_date
-    ]
-    cover_lead_count = sum(
-        MIN_SERIAL_COVER_LEAD_DAYS
-        <= (issue.cover_date - issue.store_date).days
-        <= MAX_SERIAL_COVER_LEAD_DAYS
-        for issue in paired_issues
-    )
-    near_same_date_count = sum(
-        abs((issue.cover_date - issue.store_date).days) <= 14
-        for issue in paired_issues
-    )
-    issue_titles = [clean_html_text(issue.issue_title) for issue in issues]
-    nonblank_issue_titles = [title for title in issue_titles if title]
     source_date_type, first_issue_date, last_issue_date = choose_source_dates(issues)
+    volume_marker_issue_titles = [
+        clean_html_text(issue.issue_title)
+        for issue in issues
+        if child_issue_title_starts_with_volume_marker(issue.issue_title)
+    ]
 
     return VolumeFacts(
         volume=volume,
@@ -352,22 +304,8 @@ def build_volume_facts(volume):
         duplicate_issue_numbers=duplicate_issue_numbers,
         standard_issue_numbers=standard_issue_numbers,
         longest_number_streak=longest_consecutive_streak(standard_issue_numbers),
-        median_release_gap_days=(median(positive_gaps) if positive_gaps else None),
-        paired_date_count=len(paired_issues),
-        cover_lead_count=cover_lead_count,
-        near_same_date_count=near_same_date_count,
-        collecting_issue_count=sum(
-            bool(COLLECTING_PATTERN.search(clean_html_text(issue.description)))
-            for issue in issues
-        ),
-        nonblank_issue_title_count=len(nonblank_issue_titles),
-        edition_issue_title_count=sum(
-            bool(EDITION_ISSUE_TITLE_PATTERN.match(title))
-            for title in nonblank_issue_titles
-        ),
-        edition_volume_name=bool(
-            EDITION_VOLUME_NAME_PATTERN.search(clean_html_text(volume.name))
-        ),
+        volume_marker_issue_count=len(volume_marker_issue_titles),
+        volume_marker_issue_titles=volume_marker_issue_titles,
     )
 
 
@@ -382,37 +320,6 @@ def classify_volume(facts):
             f"Publisher is {publisher!r}, not an exact local Marvel value.",
         )
 
-    if facts.collecting_issue_count:
-        return Classification(
-            ComicVineVolumeCandidate.ANALYSIS_STATUS_COLLECTION_CONTAINER,
-            not_ready,
-            f"Excluded from runs: {facts.collecting_issue_count} child issue(s) contain explicit Collects/Collecting text.",
-        )
-
-    if facts.edition_volume_name:
-        return Classification(
-            ComicVineVolumeCandidate.ANALYSIS_STATUS_COLLECTION_CONTAINER,
-            not_ready,
-            "Excluded from runs: the Comic Vine volume name has an explicit collected-edition marker.",
-        )
-
-    if (
-        facts.nonblank_issue_title_count
-        and facts.edition_issue_title_count == facts.nonblank_issue_title_count
-    ):
-        return Classification(
-            ComicVineVolumeCandidate.ANALYSIS_STATUS_COLLECTION_CONTAINER,
-            not_ready,
-            "Excluded from runs: every nonblank child issue title is edition-style (for example Vol. 1, TPB, or Hardcover).",
-        )
-
-    if facts.edition_issue_title_count and facts.near_same_date_ratio >= 0.75:
-        return Classification(
-            ComicVineVolumeCandidate.ANALYSIS_STATUS_COLLECTION_CONTAINER,
-            not_ready,
-            "Excluded from runs: edition-style child titles and near-identical store/cover dates indicate bound editions.",
-        )
-
     if not facts.issues:
         return Classification(
             ComicVineVolumeCandidate.ANALYSIS_STATUS_INSUFFICIENT_DATA,
@@ -424,14 +331,19 @@ def classify_volume(facts):
         return Classification(
             ComicVineVolumeCandidate.ANALYSIS_STATUS_INSUFFICIENT_DATA,
             not_ready,
-            "The Comic Vine volume has no local start year.",
+            "The Comic Vine volume has no local start year, so it cannot be safely keyed as a catalog run.",
         )
 
-    if facts.expected_issue_count and facts.local_issue_count < facts.expected_issue_count:
+    if facts.volume_marker_issue_count:
+        samples = ", ".join(repr(title) for title in facts.volume_marker_issue_titles[:3])
+        extra = "" if facts.volume_marker_issue_count <= 3 else ", ..."
         return Classification(
-            ComicVineVolumeCandidate.ANALYSIS_STATUS_INSUFFICIENT_DATA,
+            ComicVineVolumeCandidate.ANALYSIS_STATUS_UNRESOLVED,
             not_ready,
-            f"Local issue data is incomplete: {facts.local_issue_count} of {facts.expected_issue_count} Comic Vine issues are present.",
+            "Unsafe to confirm as a run: "
+            f"{facts.volume_marker_issue_count} child issue title(s) start with Vol./Volume "
+            f"({samples}{extra}). This may be a collected-volume/product source, "
+            "but this command does not classify collections.",
         )
 
     if facts.missing_comicvine_ids or facts.missing_issue_numbers:
@@ -453,51 +365,16 @@ def classify_volume(facts):
         return Classification(
             ComicVineVolumeCandidate.ANALYSIS_STATUS_UNRESOLVED,
             not_ready,
-            "A one-issue Comic Vine volume cannot be automatically distinguished as a serial run.",
-        )
-
-    if len(facts.standard_issue_numbers) < 2 or facts.longest_number_streak < 2:
-        return Classification(
-            ComicVineVolumeCandidate.ANALYSIS_STATUS_UNRESOLVED,
-            not_ready,
-            "The child issues do not provide at least two consecutive standard issue numbers.",
-        )
-
-    if facts.median_release_gap_days is None:
-        return Classification(
-            ComicVineVolumeCandidate.ANALYSIS_STATUS_INSUFFICIENT_DATA,
-            not_ready,
-            "There are not enough distinct local issue dates to establish serial cadence.",
-        )
-
-    if facts.median_release_gap_days > MAX_SERIAL_MEDIAN_GAP_DAYS:
-        return Classification(
-            ComicVineVolumeCandidate.ANALYSIS_STATUS_UNRESOLVED,
-            not_ready,
-            f"Median child-issue release gap is {facts.median_release_gap_days:g} days, outside the serial-run limit of {MAX_SERIAL_MEDIAN_GAP_DAYS} days.",
-        )
-
-    if facts.paired_date_count < 2:
-        return Classification(
-            ComicVineVolumeCandidate.ANALYSIS_STATUS_INSUFFICIENT_DATA,
-            not_ready,
-            "Fewer than two child issues have both store and cover dates.",
-        )
-
-    if facts.cover_lead_ratio < MIN_COVER_LEAD_RATIO:
-        return Classification(
-            ComicVineVolumeCandidate.ANALYSIS_STATUS_UNRESOLVED,
-            not_ready,
-            f"Only {facts.cover_lead_count} of {facts.paired_date_count} paired dates have the normal serial cover-date lead.",
+            "Unsafe to confirm as a run: only one local Comic Vine issue is attached. "
+            "This may be a one-shot, special, facsimile, collected product record, or a run "
+            "that has not been fully hydrated yet.",
         )
 
     return Classification(
         ComicVineVolumeCandidate.ANALYSIS_STATUS_CONFIRMED_RUN,
         ComicVineVolumeCandidate.CATALOG_STATUS_READY_TO_APPLY,
-        "Confirmed from explicit Comic Vine issue parentage, complete unique issue data, "
-        f"a consecutive numbered sequence, {facts.median_release_gap_days:g}-day median "
-        f"release cadence, and serial cover-date lead on {facts.cover_lead_count} of "
-        f"{facts.paired_date_count} paired dates.",
+        "Confirmed from attached Comic Vine issue rows: at least two child issues exist, "
+        "no child issue title starts with Vol./Volume, and child issue IDs/numbers are usable and unique.",
     )
 
 
@@ -647,6 +524,10 @@ def longest_consecutive_streak(numbers):
     return longest
 
 
+def child_issue_title_starts_with_volume_marker(value):
+    return bool(VOLUME_MARKER_TITLE_PATTERN.match(clean_html_text(value)))
+
+
 def build_source_fingerprint(volume, issues):
     lines = [
         str(volume.comicvine_id),
@@ -756,11 +637,10 @@ def print_result(command, result, *, dry_run):
         command.stdout.write(
             "    Evidence: "
             f"local/expected issues={facts.local_issue_count}/{facts.expected_issue_count or 'unknown'}, "
-            f"number streak={facts.longest_number_streak}, "
-            f"median gap={facts.median_release_gap_days if facts.median_release_gap_days is not None else 'unknown'} days, "
-            f"cover lead={facts.cover_lead_count}/{facts.paired_date_count}, "
-            f"collecting markers={facts.collecting_issue_count}, "
-            f"edition titles={facts.edition_issue_title_count}/{facts.nonblank_issue_title_count}"
+            f"missing ids={facts.missing_comicvine_ids}, "
+            f"missing numbers={facts.missing_issue_numbers}, "
+            f"duplicate numbers={len(facts.duplicate_issue_numbers)}, "
+            f"Vol./Volume child titles={facts.volume_marker_issue_count}"
         )
         command.stdout.write(f"    Reason: {item.classification.reason}")
 
@@ -774,8 +654,8 @@ def print_result(command, result, *, dry_run):
     command.stdout.write(f"{prefix}run candidates updated: {result.candidates_updated}")
     command.stdout.write(f"{prefix}run candidates unchanged: {result.candidates_unchanged}")
     command.stdout.write(f"Confirmed runs: {result.confirmed_runs}")
-    command.stdout.write(f"Collection-like sources excluded: {result.collection_like_sources}")
-    command.stdout.write(f"Unresolved sources: {result.unresolved_sources}")
+    command.stdout.write(f"Collection-container sources: {result.collection_like_sources}")
+    command.stdout.write(f"Unresolved / unsafe sources: {result.unresolved_sources}")
     command.stdout.write(f"Conflicting sources: {result.conflicting_sources}")
     command.stdout.write(f"Insufficient-data sources: {result.insufficient_sources}")
     command.stdout.write(f"Source changed since last analysis: {result.source_changed}")
