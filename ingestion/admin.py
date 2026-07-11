@@ -1,130 +1,28 @@
 from django.contrib import admin
 
 from ingestion.models import (
+    ComicVineCollectedEditionCandidate,
+    ComicVineCollectedEditionIssue,
     ComicVineVolumeCandidate,
     MarvelCatalogIssueSource,
     MarvelCatalogRunSource,
     MarvelCatalogVolumeSource,
-    MarvelIngestionGroup,
-    MarvelVolumeContainment,
 )
 
 
-class ComicVineVolumeCandidateInline(admin.TabularInline):
-    model = ComicVineVolumeCandidate
+class ComicVineCollectedEditionIssueInline(admin.TabularInline):
+    model = ComicVineCollectedEditionIssue
     extra = 0
     fields = [
-        "comicvine_volume",
-        "title",
-        "source_issue_count",
-        "source_date_type",
-        "first_issue_date",
-        "last_issue_date",
-        "analysis_status",
-        "catalog_status",
-        "suggested_kind",
-        "proposed_parent_run_candidate",
+        "issue_order",
+        "primary_run",
+        "source_run_candidate",
+        "source_issue",
+        "reference_text",
     ]
-    readonly_fields = [
-        "comicvine_volume",
-        "title",
-        "source_issue_count",
-        "source_date_type",
-        "first_issue_date",
-        "last_issue_date",
-        "analysis_status",
-        "catalog_status",
-        "suggested_kind",
-        "proposed_parent_run_candidate",
-    ]
+    readonly_fields = fields
     can_delete = False
     show_change_link = True
-
-
-class MarvelVolumeContainmentInline(admin.TabularInline):
-    model = MarvelVolumeContainment
-    extra = 0
-    fields = [
-        "run_candidate",
-        "collected_volume_candidate",
-        "date_type",
-        "collected_first_issue_date",
-        "collected_last_issue_date",
-        "status",
-        "determination_source",
-    ]
-    readonly_fields = [
-        "run_candidate",
-        "collected_volume_candidate",
-        "date_type",
-        "collected_first_issue_date",
-        "collected_last_issue_date",
-        "status",
-        "determination_source",
-    ]
-    can_delete = False
-    show_change_link = True
-
-
-@admin.register(MarvelIngestionGroup)
-class MarvelIngestionGroupAdmin(admin.ModelAdmin):
-    list_display = [
-        "display_title",
-        "normalized_title",
-        "publisher_name",
-        "source_volume_count",
-        "source_issue_count",
-        "first_issue_date",
-        "last_issue_date",
-        "analysis_status",
-        "catalog_status",
-        "determination_source",
-        "analysis_version",
-        "analyzed_at",
-        "source_changed_at",
-        "catalog_run",
-    ]
-    list_filter = [
-        "publisher_name",
-        "analysis_status",
-        "catalog_status",
-        "determination_source",
-        "analysis_version",
-    ]
-    search_fields = [
-        "display_title",
-        "normalized_title",
-        "analysis_reason",
-        "catalog_run__title",
-    ]
-    raw_id_fields = [
-        "catalog_run",
-    ]
-    readonly_fields = [
-        "publisher_name",
-        "normalized_title",
-        "display_title",
-        "source_volume_count",
-        "source_issue_count",
-        "first_issue_date",
-        "last_issue_date",
-        "source_volume_fingerprint",
-        "source_issue_fingerprint",
-        "analysis_version",
-        "analysis_status",
-        "catalog_status",
-        "determination_source",
-        "analysis_reason",
-        "analyzed_at",
-        "source_changed_at",
-        "catalog_applied_at",
-        "created_at",
-        "updated_at",
-    ]
-    inlines = [
-        ComicVineVolumeCandidateInline,
-        MarvelVolumeContainmentInline,
-    ]
 
 
 @admin.register(ComicVineVolumeCandidate)
@@ -132,36 +30,26 @@ class ComicVineVolumeCandidateAdmin(admin.ModelAdmin):
     list_display = [
         "title",
         "publisher_name",
-        "normalized_title",
         "start_year",
         "source_issue_count",
-        "source_date_type",
         "first_issue_date",
         "last_issue_date",
-        "suggested_kind",
-        "reviewed_kind",
         "analysis_status",
         "catalog_status",
-        "determination_source",
         "review_status",
-        "group",
-        "proposed_parent_run_candidate",
         "catalog_run",
-        "catalog_volume",
         "analyzed_at",
         "source_changed_at",
-        "reviewed_at",
     ]
     list_filter = [
         "publisher_name",
         "analysis_status",
         "catalog_status",
         "determination_source",
-        "suggested_kind",
-        "reviewed_kind",
         "review_status",
         "source_date_type",
         "start_year",
+        "analysis_version",
     ]
     search_fields = [
         "title",
@@ -173,15 +61,8 @@ class ComicVineVolumeCandidateAdmin(admin.ModelAdmin):
         "comicvine_volume__name",
         "comicvine_volume__comicvine_id",
         "catalog_run__title",
-        "catalog_volume__title",
     ]
-    raw_id_fields = [
-        "comicvine_volume",
-        "group",
-        "proposed_parent_run_candidate",
-        "catalog_run",
-        "catalog_volume",
-    ]
+    raw_id_fields = ["comicvine_volume", "catalog_run"]
     readonly_fields = [
         "publisher_name",
         "title",
@@ -194,28 +75,24 @@ class ComicVineVolumeCandidateAdmin(admin.ModelAdmin):
         "first_issue_number",
         "last_issue_number",
         "source_volume_date_last_updated",
-        "source_issue_fingerprint",
-        "suggested_kind",
+        "source_fingerprint",
         "analysis_version",
         "analysis_status",
         "catalog_status",
         "determination_source",
         "analysis_reason",
-        "review_reason",
         "analyzed_at",
         "source_changed_at",
         "catalog_applied_at",
         "created_at",
         "updated_at",
     ]
-
     fieldsets = [
         (
-            "Source Comic Vine volume",
+            "Comic Vine run source",
             {
                 "fields": [
                     "comicvine_volume",
-                    "group",
                     "publisher_name",
                     "title",
                     "normalized_title",
@@ -227,16 +104,14 @@ class ComicVineVolumeCandidateAdmin(admin.ModelAdmin):
                     "first_issue_number",
                     "last_issue_number",
                     "source_volume_date_last_updated",
-                    "source_issue_fingerprint",
+                    "source_fingerprint",
                 ]
             },
         ),
         (
-            "Deterministic analysis",
+            "Analysis",
             {
                 "fields": [
-                    "suggested_kind",
-                    "proposed_parent_run_candidate",
                     "analysis_version",
                     "analysis_status",
                     "catalog_status",
@@ -249,94 +124,175 @@ class ComicVineVolumeCandidateAdmin(admin.ModelAdmin):
             },
         ),
         (
-            "Manual review",
+            "Review and catalog",
             {
                 "fields": [
-                    "reviewed_kind",
                     "review_status",
                     "review_reason",
                     "reviewed_at",
-                ]
-            },
-        ),
-        (
-            "Catalog links",
-            {
-                "fields": [
                     "catalog_run",
-                    "catalog_volume",
                 ]
             },
         ),
         (
-            "Timestamps",
-            {
-                "fields": [
-                    "created_at",
-                    "updated_at",
-                ]
-            },
+            "Audit",
+            {"fields": ["created_at", "updated_at"]},
         ),
     ]
 
 
-@admin.register(MarvelVolumeContainment)
-class MarvelVolumeContainmentAdmin(admin.ModelAdmin):
+@admin.register(ComicVineCollectedEditionCandidate)
+class ComicVineCollectedEditionCandidateAdmin(admin.ModelAdmin):
     list_display = [
-        "group",
-        "run_candidate",
-        "collected_volume_candidate",
-        "date_type",
-        "run_first_issue_date",
-        "run_last_issue_date",
-        "collected_first_issue_date",
-        "collected_last_issue_date",
-        "status",
-        "determination_source",
-        "analysis_version",
+        "source_title",
+        "publisher_name",
+        "volume_number",
+        "title",
+        "release_date",
+        "source_issue_count",
+        "analysis_status",
+        "catalog_status",
+        "proposed_parent_run_candidate",
+        "catalog_volume",
         "analyzed_at",
         "source_changed_at",
-        "catalog_applied_at",
     ]
     list_filter = [
-        "status",
+        "publisher_name",
+        "analysis_status",
+        "catalog_status",
         "determination_source",
-        "date_type",
+        "review_status",
         "analysis_version",
     ]
     search_fields = [
-        "group__display_title",
-        "group__normalized_title",
-        "run_candidate__title",
-        "collected_volume_candidate__title",
-        "determination_reason",
+        "source_title",
+        "title",
+        "volume_number",
+        "collecting_text",
+        "unresolved_reference_text",
+        "analysis_reason",
+        "comicvine_issue__comicvine_id",
+        "source_collection_volume__name",
+        "source_collection_volume__comicvine_id",
+        "proposed_parent_run_candidate__title",
+        "catalog_volume__title",
     ]
     raw_id_fields = [
-        "group",
-        "run_candidate",
-        "collected_volume_candidate",
+        "comicvine_issue",
+        "source_collection_volume",
+        "proposed_parent_run_candidate",
+        "catalog_volume",
     ]
     readonly_fields = [
-        "group",
-        "run_candidate",
-        "collected_volume_candidate",
-        "date_type",
-        "run_first_issue_date",
-        "run_last_issue_date",
-        "collected_first_issue_date",
-        "collected_last_issue_date",
+        "publisher_name",
+        "source_title",
+        "volume_number",
+        "title",
+        "release_date",
+        "collecting_text",
+        "unresolved_reference_text",
+        "source_reference_count",
+        "source_issue_count",
+        "primary_first_issue_number",
+        "primary_last_issue_number",
+        "source_issue_date_last_updated",
+        "source_fingerprint",
         "analysis_version",
-        "status",
+        "analysis_status",
+        "catalog_status",
         "determination_source",
-        "determination_reason",
-        "run_source_issue_fingerprint",
-        "collected_source_issue_fingerprint",
+        "analysis_reason",
         "analyzed_at",
         "source_changed_at",
         "catalog_applied_at",
         "created_at",
         "updated_at",
     ]
+    inlines = [ComicVineCollectedEditionIssueInline]
+    fieldsets = [
+        (
+            "Comic Vine collected-edition source",
+            {
+                "fields": [
+                    "comicvine_issue",
+                    "source_collection_volume",
+                    "publisher_name",
+                    "source_title",
+                    "volume_number",
+                    "title",
+                    "release_date",
+                    "collecting_text",
+                    "source_issue_date_last_updated",
+                    "source_fingerprint",
+                ]
+            },
+        ),
+        (
+            "Resolved contents",
+            {
+                "fields": [
+                    "proposed_parent_run_candidate",
+                    "source_reference_count",
+                    "source_issue_count",
+                    "primary_first_issue_number",
+                    "primary_last_issue_number",
+                    "unresolved_reference_text",
+                ]
+            },
+        ),
+        (
+            "Analysis",
+            {
+                "fields": [
+                    "analysis_version",
+                    "analysis_status",
+                    "catalog_status",
+                    "determination_source",
+                    "analysis_reason",
+                    "analyzed_at",
+                    "source_changed_at",
+                    "catalog_applied_at",
+                ]
+            },
+        ),
+        (
+            "Review and catalog",
+            {
+                "fields": [
+                    "review_status",
+                    "review_reason",
+                    "reviewed_at",
+                    "catalog_volume",
+                ]
+            },
+        ),
+        (
+            "Audit",
+            {"fields": ["created_at", "updated_at"]},
+        ),
+    ]
+
+
+@admin.register(ComicVineCollectedEditionIssue)
+class ComicVineCollectedEditionIssueAdmin(admin.ModelAdmin):
+    list_display = [
+        "candidate",
+        "issue_order",
+        "primary_run",
+        "source_run_candidate",
+        "source_issue",
+    ]
+    list_filter = ["primary_run"]
+    search_fields = [
+        "candidate__source_title",
+        "source_run_candidate__title",
+        "source_issue__comicvine_id",
+        "source_issue__issue_number",
+        "reference_text",
+    ]
+    raw_id_fields = ["candidate", "source_run_candidate", "source_issue"]
+    readonly_fields = ["created_at", "updated_at"]
 
 
 @admin.register(MarvelCatalogRunSource)
@@ -353,59 +309,8 @@ class MarvelCatalogRunSourceAdmin(admin.ModelAdmin):
         "catalog_run__title",
         "comicvine_volume__name",
         "comicvine_volume__comicvine_id",
-        "candidate__title",
     ]
-    raw_id_fields = [
-        "catalog_run",
-        "comicvine_volume",
-        "candidate",
-    ]
-    readonly_fields = [
-        "source_volume_date_last_updated",
-        "source_issue_fingerprint",
-        "confirmed_at",
-        "last_processed_at",
-        "source_changed_at",
-        "created_at",
-        "updated_at",
-    ]
-
-
-@admin.register(MarvelCatalogVolumeSource)
-class MarvelCatalogVolumeSourceAdmin(admin.ModelAdmin):
-    list_display = [
-        "catalog_volume",
-        "catalog_run",
-        "comicvine_volume",
-        "candidate",
-        "containment",
-        "confirmed_at",
-        "last_processed_at",
-        "source_changed_at",
-    ]
-    search_fields = [
-        "catalog_volume__title",
-        "catalog_run__title",
-        "comicvine_volume__name",
-        "comicvine_volume__comicvine_id",
-        "candidate__title",
-    ]
-    raw_id_fields = [
-        "catalog_volume",
-        "catalog_run",
-        "comicvine_volume",
-        "candidate",
-        "containment",
-    ]
-    readonly_fields = [
-        "source_volume_date_last_updated",
-        "source_issue_fingerprint",
-        "confirmed_at",
-        "last_processed_at",
-        "source_changed_at",
-        "created_at",
-        "updated_at",
-    ]
+    raw_id_fields = ["catalog_run", "comicvine_volume", "candidate"]
 
 
 @admin.register(MarvelCatalogIssueSource)
@@ -415,21 +320,13 @@ class MarvelCatalogIssueSourceAdmin(admin.ModelAdmin):
         "catalog_run",
         "comicvine_issue",
         "comicvine_volume",
-        "run_source",
-        "confirmed_at",
         "last_processed_at",
         "source_changed_at",
     ]
     search_fields = [
-        "catalog_issue__issue_number",
-        "catalog_issue__title",
-        "catalog_issue__run__title",
         "catalog_run__title",
-        "comicvine_issue__issue_number",
-        "comicvine_issue__issue_title",
+        "catalog_issue__issue_number",
         "comicvine_issue__comicvine_id",
-        "comicvine_volume__name",
-        "comicvine_volume__comicvine_id",
     ]
     raw_id_fields = [
         "catalog_issue",
@@ -438,11 +335,27 @@ class MarvelCatalogIssueSourceAdmin(admin.ModelAdmin):
         "comicvine_volume",
         "run_source",
     ]
-    readonly_fields = [
-        "source_issue_date_last_updated",
+
+
+@admin.register(MarvelCatalogVolumeSource)
+class MarvelCatalogVolumeSourceAdmin(admin.ModelAdmin):
+    list_display = [
+        "catalog_volume",
+        "catalog_run",
+        "comicvine_issue",
+        "candidate",
         "confirmed_at",
         "last_processed_at",
         "source_changed_at",
-        "created_at",
-        "updated_at",
+    ]
+    search_fields = [
+        "catalog_run__title",
+        "catalog_volume__title",
+        "comicvine_issue__comicvine_id",
+    ]
+    raw_id_fields = [
+        "catalog_volume",
+        "catalog_run",
+        "comicvine_issue",
+        "candidate",
     ]

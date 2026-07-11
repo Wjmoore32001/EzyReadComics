@@ -1,24 +1,34 @@
-import re
 from dataclasses import dataclass
 
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
-from django.db.models import Case, IntegerField, When
+from django.db.models import Q
 from django.utils import timezone
 from django.utils.text import slugify
 
-from catalog.models import ComicIssue, ComicPublisher, ComicRun, ComicVolume
-from comicvine.models import ComicVineIssue
+from catalog.models import (
+    ComicIssue,
+    ComicPublisher,
+    ComicRun,
+    ComicVolume,
+    ComicVolumeIssue,
+)
 from ingestion.models import (
+    ComicVineCollectedEditionCandidate,
     ComicVineVolumeCandidate,
     MarvelCatalogIssueSource,
     MarvelCatalogRunSource,
     MarvelCatalogVolumeSource,
-    MarvelVolumeContainment,
 )
 
 
 PUBLISHER_NAME = "Marvel"
+
+
+@dataclass
+class CandidateSelection:
+    run_candidates: list
+    collected_candidates: list
 
 
 @dataclass
@@ -45,6 +55,10 @@ class ApplyResult:
     volume_source_links_created: int = 0
     volume_source_links_updated: int = 0
 
+    volume_issue_links_created: int = 0
+    volume_issue_links_updated: int = 0
+    volume_issue_links_deleted: int = 0
+
     candidates_marked_applied: int = 0
     missing_catalog_targets: int = 0
     conflicts: int = 0
@@ -53,8 +67,8 @@ class ApplyResult:
 
 class Command(BaseCommand):
     help = (
-        "Apply confirmed Marvel ingestion candidates into catalog rows and create "
-        "source-link tracking rows."
+        "Apply confirmed Marvel run and per-issue collected-edition candidates "
+        "to catalog rows, including explicit collected issue memberships."
     )
 
     def add_arguments(self, parser):
@@ -64,39 +78,49 @@ class Command(BaseCommand):
             action="append",
             dest="comicvine_volume_ids",
             help=(
-                "Optional Comic Vine volume ID to apply. Can be provided multiple times. "
-                "If omitted, all ready confirmed Marvel candidates are selected."
+                "Optional Comic Vine source volume ID to apply. Can be supplied "
+                "multiple times. Required referenced runs are included automatically."
+            ),
+        )
+        parser.add_argument(
+            "--comicvine-issue-id",
+            type=int,
+            action="append",
+            dest="comicvine_issue_ids",
+            help=(
+                "Optional collected-edition Comic Vine issue ID to apply. Can be "
+                "supplied multiple times."
             ),
         )
         parser.add_argument(
             "--limit",
             type=int,
             default=None,
-            help="Optional maximum number of candidates to apply.",
+            help=(
+                "Optional maximum number of directly selected candidates. Required "
+                "run dependencies do not count against this limit."
+            ),
         )
         parser.add_argument(
             "--create-missing-catalog",
             action="store_true",
             help=(
-                "Create missing catalog runs, issues, and collected volumes. "
-                "Without this flag, the command only links to existing exact catalog rows."
+                "Create missing catalog runs, issues, and collected volumes. Without "
+                "this flag, only exact existing catalog rows are linked."
             ),
         )
         parser.add_argument(
             "--update-existing-catalog",
             action="store_true",
             help=(
-                "Update existing catalog fields from source data. "
-                "Without this flag, existing catalog rows only have blank fields filled."
+                "Update populated catalog fields from current source data. Without "
+                "this flag, only blank existing fields are filled."
             ),
         )
         parser.add_argument(
             "--skip-collected-volumes",
             action="store_true",
-            help=(
-                "Apply confirmed runs and issues only. "
-                "Do not create/link collected volume catalog rows."
-            ),
+            help="Apply confirmed runs and monthly issues only.",
         )
         parser.add_argument(
             "--dry-run",
@@ -106,6 +130,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         comicvine_volume_ids = options["comicvine_volume_ids"] or []
+        comicvine_issue_ids = options["comicvine_issue_ids"] or []
         limit = options["limit"]
         create_missing_catalog = options["create_missing_catalog"]
         update_existing_catalog = options["update_existing_catalog"]
@@ -114,18 +139,19 @@ class Command(BaseCommand):
 
         validate_options(
             comicvine_volume_ids=comicvine_volume_ids,
+            comicvine_issue_ids=comicvine_issue_ids,
             limit=limit,
         )
-
-        candidates = list_selected_candidates(
+        selection = list_selected_candidates(
             comicvine_volume_ids=comicvine_volume_ids,
+            comicvine_issue_ids=comicvine_issue_ids,
             limit=limit,
         )
 
         self.stdout.write("")
         self.stdout.write(self.style.SUCCESS("Apply Marvel ingestion to catalog"))
         self.stdout.write(f"Mode: {'dry run' if dry_run else 'writing to database'}")
-        self.stdout.write("Source: confirmed Marvel ingestion candidates")
+        self.stdout.write("Source: confirmed local ingestion candidates")
         self.stdout.write("Comic Vine API calls: none")
         self.stdout.write(
             f"Create missing catalog rows: {'yes' if create_missing_catalog else 'no'}"
@@ -137,22 +163,35 @@ class Command(BaseCommand):
         self.stdout.write(
             f"Collected volumes: {'skipped' if skip_collected_volumes else 'included'}"
         )
+        self.stdout.write(
+            f"Run candidates selected: {len(selection.run_candidates)}"
+        )
+        self.stdout.write(
+            f"Collected candidates selected: {len(selection.collected_candidates)}"
+        )
 
         if comicvine_volume_ids:
             self.stdout.write(
                 "Selected Comic Vine volume IDs: "
-                + ", ".join(str(volume_id) for volume_id in comicvine_volume_ids)
+                + ", ".join(str(value) for value in comicvine_volume_ids)
             )
         else:
             self.stdout.write("Selected Comic Vine volume IDs: all ready candidates")
 
+        if comicvine_issue_ids:
+            self.stdout.write(
+                "Selected collected-edition issue IDs: "
+                + ", ".join(str(value) for value in comicvine_issue_ids)
+            )
+        else:
+            self.stdout.write("Selected collected-edition issue IDs: all ready candidates")
+
         self.stdout.write(f"Limit: {limit if limit is not None else 'none'}")
-        self.stdout.write(f"Candidates selected: {len(candidates)}")
 
         with transaction.atomic():
             publisher = get_or_create_marvel_publisher()
             result = apply_candidates(
-                candidates=candidates,
+                selection=selection,
                 publisher=publisher,
                 create_missing_catalog=create_missing_catalog,
                 update_existing_catalog=update_existing_catalog,
@@ -162,129 +201,146 @@ class Command(BaseCommand):
             if dry_run:
                 transaction.set_rollback(True)
 
-        self.stdout.write("")
-        self.stdout.write(self.style.SUCCESS("Run complete."))
-        self.stdout.write("=" * 60)
-
-        prefix = "Would " if dry_run else ""
-
-        self.stdout.write(f"Candidates seen: {result.candidates_seen}")
-        self.stdout.write("")
-        self.stdout.write(f"{prefix}runs created: {result.runs_created}")
-        self.stdout.write(f"{prefix}runs linked existing: {result.runs_linked_existing}")
-        self.stdout.write(f"{prefix}runs updated: {result.runs_updated}")
-        self.stdout.write(
-            f"{prefix}run source links created: {result.run_source_links_created}"
-        )
-        self.stdout.write(
-            f"{prefix}run source links updated: {result.run_source_links_updated}"
-        )
-        self.stdout.write("")
-        self.stdout.write(f"Issues seen: {result.issues_seen}")
-        self.stdout.write(f"{prefix}issues created: {result.issues_created}")
-        self.stdout.write(
-            f"{prefix}issues linked existing: {result.issues_linked_existing}"
-        )
-        self.stdout.write(f"{prefix}issues updated: {result.issues_updated}")
-        self.stdout.write(
-            f"{prefix}issue source links created: {result.issue_source_links_created}"
-        )
-        self.stdout.write(
-            f"{prefix}issue source links updated: {result.issue_source_links_updated}"
-        )
-        self.stdout.write(f"Issues skipped: {result.issues_skipped}")
-        self.stdout.write("")
-        self.stdout.write(f"{prefix}volumes created: {result.volumes_created}")
-        self.stdout.write(
-            f"{prefix}volumes linked existing: {result.volumes_linked_existing}"
-        )
-        self.stdout.write(f"{prefix}volumes updated: {result.volumes_updated}")
-        self.stdout.write(
-            f"{prefix}volume source links created: {result.volume_source_links_created}"
-        )
-        self.stdout.write(
-            f"{prefix}volume source links updated: {result.volume_source_links_updated}"
-        )
-        self.stdout.write("")
-        self.stdout.write(
-            f"{prefix}candidates marked applied: {result.candidates_marked_applied}"
-        )
-        self.stdout.write(f"Missing catalog targets: {result.missing_catalog_targets}")
-        self.stdout.write(f"Conflicts: {result.conflicts}")
-        self.stdout.write(f"Skipped: {result.skipped}")
-
-        if dry_run:
-            self.stdout.write("")
-            self.stdout.write("Dry run only. No database changes were saved.")
+        print_result(self, result, dry_run=dry_run)
 
 
-def validate_options(*, comicvine_volume_ids, limit):
-    invalid_volume_ids = [
-        volume_id for volume_id in comicvine_volume_ids if volume_id < 1
-    ]
-
-    if invalid_volume_ids:
+def validate_options(*, comicvine_volume_ids, comicvine_issue_ids, limit):
+    if any(value < 1 for value in comicvine_volume_ids):
         raise CommandError("--comicvine-volume-id values must be positive integers.")
+
+    if any(value < 1 for value in comicvine_issue_ids):
+        raise CommandError("--comicvine-issue-id values must be positive integers.")
 
     if limit is not None and limit < 1:
         raise CommandError("--limit must be at least 1 when provided.")
 
 
-def list_selected_candidates(*, comicvine_volume_ids, limit):
-    queryset = (
+def list_selected_candidates(*, comicvine_volume_ids, comicvine_issue_ids, limit):
+    allowed_catalog_statuses = [
+        ComicVineVolumeCandidate.CATALOG_STATUS_READY_TO_APPLY,
+        ComicVineVolumeCandidate.CATALOG_STATUS_UPDATE_AVAILABLE,
+        ComicVineVolumeCandidate.CATALOG_STATUS_APPLIED,
+    ]
+    run_base = (
         ComicVineVolumeCandidate.objects.select_related(
             "comicvine_volume",
-            "group",
-            "proposed_parent_run_candidate",
+            "catalog_run",
+        )
+        .filter(
+            publisher_name__iexact=PUBLISHER_NAME,
+            analysis_status=(
+                ComicVineVolumeCandidate.ANALYSIS_STATUS_CONFIRMED_RUN
+            ),
+            catalog_status__in=allowed_catalog_statuses,
+        )
+        .order_by(
+            "normalized_title",
+            "start_year",
+            "comicvine_volume__comicvine_id",
+        )
+    )
+    collected_base = (
+        ComicVineCollectedEditionCandidate.objects.select_related(
+            "comicvine_issue",
+            "source_collection_volume",
+            "proposed_parent_run_candidate__comicvine_volume",
             "catalog_volume",
         )
         .filter(
             publisher_name__iexact=PUBLISHER_NAME,
-            analysis_status__in=[
-                ComicVineVolumeCandidate.ANALYSIS_STATUS_CONFIRMED_RUN,
-                ComicVineVolumeCandidate.ANALYSIS_STATUS_CONFIRMED_COLLECTED_VOLUME,
-            ],
-            catalog_status__in=[
-                ComicVineVolumeCandidate.CATALOG_STATUS_READY_TO_APPLY,
-                ComicVineVolumeCandidate.CATALOG_STATUS_UPDATE_AVAILABLE,
-                ComicVineVolumeCandidate.CATALOG_STATUS_APPLIED,
-            ],
-        )
-        .annotate(
-            apply_order=Case(
-                When(
-                    analysis_status=ComicVineVolumeCandidate.ANALYSIS_STATUS_CONFIRMED_RUN,
-                    then=0,
-                ),
-                When(
-                    analysis_status=(
-                        ComicVineVolumeCandidate
-                        .ANALYSIS_STATUS_CONFIRMED_COLLECTED_VOLUME
-                    ),
-                    then=1,
-                ),
-                default=2,
-                output_field=IntegerField(),
-            )
+            analysis_status=(
+                ComicVineCollectedEditionCandidate
+                .ANALYSIS_STATUS_CONFIRMED_COLLECTED_VOLUME
+            ),
+            catalog_status__in=allowed_catalog_statuses,
         )
         .order_by(
-            "normalized_title",
-            "apply_order",
-            "first_issue_date",
-            "last_issue_date",
-            "comicvine_volume__comicvine_id",
+            "source_collection_volume__name",
+            "release_date",
+            "volume_number",
+            "comicvine_issue__comicvine_id",
         )
     )
 
-    if comicvine_volume_ids:
-        queryset = queryset.filter(
-            comicvine_volume__comicvine_id__in=comicvine_volume_ids,
+    filters_supplied = bool(comicvine_volume_ids or comicvine_issue_ids)
+
+    if filters_supplied:
+        primary_runs = list(
+            run_base.filter(
+                comicvine_volume__comicvine_id__in=comicvine_volume_ids,
+            )
         )
+        collected_filter = Q()
+
+        if comicvine_volume_ids:
+            collected_filter |= Q(
+                source_collection_volume__comicvine_id__in=comicvine_volume_ids,
+            )
+
+        if comicvine_issue_ids:
+            collected_filter |= Q(
+                comicvine_issue__comicvine_id__in=comicvine_issue_ids,
+            )
+
+        primary_collected = list(collected_base.filter(collected_filter))
+    else:
+        primary_runs = list(run_base)
+        primary_collected = list(collected_base)
 
     if limit is not None:
-        queryset = queryset[:limit]
+        combined = [
+            (candidate.normalized_title, 0, candidate)
+            for candidate in primary_runs
+        ] + [
+            (
+                clean_text(candidate.source_collection_volume.name).casefold(),
+                1,
+                candidate,
+            )
+            for candidate in primary_collected
+        ]
+        combined.sort(
+            key=lambda item: (
+                item[0],
+                item[1],
+                item[2].pk,
+            )
+        )
+        combined = combined[:limit]
+        primary_runs = [item[2] for item in combined if item[1] == 0]
+        primary_collected = [item[2] for item in combined if item[1] == 1]
 
-    return list(queryset)
+    required_run_candidate_ids = set()
+
+    for candidate in primary_collected:
+        if candidate.proposed_parent_run_candidate_id:
+            required_run_candidate_ids.add(candidate.proposed_parent_run_candidate_id)
+
+        required_run_candidate_ids.update(
+            candidate.source_issue_links.values_list(
+                "source_run_candidate_id",
+                flat=True,
+            )
+        )
+
+    run_candidates_by_id = {candidate.id: candidate for candidate in primary_runs}
+
+    for candidate in run_base.filter(id__in=required_run_candidate_ids):
+        run_candidates_by_id.setdefault(candidate.id, candidate)
+
+    run_candidates = sorted(
+        run_candidates_by_id.values(),
+        key=lambda candidate: (
+            candidate.normalized_title,
+            candidate.start_year,
+            candidate.comicvine_volume.comicvine_id,
+        ),
+    )
+
+    return CandidateSelection(
+        run_candidates=run_candidates,
+        collected_candidates=primary_collected,
+    )
 
 
 def get_or_create_marvel_publisher():
@@ -306,7 +362,7 @@ def get_or_create_marvel_publisher():
 
 def apply_candidates(
     *,
-    candidates,
+    selection,
     publisher,
     create_missing_catalog,
     update_existing_catalog,
@@ -314,22 +370,8 @@ def apply_candidates(
 ):
     result = ApplyResult()
 
-    run_candidates = [
-        candidate
-        for candidate in candidates
-        if candidate.analysis_status
-        == ComicVineVolumeCandidate.ANALYSIS_STATUS_CONFIRMED_RUN
-    ]
-    collected_volume_candidates = [
-        candidate
-        for candidate in candidates
-        if candidate.analysis_status
-        == ComicVineVolumeCandidate.ANALYSIS_STATUS_CONFIRMED_COLLECTED_VOLUME
-    ]
-
-    for candidate in run_candidates:
+    for candidate in selection.run_candidates:
         result.candidates_seen += 1
-
         apply_run_candidate(
             candidate=candidate,
             publisher=publisher,
@@ -339,12 +381,11 @@ def apply_candidates(
         )
 
     if skip_collected_volumes:
-        result.skipped += len(collected_volume_candidates)
+        result.skipped += len(selection.collected_candidates)
         return result
 
-    for candidate in collected_volume_candidates:
+    for candidate in selection.collected_candidates:
         result.candidates_seen += 1
-
         apply_collected_volume_candidate(
             candidate=candidate,
             publisher=publisher,
@@ -365,7 +406,6 @@ def apply_run_candidate(
     result,
 ):
     now = timezone.now()
-
     catalog_run, run_status = resolve_catalog_run(
         candidate=candidate,
         publisher=publisher,
@@ -382,8 +422,23 @@ def apply_run_candidate(
 
     if run_status == "created":
         result.runs_created += 1
-    elif run_status == "existing":
+    else:
         result.runs_linked_existing += 1
+
+    run_source, link_status = upsert_run_source_link(
+        candidate=candidate,
+        catalog_run=catalog_run,
+        now=now,
+    )
+
+    if link_status == "conflict":
+        result.conflicts += 1
+        return
+
+    if link_status == "created":
+        result.run_source_links_created += 1
+    elif link_status == "updated":
+        result.run_source_links_updated += 1
 
     if update_catalog_run_from_source(
         catalog_run=catalog_run,
@@ -392,43 +447,41 @@ def apply_run_candidate(
     ):
         result.runs_updated += 1
 
-    run_link, run_link_status = upsert_run_source_link(
+    issues_applied = apply_run_issues(
         candidate=candidate,
         catalog_run=catalog_run,
-        now=now,
-    )
-
-    if run_link_status == "conflict":
-        result.conflicts += 1
-        return
-
-    if run_link_status == "created":
-        result.run_source_links_created += 1
-    elif run_link_status == "updated":
-        result.run_source_links_updated += 1
-
-    if mark_candidate_applied(
-        candidate=candidate,
-        now=now,
-    ):
-        result.candidates_marked_applied += 1
-
-    apply_run_issues(
-        candidate=candidate,
-        catalog_run=catalog_run,
-        run_source=run_link,
+        run_source=run_source,
         create_missing_catalog=create_missing_catalog,
         update_existing_catalog=update_existing_catalog,
         result=result,
         now=now,
     )
 
+    if issues_applied and mark_run_candidate_applied(
+        candidate=candidate,
+        catalog_run=catalog_run,
+        now=now,
+    ):
+        result.candidates_marked_applied += 1
+
 
 def resolve_catalog_run(*, candidate, publisher, create_missing_catalog):
-    existing_link = find_run_source_link(candidate)
+    source_link, source_link_conflict = find_run_source_link(candidate)
 
-    if existing_link is not None:
-        return existing_link.catalog_run, "existing"
+    if source_link_conflict:
+        return None, "conflict"
+
+    if source_link is not None:
+        if (
+            candidate.catalog_run_id
+            and candidate.catalog_run_id != source_link.catalog_run_id
+        ):
+            return None, "conflict"
+
+        return source_link.catalog_run, "existing"
+
+    if candidate.catalog_run_id:
+        return candidate.catalog_run, "existing"
 
     matching_runs = list(
         ComicRun.objects.filter(
@@ -459,81 +512,61 @@ def resolve_catalog_run(*, candidate, publisher, create_missing_catalog):
     )
     copy_image_fields_from_volume_source(catalog_run, candidate.comicvine_volume)
     catalog_run.save()
-
     return catalog_run, "created"
 
 
-def update_catalog_run_from_source(
-    *,
-    catalog_run,
-    candidate,
-    update_existing_catalog,
-):
-    update_fields = []
-
-    field_values = {
-        "first_issue_date": candidate.first_issue_date,
-        "last_issue_date": candidate.last_issue_date,
-        "issue_count": candidate.source_issue_count,
-        "description": clean_text(candidate.comicvine_volume.description),
-    }
-
-    for field_name, source_value in field_values.items():
-        if source_value in [None, ""]:
-            continue
-
-        current_value = getattr(catalog_run, field_name)
-
-        if update_existing_catalog or current_value in [None, ""]:
-            if current_value != source_value:
-                setattr(catalog_run, field_name, source_value)
-                update_fields.append(field_name)
-
-    image_fields_changed = fill_image_fields_from_volume_source(
-        catalog_object=catalog_run,
-        source_volume=candidate.comicvine_volume,
-        update_existing_catalog=update_existing_catalog,
+def find_run_source_link(candidate):
+    links = list(
+        MarvelCatalogRunSource.objects.filter(
+            Q(candidate=candidate) | Q(comicvine_volume=candidate.comicvine_volume)
+        ).distinct()
     )
-    update_fields.extend(image_fields_changed)
 
-    if update_fields:
-        catalog_run.save(update_fields=dedupe(update_fields))
-        return True
+    if len(links) > 1:
+        return None, True
 
-    return False
+    return (links[0] if links else None), False
 
 
 def upsert_run_source_link(*, candidate, catalog_run, now):
-    existing_link = find_run_source_link(candidate)
+    existing_link, conflict = find_run_source_link(candidate)
+
+    if conflict:
+        return None, "conflict"
+
+    target_link = MarvelCatalogRunSource.objects.filter(
+        catalog_run=catalog_run,
+    ).exclude(candidate=candidate).first()
+
+    if target_link is not None:
+        return target_link, "conflict"
 
     link_data = {
         "catalog_run": catalog_run,
         "comicvine_volume": candidate.comicvine_volume,
         "candidate": candidate,
         "source_volume_date_last_updated": candidate.source_volume_date_last_updated,
-        "source_issue_fingerprint": candidate.source_issue_fingerprint,
+        "source_fingerprint": candidate.source_fingerprint,
         "last_processed_at": now,
     }
 
     if existing_link is None:
-        existing_link = MarvelCatalogRunSource.objects.create(
-            confirmed_at=now,
-            **link_data,
+        return (
+            MarvelCatalogRunSource.objects.create(
+                confirmed_at=now,
+                **link_data,
+            ),
+            "created",
         )
-        return existing_link, "created"
 
-    if existing_link.catalog_run_id != catalog_run.id:
+    if (
+        existing_link.catalog_run_id != catalog_run.id
+        or existing_link.comicvine_volume_id != candidate.comicvine_volume_id
+        or existing_link.candidate_id != candidate.id
+    ):
         return existing_link, "conflict"
 
-    if existing_link.comicvine_volume_id != candidate.comicvine_volume_id:
-        return existing_link, "conflict"
-
-    update_fields = []
-
-    for field_name, new_value in link_data.items():
-        if getattr(existing_link, field_name) != new_value:
-            setattr(existing_link, field_name, new_value)
-            update_fields.append(field_name)
+    update_fields = assign_changed_fields(existing_link, link_data)
 
     if existing_link.source_changed_at is not None:
         existing_link.source_changed_at = None
@@ -546,33 +579,35 @@ def upsert_run_source_link(*, candidate, catalog_run, now):
     return existing_link, "unchanged"
 
 
-def find_run_source_link(candidate):
-    link = MarvelCatalogRunSource.objects.filter(candidate=candidate).first()
+def update_catalog_run_from_source(
+    *,
+    catalog_run,
+    candidate,
+    update_existing_catalog,
+):
+    update_fields = fill_catalog_fields(
+        catalog_object=catalog_run,
+        field_values={
+            "first_issue_date": candidate.first_issue_date,
+            "last_issue_date": candidate.last_issue_date,
+            "issue_count": candidate.source_issue_count,
+            "description": clean_text(candidate.comicvine_volume.description),
+        },
+        update_existing_catalog=update_existing_catalog,
+    )
+    update_fields.extend(
+        fill_image_fields_from_volume_source(
+            catalog_object=catalog_run,
+            source_volume=candidate.comicvine_volume,
+            update_existing_catalog=update_existing_catalog,
+        )
+    )
 
-    if link is not None:
-        return link
+    if not update_fields:
+        return False
 
-    return MarvelCatalogRunSource.objects.filter(
-        comicvine_volume=candidate.comicvine_volume,
-    ).first()
-
-
-def mark_candidate_applied(*, candidate, now):
-    update_fields = []
-
-    if candidate.catalog_status != ComicVineVolumeCandidate.CATALOG_STATUS_APPLIED:
-        candidate.catalog_status = ComicVineVolumeCandidate.CATALOG_STATUS_APPLIED
-        update_fields.append("catalog_status")
-
-    if candidate.catalog_applied_at is None:
-        candidate.catalog_applied_at = now
-        update_fields.append("catalog_applied_at")
-
-    if update_fields:
-        candidate.save(update_fields=dedupe(update_fields))
-        return True
-
-    return False
+    catalog_run.save(update_fields=dedupe(update_fields))
+    return True
 
 
 def apply_run_issues(
@@ -585,24 +620,21 @@ def apply_run_issues(
     result,
     now,
 ):
-    source_issues = (
-        ComicVineIssue.objects.filter(volume=candidate.comicvine_volume)
-        .order_by(
-            "store_date",
-            "cover_date",
-            "issue_number",
-            "comicvine_id",
-            "id",
-        )
+    source_issues = candidate.comicvine_volume.issues.order_by(
+        "store_date",
+        "cover_date",
+        "issue_number",
+        "comicvine_id",
+        "id",
     )
+    all_applied = source_issues.exists()
 
     for source_issue in source_issues:
         result.issues_seen += 1
 
-        issue_number = clean_text(source_issue.issue_number)
-
-        if not issue_number:
+        if not clean_text(source_issue.issue_number):
             result.issues_skipped += 1
+            all_applied = False
             continue
 
         catalog_issue, issue_status = resolve_catalog_issue(
@@ -613,25 +645,20 @@ def apply_run_issues(
 
         if issue_status == "conflict":
             result.conflicts += 1
+            all_applied = False
             continue
 
         if catalog_issue is None:
             result.missing_catalog_targets += 1
+            all_applied = False
             continue
 
         if issue_status == "created":
             result.issues_created += 1
-        elif issue_status == "existing":
+        else:
             result.issues_linked_existing += 1
 
-        if update_catalog_issue_from_source(
-            catalog_issue=catalog_issue,
-            source_issue=source_issue,
-            update_existing_catalog=update_existing_catalog,
-        ):
-            result.issues_updated += 1
-
-        _, issue_link_status = upsert_issue_source_link(
+        issue_link, link_status = upsert_issue_source_link(
             catalog_issue=catalog_issue,
             catalog_run=catalog_run,
             source_issue=source_issue,
@@ -640,35 +667,54 @@ def apply_run_issues(
             now=now,
         )
 
-        if issue_link_status == "conflict":
+        if link_status == "conflict":
             result.conflicts += 1
-        elif issue_link_status == "created":
+            all_applied = False
+            continue
+
+        if link_status == "created":
             result.issue_source_links_created += 1
-        elif issue_link_status == "updated":
+        elif link_status == "updated":
             result.issue_source_links_updated += 1
+
+        if issue_link is None:
+            all_applied = False
+            continue
+
+        if update_catalog_issue_from_source(
+            catalog_issue=catalog_issue,
+            source_issue=source_issue,
+            update_existing_catalog=update_existing_catalog,
+        ):
+            result.issues_updated += 1
+
+    return all_applied
 
 
 def resolve_catalog_issue(*, catalog_run, source_issue, create_missing_catalog):
-    existing_link = MarvelCatalogIssueSource.objects.filter(
+    source_link = MarvelCatalogIssueSource.objects.filter(
         comicvine_issue=source_issue,
     ).first()
 
-    if existing_link is not None:
-        if existing_link.catalog_run_id != catalog_run.id:
+    if source_link is not None:
+        if source_link.catalog_run_id != catalog_run.id:
             return None, "conflict"
 
-        return existing_link.catalog_issue, "existing"
+        return source_link.catalog_issue, "existing"
 
     issue_number = clean_text(source_issue.issue_number)
-
-    try:
-        catalog_issue = ComicIssue.objects.get(
+    matching_issues = list(
+        ComicIssue.objects.filter(
             run=catalog_run,
             issue_number=issue_number,
         )
-        return catalog_issue, "existing"
-    except ComicIssue.DoesNotExist:
-        pass
+    )
+
+    if len(matching_issues) == 1:
+        return matching_issues[0], "existing"
+
+    if len(matching_issues) > 1:
+        return None, "conflict"
 
     if not create_missing_catalog:
         return None, "missing"
@@ -683,48 +729,7 @@ def resolve_catalog_issue(*, catalog_run, source_issue, create_missing_catalog):
     )
     copy_image_fields_from_issue_source(catalog_issue, source_issue)
     catalog_issue.save()
-
     return catalog_issue, "created"
-
-
-def update_catalog_issue_from_source(
-    *,
-    catalog_issue,
-    source_issue,
-    update_existing_catalog,
-):
-    update_fields = []
-
-    field_values = {
-        "title": clean_text(source_issue.issue_title),
-        "cover_date": source_issue.cover_date,
-        "store_date": source_issue.store_date,
-        "description": clean_text(source_issue.description),
-    }
-
-    for field_name, source_value in field_values.items():
-        if source_value in [None, ""]:
-            continue
-
-        current_value = getattr(catalog_issue, field_name)
-
-        if update_existing_catalog or current_value in [None, ""]:
-            if current_value != source_value:
-                setattr(catalog_issue, field_name, source_value)
-                update_fields.append(field_name)
-
-    image_fields_changed = fill_image_fields_from_issue_source(
-        catalog_object=catalog_issue,
-        source_issue=source_issue,
-        update_existing_catalog=update_existing_catalog,
-    )
-    update_fields.extend(image_fields_changed)
-
-    if update_fields:
-        catalog_issue.save(update_fields=dedupe(update_fields))
-        return True
-
-    return False
 
 
 def upsert_issue_source_link(
@@ -739,28 +744,26 @@ def upsert_issue_source_link(
     link_by_source = MarvelCatalogIssueSource.objects.filter(
         comicvine_issue=source_issue,
     ).first()
-    link_by_catalog_issue = MarvelCatalogIssueSource.objects.filter(
+    link_by_catalog = MarvelCatalogIssueSource.objects.filter(
         catalog_issue=catalog_issue,
     ).first()
 
     if (
         link_by_source is not None
-        and link_by_catalog_issue is not None
-        and link_by_source.id != link_by_catalog_issue.id
+        and link_by_catalog is not None
+        and link_by_source.id != link_by_catalog.id
     ):
-        return link_by_source, "conflict"
+        return None, "conflict"
 
-    existing_link = link_by_source or link_by_catalog_issue
+    existing_link = link_by_source or link_by_catalog
 
-    if existing_link is not None:
-        if existing_link.comicvine_issue_id != source_issue.id:
-            return existing_link, "conflict"
-
-        if existing_link.catalog_issue_id != catalog_issue.id:
-            return existing_link, "conflict"
-
-        if existing_link.catalog_run_id != catalog_run.id:
-            return existing_link, "conflict"
+    if existing_link is not None and (
+        existing_link.catalog_issue_id != catalog_issue.id
+        or existing_link.catalog_run_id != catalog_run.id
+        or existing_link.comicvine_issue_id != source_issue.id
+        or existing_link.comicvine_volume_id != source_volume.id
+    ):
+        return existing_link, "conflict"
 
     link_data = {
         "catalog_issue": catalog_issue,
@@ -773,18 +776,15 @@ def upsert_issue_source_link(
     }
 
     if existing_link is None:
-        existing_link = MarvelCatalogIssueSource.objects.create(
-            confirmed_at=now,
-            **link_data,
+        return (
+            MarvelCatalogIssueSource.objects.create(
+                confirmed_at=now,
+                **link_data,
+            ),
+            "created",
         )
-        return existing_link, "created"
 
-    update_fields = []
-
-    for field_name, new_value in link_data.items():
-        if getattr(existing_link, field_name) != new_value:
-            setattr(existing_link, field_name, new_value)
-            update_fields.append(field_name)
+    update_fields = assign_changed_fields(existing_link, link_data)
 
     if existing_link.source_changed_at is not None:
         existing_link.source_changed_at = None
@@ -797,6 +797,54 @@ def upsert_issue_source_link(
     return existing_link, "unchanged"
 
 
+def update_catalog_issue_from_source(
+    *,
+    catalog_issue,
+    source_issue,
+    update_existing_catalog,
+):
+    update_fields = fill_catalog_fields(
+        catalog_object=catalog_issue,
+        field_values={
+            "title": clean_text(source_issue.issue_title),
+            "cover_date": source_issue.cover_date,
+            "store_date": source_issue.store_date,
+            "description": clean_text(source_issue.description),
+        },
+        update_existing_catalog=update_existing_catalog,
+    )
+    update_fields.extend(
+        fill_image_fields_from_issue_source(
+            catalog_object=catalog_issue,
+            source_issue=source_issue,
+            update_existing_catalog=update_existing_catalog,
+        )
+    )
+
+    if not update_fields:
+        return False
+
+    catalog_issue.save(update_fields=dedupe(update_fields))
+    return True
+
+
+def mark_run_candidate_applied(*, candidate, catalog_run, now):
+    update_fields = []
+
+    if candidate.catalog_run_id != catalog_run.id:
+        candidate.catalog_run = catalog_run
+        update_fields.append("catalog_run")
+
+    if candidate.catalog_status != candidate.CATALOG_STATUS_APPLIED:
+        candidate.catalog_status = candidate.CATALOG_STATUS_APPLIED
+        update_fields.append("catalog_status")
+
+    candidate.catalog_applied_at = now
+    update_fields.append("catalog_applied_at")
+    candidate.save(update_fields=dedupe(update_fields))
+    return True
+
+
 def apply_collected_volume_candidate(
     *,
     candidate,
@@ -806,24 +854,23 @@ def apply_collected_volume_candidate(
     result,
 ):
     now = timezone.now()
-
-    parent_candidate = candidate.proposed_parent_run_candidate
-
-    if parent_candidate is None:
-        result.missing_catalog_targets += 1
-        return
-
-    parent_run = resolve_parent_catalog_run(parent_candidate)
+    parent_run = resolve_parent_catalog_run(candidate)
 
     if parent_run is None:
         result.missing_catalog_targets += 1
         return
 
-    containment = MarvelVolumeContainment.objects.filter(
-        run_candidate=parent_candidate,
-        collected_volume_candidate=candidate,
-        status=MarvelVolumeContainment.STATUS_CONFIRMED_BY_RULE,
-    ).first()
+    resolved_memberships, membership_status = preflight_collected_memberships(
+        candidate
+    )
+
+    if membership_status == "conflict":
+        result.conflicts += 1
+        return
+
+    if membership_status == "missing":
+        result.missing_catalog_targets += 1
+        return
 
     catalog_volume, volume_status = resolve_catalog_volume(
         candidate=candidate,
@@ -842,8 +889,28 @@ def apply_collected_volume_candidate(
 
     if volume_status == "created":
         result.volumes_created += 1
-    elif volume_status == "existing":
+    else:
         result.volumes_linked_existing += 1
+
+    volume_source, link_status = upsert_volume_source_link(
+        candidate=candidate,
+        catalog_volume=catalog_volume,
+        catalog_run=parent_run,
+        now=now,
+    )
+
+    if link_status == "conflict":
+        result.conflicts += 1
+        return
+
+    if link_status == "created":
+        result.volume_source_links_created += 1
+    elif link_status == "updated":
+        result.volume_source_links_updated += 1
+
+    if volume_source is None:
+        result.conflicts += 1
+        return
 
     if update_catalog_volume_from_source(
         catalog_volume=catalog_volume,
@@ -853,24 +920,16 @@ def apply_collected_volume_candidate(
     ):
         result.volumes_updated += 1
 
-    _, volume_link_status = upsert_volume_source_link(
+    sync_result = sync_catalog_volume_issues(
         candidate=candidate,
         catalog_volume=catalog_volume,
-        catalog_run=parent_run,
-        containment=containment,
-        now=now,
+        resolved_memberships=resolved_memberships,
     )
+    result.volume_issue_links_created += sync_result["created"]
+    result.volume_issue_links_updated += sync_result["updated"]
+    result.volume_issue_links_deleted += sync_result["deleted"]
 
-    if volume_link_status == "conflict":
-        result.conflicts += 1
-        return
-
-    if volume_link_status == "created":
-        result.volume_source_links_created += 1
-    elif volume_link_status == "updated":
-        result.volume_source_links_updated += 1
-
-    if mark_volume_candidate_applied(
+    if mark_collected_candidate_applied(
         candidate=candidate,
         catalog_volume=catalog_volume,
         now=now,
@@ -878,13 +937,66 @@ def apply_collected_volume_candidate(
         result.candidates_marked_applied += 1
 
 
-def resolve_parent_catalog_run(parent_candidate):
-    source_link = find_run_source_link(parent_candidate)
+def resolve_parent_catalog_run(candidate):
+    parent_candidate = candidate.proposed_parent_run_candidate
 
-    if source_link is not None:
-        return source_link.catalog_run
+    if parent_candidate is None:
+        return None
 
-    return None
+    source_link, conflict = find_run_source_link(parent_candidate)
+
+    if conflict or source_link is None:
+        return None
+
+    if (
+        parent_candidate.catalog_run_id
+        and parent_candidate.catalog_run_id != source_link.catalog_run_id
+    ):
+        return None
+
+    return source_link.catalog_run
+
+
+def preflight_collected_memberships(candidate):
+    memberships = list(
+        candidate.source_issue_links.select_related(
+            "source_issue",
+            "source_run_candidate__comicvine_volume",
+        ).order_by("issue_order", "id")
+    )
+
+    if candidate.source_reference_count == 0:
+        if memberships:
+            return [], "conflict"
+        return [], "ready"
+
+    if not memberships or len(memberships) != candidate.source_issue_count:
+        return [], "missing"
+
+    resolved = []
+
+    for membership in memberships:
+        run_source, conflict = find_run_source_link(membership.source_run_candidate)
+
+        if conflict or run_source is None:
+            return [], "missing"
+
+        issue_source = MarvelCatalogIssueSource.objects.filter(
+            comicvine_issue=membership.source_issue,
+        ).select_related("catalog_issue").first()
+
+        if issue_source is None:
+            return [], "missing"
+
+        if (
+            issue_source.catalog_run_id != run_source.catalog_run_id
+            or issue_source.run_source_id != run_source.id
+        ):
+            return [], "conflict"
+
+        resolved.append((membership, issue_source.catalog_issue))
+
+    return resolved, "ready"
 
 
 def resolve_catalog_volume(
@@ -894,31 +1006,35 @@ def resolve_catalog_volume(
     parent_run,
     create_missing_catalog,
 ):
-    existing_link = find_volume_source_link(candidate)
+    source_link, source_link_conflict = find_volume_source_link(candidate)
 
-    if existing_link is not None:
+    if source_link_conflict:
+        return None, "conflict"
+
+    if source_link is not None:
         if (
             candidate.catalog_volume_id
-            and candidate.catalog_volume_id != existing_link.catalog_volume_id
+            and candidate.catalog_volume_id != source_link.catalog_volume_id
         ):
             return None, "conflict"
 
-        return existing_link.catalog_volume, "existing"
+        if source_link.catalog_run_id != parent_run.id:
+            return None, "conflict"
+
+        return source_link.catalog_volume, "existing"
 
     if candidate.catalog_volume_id:
+        if candidate.catalog_volume.run_id != parent_run.id:
+            return None, "conflict"
         return candidate.catalog_volume, "existing"
 
-    volume_title, volume_number = derive_catalog_volume_title_and_number(
-        candidate=candidate,
-        run_title=parent_run.title,
-    )
-
+    title = derive_catalog_volume_title(candidate, parent_run)
     matching_volumes = list(
         ComicVolume.objects.filter(
             publisher=publisher,
             run=parent_run,
-            title=volume_title,
-            volume_number=volume_number,
+            title=title,
+            volume_number=candidate.volume_number,
         )
     )
 
@@ -934,64 +1050,57 @@ def resolve_catalog_volume(
     catalog_volume = ComicVolume.objects.create(
         publisher=publisher,
         run=parent_run,
-        title=volume_title,
-        volume_number=volume_number,
-        first_issue_number="",
-        last_issue_number="",
-        release_date=candidate.first_issue_date,
-        issue_count=None,
-        description=clean_text(candidate.comicvine_volume.description),
+        title=title,
+        volume_number=candidate.volume_number,
+        first_issue_number=(
+            candidate.primary_first_issue_number
+            if candidate.source_reference_count
+            else ""
+        ),
+        last_issue_number=(
+            candidate.primary_last_issue_number
+            if candidate.source_reference_count
+            else ""
+        ),
+        release_date=candidate.release_date,
+        issue_count=(candidate.source_issue_count or None),
+        description=clean_text(candidate.comicvine_issue.description),
     )
-    copy_image_fields_from_volume_source(catalog_volume, candidate.comicvine_volume)
+    copy_image_fields_from_issue_source(catalog_volume, candidate.comicvine_issue)
     catalog_volume.save()
-
     return catalog_volume, "created"
 
 
-def update_catalog_volume_from_source(
-    *,
-    catalog_volume,
-    candidate,
-    parent_run,
-    update_existing_catalog,
-):
-    update_fields = []
+def derive_catalog_volume_title(candidate, parent_run):
+    title = clean_text(candidate.title)
 
-    volume_title, volume_number = derive_catalog_volume_title_and_number(
-        candidate=candidate,
-        run_title=parent_run.title,
+    if not title and not clean_text(candidate.volume_number):
+        title = clean_text(candidate.source_title)
+
+    run_title = clean_text(parent_run.title)
+
+    if title.casefold() == run_title.casefold():
+        return ""
+
+    if title.casefold().startswith(run_title.casefold()):
+        suffix = title[len(run_title):].lstrip(" :;-–—")
+        if suffix:
+            return suffix
+
+    return title
+
+
+def find_volume_source_link(candidate):
+    links = list(
+        MarvelCatalogVolumeSource.objects.filter(
+            Q(candidate=candidate) | Q(comicvine_issue=candidate.comicvine_issue)
+        ).distinct()
     )
 
-    field_values = {
-        "title": volume_title,
-        "volume_number": volume_number,
-        "release_date": candidate.first_issue_date,
-        "description": clean_text(candidate.comicvine_volume.description),
-    }
+    if len(links) > 1:
+        return None, True
 
-    for field_name, source_value in field_values.items():
-        if source_value in [None, ""]:
-            continue
-
-        current_value = getattr(catalog_volume, field_name)
-
-        if update_existing_catalog or current_value in [None, ""]:
-            if current_value != source_value:
-                setattr(catalog_volume, field_name, source_value)
-                update_fields.append(field_name)
-
-    image_fields_changed = fill_image_fields_from_volume_source(
-        catalog_object=catalog_volume,
-        source_volume=candidate.comicvine_volume,
-        update_existing_catalog=update_existing_catalog,
-    )
-    update_fields.extend(image_fields_changed)
-
-    if update_fields:
-        catalog_volume.save(update_fields=dedupe(update_fields))
-        return True
-
-    return False
+    return (links[0] if links else None), False
 
 
 def upsert_volume_source_link(
@@ -999,44 +1108,48 @@ def upsert_volume_source_link(
     candidate,
     catalog_volume,
     catalog_run,
-    containment,
     now,
 ):
-    existing_link = find_volume_source_link(candidate)
+    existing_link, conflict = find_volume_source_link(candidate)
+
+    if conflict:
+        return None, "conflict"
+
+    target_link = MarvelCatalogVolumeSource.objects.filter(
+        catalog_volume=catalog_volume,
+    ).exclude(candidate=candidate).first()
+
+    if target_link is not None:
+        return target_link, "conflict"
 
     link_data = {
         "catalog_volume": catalog_volume,
         "catalog_run": catalog_run,
-        "comicvine_volume": candidate.comicvine_volume,
+        "comicvine_issue": candidate.comicvine_issue,
         "candidate": candidate,
-        "containment": containment,
-        "source_volume_date_last_updated": candidate.source_volume_date_last_updated,
-        "source_issue_fingerprint": candidate.source_issue_fingerprint,
+        "source_issue_date_last_updated": candidate.source_issue_date_last_updated,
+        "source_fingerprint": candidate.source_fingerprint,
         "last_processed_at": now,
     }
 
     if existing_link is None:
-        existing_link = MarvelCatalogVolumeSource.objects.create(
-            confirmed_at=now,
-            **link_data,
+        return (
+            MarvelCatalogVolumeSource.objects.create(
+                confirmed_at=now,
+                **link_data,
+            ),
+            "created",
         )
-        return existing_link, "created"
 
-    if existing_link.catalog_volume_id != catalog_volume.id:
+    if (
+        existing_link.catalog_volume_id != catalog_volume.id
+        or existing_link.catalog_run_id != catalog_run.id
+        or existing_link.comicvine_issue_id != candidate.comicvine_issue_id
+        or existing_link.candidate_id != candidate.id
+    ):
         return existing_link, "conflict"
 
-    if existing_link.catalog_run_id != catalog_run.id:
-        return existing_link, "conflict"
-
-    if existing_link.comicvine_volume_id != candidate.comicvine_volume_id:
-        return existing_link, "conflict"
-
-    update_fields = []
-
-    for field_name, new_value in link_data.items():
-        if getattr(existing_link, field_name) != new_value:
-            setattr(existing_link, field_name, new_value)
-            update_fields.append(field_name)
+    update_fields = assign_changed_fields(existing_link, link_data)
 
     if existing_link.source_changed_at is not None:
         existing_link.source_changed_at = None
@@ -1049,108 +1162,130 @@ def upsert_volume_source_link(
     return existing_link, "unchanged"
 
 
-def find_volume_source_link(candidate):
-    link = MarvelCatalogVolumeSource.objects.filter(candidate=candidate).first()
+def update_catalog_volume_from_source(
+    *,
+    catalog_volume,
+    candidate,
+    parent_run,
+    update_existing_catalog,
+):
+    explicit_source = candidate.source_reference_count > 0
+    update_fields = fill_catalog_fields(
+        catalog_object=catalog_volume,
+        field_values={
+            "title": derive_catalog_volume_title(candidate, parent_run),
+            "volume_number": candidate.volume_number,
+            "first_issue_number": (
+                candidate.primary_first_issue_number if explicit_source else ""
+            ),
+            "last_issue_number": (
+                candidate.primary_last_issue_number if explicit_source else ""
+            ),
+            "release_date": candidate.release_date,
+            "issue_count": candidate.source_issue_count if explicit_source else None,
+            "description": clean_text(candidate.comicvine_issue.description),
+        },
+        update_existing_catalog=update_existing_catalog,
+    )
+    update_fields.extend(
+        fill_image_fields_from_issue_source(
+            catalog_object=catalog_volume,
+            source_issue=candidate.comicvine_issue,
+            update_existing_catalog=update_existing_catalog,
+        )
+    )
 
-    if link is not None:
-        return link
+    if not update_fields:
+        return False
 
-    return MarvelCatalogVolumeSource.objects.filter(
-        comicvine_volume=candidate.comicvine_volume,
-    ).first()
+    catalog_volume.save(update_fields=dedupe(update_fields))
+    return True
 
 
-def mark_volume_candidate_applied(
+def sync_catalog_volume_issues(
     *,
     candidate,
     catalog_volume,
-    now,
+    resolved_memberships,
 ):
+    result = {"created": 0, "updated": 0, "deleted": 0}
+
+    if candidate.source_reference_count == 0:
+        return result
+
+    desired_issue_ids = set()
+
+    for membership, catalog_issue in resolved_memberships:
+        desired_issue_ids.add(catalog_issue.id)
+        volume_issue, created = ComicVolumeIssue.objects.get_or_create(
+            volume=catalog_volume,
+            issue=catalog_issue,
+            defaults={"issue_order": membership.issue_order},
+        )
+
+        if created:
+            result["created"] += 1
+        elif volume_issue.issue_order != membership.issue_order:
+            volume_issue.issue_order = membership.issue_order
+            volume_issue.save(update_fields=["issue_order"])
+            result["updated"] += 1
+
+    stale_links = ComicVolumeIssue.objects.filter(volume=catalog_volume).exclude(
+        issue_id__in=desired_issue_ids,
+    )
+    result["deleted"] = stale_links.count()
+    stale_links.delete()
+    return result
+
+
+def mark_collected_candidate_applied(*, candidate, catalog_volume, now):
     update_fields = []
 
     if candidate.catalog_volume_id != catalog_volume.id:
         candidate.catalog_volume = catalog_volume
         update_fields.append("catalog_volume")
 
-    if candidate.catalog_status != ComicVineVolumeCandidate.CATALOG_STATUS_APPLIED:
-        candidate.catalog_status = ComicVineVolumeCandidate.CATALOG_STATUS_APPLIED
+    if candidate.catalog_status != candidate.CATALOG_STATUS_APPLIED:
+        candidate.catalog_status = candidate.CATALOG_STATUS_APPLIED
         update_fields.append("catalog_status")
 
-    if candidate.catalog_applied_at is None:
-        candidate.catalog_applied_at = now
-        update_fields.append("catalog_applied_at")
-
-    if update_fields:
-        candidate.save(update_fields=dedupe(update_fields))
-        return True
-
-    return False
+    candidate.catalog_applied_at = now
+    update_fields.append("catalog_applied_at")
+    candidate.save(update_fields=dedupe(update_fields))
+    return True
 
 
-def derive_catalog_volume_title_and_number(*, candidate, run_title):
-    source_issue_title = get_single_source_issue_title(candidate)
-    display_source = source_issue_title or candidate.title
+def fill_catalog_fields(
+    *,
+    catalog_object,
+    field_values,
+    update_existing_catalog,
+):
+    changed_fields = []
 
-    volume_number, title = parse_volume_number_and_title(display_source)
+    for field_name, source_value in field_values.items():
+        if source_value in [None, ""]:
+            continue
 
-    if not title:
-        title = clean_text(display_source)
+        current_value = getattr(catalog_object, field_name)
 
-    title = remove_leading_run_title(title, run_title)
+        if update_existing_catalog or current_value in [None, ""]:
+            if current_value != source_value:
+                setattr(catalog_object, field_name, source_value)
+                changed_fields.append(field_name)
 
-    if not title and clean_text(display_source).casefold() == clean_text(run_title).casefold():
-        title = ""
-
-    return title, volume_number
-
-
-def get_single_source_issue_title(candidate):
-    source_issues = list(
-        ComicVineIssue.objects.filter(volume=candidate.comicvine_volume)
-        .order_by("comicvine_id", "id")
-    )
-
-    if len(source_issues) != 1:
-        return ""
-
-    return clean_text(source_issues[0].issue_title)
+    return changed_fields
 
 
-def parse_volume_number_and_title(value):
-    value = clean_text(value)
+def assign_changed_fields(instance, field_values):
+    update_fields = []
 
-    if not value:
-        return "", ""
+    for field_name, new_value in field_values.items():
+        if getattr(instance, field_name) != new_value:
+            setattr(instance, field_name, new_value)
+            update_fields.append(field_name)
 
-    patterns = [
-        r"^vol\.?\s*(?P<number>[0-9]+)\s*[:\-–—]?\s*(?P<title>.*)$",
-        r"^volume\s*(?P<number>[0-9]+)\s*[:\-–—]?\s*(?P<title>.*)$",
-    ]
-
-    for pattern in patterns:
-        match = re.match(pattern, value, flags=re.IGNORECASE)
-
-        if match:
-            return (
-                clean_text(match.group("number")),
-                clean_text(match.group("title")),
-            )
-
-    return "", value
-
-
-def remove_leading_run_title(title, run_title):
-    title = clean_text(title)
-    run_title = clean_text(run_title)
-
-    if not title or not run_title:
-        return title
-
-    if title.casefold().startswith(run_title.casefold()):
-        title = title[len(run_title):].strip()
-        title = title.lstrip(":;-–— ").strip()
-
-    return title
+    return update_fields
 
 
 def copy_image_fields_from_volume_source(catalog_object, source_volume):
@@ -1180,38 +1315,28 @@ def fill_image_fields_from_volume_source(
         "comicvine_image_tags": "image_tags",
         "display_image_url": "display_image_url",
     }
+    changed_fields = copy_image_field_mapping(
+        catalog_object=catalog_object,
+        source_object=source_volume,
+        source_to_target=source_to_target,
+        update_existing_catalog=update_existing_catalog,
+    )
 
-    changed_fields = []
-
-    for source_field, target_field in source_to_target.items():
-        source_value = clean_text(getattr(source_volume, source_field, ""))
-
-        if not source_value:
-            continue
-
-        current_value = getattr(catalog_object, target_field)
-
-        if update_existing_catalog or not current_value:
-            if current_value != source_value:
-                setattr(catalog_object, target_field, source_value)
-                changed_fields.append(target_field)
-
-    if clean_text(getattr(catalog_object, "display_image_url", "")):
-        if (
-            catalog_object.display_image_source
-            != catalog_object.DISPLAY_IMAGE_SOURCE_SOURCE_DATA
-        ):
-            catalog_object.display_image_source = (
-                catalog_object.DISPLAY_IMAGE_SOURCE_SOURCE_DATA
-            )
-            changed_fields.append("display_image_source")
+    if clean_text(catalog_object.display_image_url) and (
+        catalog_object.display_image_source
+        != catalog_object.DISPLAY_IMAGE_SOURCE_SOURCE_DATA
+    ):
+        catalog_object.display_image_source = (
+            catalog_object.DISPLAY_IMAGE_SOURCE_SOURCE_DATA
+        )
+        changed_fields.append("display_image_source")
 
     return changed_fields
 
 
-def copy_image_fields_from_issue_source(catalog_issue, source_issue):
+def copy_image_fields_from_issue_source(catalog_object, source_issue):
     fill_image_fields_from_issue_source(
-        catalog_object=catalog_issue,
+        catalog_object=catalog_object,
         source_issue=source_issue,
         update_existing_catalog=True,
     )
@@ -1235,11 +1360,42 @@ def fill_image_fields_from_issue_source(
         "comicvine_image_original_url": "image_original_url",
         "comicvine_image_tags": "image_tags",
     }
+    changed_fields = copy_image_field_mapping(
+        catalog_object=catalog_object,
+        source_object=source_issue,
+        source_to_target=source_to_target,
+        update_existing_catalog=update_existing_catalog,
+    )
 
+    if clean_text(catalog_object.image_original_url) and not clean_text(
+        catalog_object.display_image_url
+    ):
+        catalog_object.display_image_url = catalog_object.image_original_url
+        changed_fields.append("display_image_url")
+
+    if clean_text(catalog_object.display_image_url) and (
+        catalog_object.display_image_source
+        != catalog_object.DISPLAY_IMAGE_SOURCE_SOURCE_DATA
+    ):
+        catalog_object.display_image_source = (
+            catalog_object.DISPLAY_IMAGE_SOURCE_SOURCE_DATA
+        )
+        changed_fields.append("display_image_source")
+
+    return changed_fields
+
+
+def copy_image_field_mapping(
+    *,
+    catalog_object,
+    source_object,
+    source_to_target,
+    update_existing_catalog,
+):
     changed_fields = []
 
     for source_field, target_field in source_to_target.items():
-        source_value = clean_text(getattr(source_issue, source_field, ""))
+        source_value = clean_text(getattr(source_object, source_field, ""))
 
         if not source_value:
             continue
@@ -1251,40 +1407,87 @@ def fill_image_fields_from_issue_source(
                 setattr(catalog_object, target_field, source_value)
                 changed_fields.append(target_field)
 
-    if clean_text(getattr(catalog_object, "image_original_url", "")):
-        if not clean_text(getattr(catalog_object, "display_image_url", "")):
-            catalog_object.display_image_url = catalog_object.image_original_url
-            changed_fields.append("display_image_url")
-
-    if clean_text(getattr(catalog_object, "display_image_url", "")):
-        if (
-            catalog_object.display_image_source
-            != catalog_object.DISPLAY_IMAGE_SOURCE_SOURCE_DATA
-        ):
-            catalog_object.display_image_source = (
-                catalog_object.DISPLAY_IMAGE_SOURCE_SOURCE_DATA
-            )
-            changed_fields.append("display_image_source")
-
     return changed_fields
 
 
 def clean_text(value):
     if value is None:
         return ""
-
     return str(value).strip()
 
 
 def dedupe(values):
     seen = set()
-    deduped_values = []
+    result = []
 
     for value in values:
         if value in seen:
             continue
-
         seen.add(value)
-        deduped_values.append(value)
+        result.append(value)
 
-    return deduped_values
+    return result
+
+
+def print_result(command, result, *, dry_run):
+    prefix = "Would " if dry_run else ""
+    command.stdout.write("")
+    command.stdout.write(command.style.SUCCESS("Run complete."))
+    command.stdout.write("=" * 60)
+    command.stdout.write(f"Candidates seen: {result.candidates_seen}")
+    command.stdout.write("")
+    command.stdout.write(f"{prefix}runs created: {result.runs_created}")
+    command.stdout.write(f"{prefix}runs linked existing: {result.runs_linked_existing}")
+    command.stdout.write(f"{prefix}runs updated: {result.runs_updated}")
+    command.stdout.write(
+        f"{prefix}run source links created: {result.run_source_links_created}"
+    )
+    command.stdout.write(
+        f"{prefix}run source links updated: {result.run_source_links_updated}"
+    )
+    command.stdout.write("")
+    command.stdout.write(f"Issues seen: {result.issues_seen}")
+    command.stdout.write(f"{prefix}issues created: {result.issues_created}")
+    command.stdout.write(
+        f"{prefix}issues linked existing: {result.issues_linked_existing}"
+    )
+    command.stdout.write(f"{prefix}issues updated: {result.issues_updated}")
+    command.stdout.write(
+        f"{prefix}issue source links created: {result.issue_source_links_created}"
+    )
+    command.stdout.write(
+        f"{prefix}issue source links updated: {result.issue_source_links_updated}"
+    )
+    command.stdout.write(f"Issues skipped: {result.issues_skipped}")
+    command.stdout.write("")
+    command.stdout.write(f"{prefix}volumes created: {result.volumes_created}")
+    command.stdout.write(
+        f"{prefix}volumes linked existing: {result.volumes_linked_existing}"
+    )
+    command.stdout.write(f"{prefix}volumes updated: {result.volumes_updated}")
+    command.stdout.write(
+        f"{prefix}volume source links created: {result.volume_source_links_created}"
+    )
+    command.stdout.write(
+        f"{prefix}volume source links updated: {result.volume_source_links_updated}"
+    )
+    command.stdout.write(
+        f"{prefix}volume issue links created: {result.volume_issue_links_created}"
+    )
+    command.stdout.write(
+        f"{prefix}volume issue links updated: {result.volume_issue_links_updated}"
+    )
+    command.stdout.write(
+        f"{prefix}volume issue links deleted: {result.volume_issue_links_deleted}"
+    )
+    command.stdout.write("")
+    command.stdout.write(
+        f"{prefix}candidates marked applied: {result.candidates_marked_applied}"
+    )
+    command.stdout.write(f"Missing catalog targets: {result.missing_catalog_targets}")
+    command.stdout.write(f"Conflicts: {result.conflicts}")
+    command.stdout.write(f"Skipped: {result.skipped}")
+
+    if dry_run:
+        command.stdout.write("")
+        command.stdout.write("Dry run only. No database changes were saved.")
