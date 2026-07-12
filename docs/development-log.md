@@ -17,10 +17,61 @@ Current project areas:
 - `reading` stores user-specific comic tracking data.
 - The site currently has catalog home, browse, run details, issue details, collected-volume details, and My Comics pages.
 - Comic Vine backfill/import work is ongoing.
-- Comic Vine run and issue ingestion now supports confirmed source-to-catalog promotion.
+- Comic Vine run and issue ingestion supports confirmed source-to-catalog promotion.
+- AI-assisted Marvel catalog commands now support missing run discovery and official Marvel.com issue metadata filling.
+- Issue display has shifted away from issue titles and cover dates.
+- Published date is now the main issue date used by the catalog UI.
 - Recommendation logic, reading-order algorithms, character features, creator features, event features, and story-arc features are not built yet.
 
 ## Timeline
+
+### 2026-07-12
+
+- Added AI-assisted missing Marvel run discovery through `find_missing_marvel_runs_ai`.
+- The missing-run finder creates missing `ComicRun` rows only.
+- The missing-run finder does not create issues from OpenAI.
+- The missing-run finder does not create collected volumes.
+- The missing-run finder does not create credits or images.
+- The missing-run finder checks existing catalog runs locally instead of sending the full existing run list to the model.
+- The missing-run finder works in batches:
+  - Ask for a small batch of current/upcoming Marvel numbered runs.
+  - Reject existing, repeated, or incomplete candidates locally.
+  - Ask for another batch only when the returned candidates are unusable.
+- Run discovery no longer asks for or generates run descriptions.
+- New run descriptions are left blank.
+- Added automatic run-description filling from issue #1:
+  - When issue #1 is saved with a description, the parent run description is filled if it is blank.
+  - This works for normal model saves, including admin/manual issue entry and normal command-created issues.
+  - It does not overwrite an existing run description.
+- Renamed the main issue date concept from store date to published date in the catalog model/UI.
+- Kept `ComicIssue.title` as a legacy/manual field, but removed issue title from the current user-facing issue workflow.
+- Kept `ComicIssue.cover_date` for possible future/debug use, but removed cover date from current user-facing issue display.
+- Updated issue display direction:
+  - Browse issue rows show issue number, published date, and Writer.
+  - Issue detail pages focus on issue number, published date, description, and credits.
+  - Penciller is no longer a dedicated browse column.
+- Added official Marvel.com issue metadata filling through `fill_missing_marvel_issues_ai`.
+- The Marvel issue filler:
+  - Uses official Marvel.com issue pages only.
+  - Ignores issue titles.
+  - Ignores cover dates.
+  - Uses `published_date`.
+  - Uses existing catalog data first and makes no OpenAI call when a run is already complete enough.
+  - Requires issue number and published date by default.
+  - In strict mode, requires issue number, published date, description, and at least one Writer.
+  - Does not require Penciller.
+  - Collects other Marvel-listed credits when available.
+  - Stores issue credits through `ComicIssueCredit`.
+  - Skips future-dated issues because upcoming Marvel pages may be incomplete.
+  - Can reduce a run's issue count to the currently released count when future-dated issues are found during normal filling, avoiding repeated checks for intentionally skipped upcoming issues.
+- Updated issue credit direction:
+  - Writer is prioritized for browse and strict validation.
+  - Other listed credits such as Artist, Penciller, Inker, Colorist, Letterer, Cover Artist, and Editor are still collected when Marvel provides them.
+- Updated browse and detail-page direction to match the new issue model:
+  - Title is not part of normal issue display.
+  - Published date replaces store date.
+  - Cover date is not shown as a normal user-facing field.
+  - Writer is the only dedicated issue credit column in browse-style issue tables.
 
 ### 2026-07-11
 
@@ -123,7 +174,7 @@ Current project areas:
   - `reading`
 - Established `comicvine` as the source-data layer.
 - Established `catalog` as the confirmed app-facing data layer.
-- Established `ingestion` as the future candidate/review layer.
+- Established `ingestion` as the candidate/review layer.
 - Reserved `reading` for user reading-tracking features.
 - Removed the old temporary `comics` app from the active project structure.
 
@@ -179,7 +230,9 @@ Current project areas:
 
 ## Next Major Goals
 
-- Run the confirmed Comic Vine run and issue catalog apply flow.
+- Run and verify the AI-assisted missing Marvel run finder on a small batch.
+- Run and verify the official Marvel.com issue metadata fill command on a small number of runs.
+- Confirm that issue #1 descriptions correctly populate blank parent run descriptions.
 - Check the resulting catalog rows in Browse and detail pages.
 - Continue verifying confirmed run candidates for obvious source mistakes.
 - Keep Comic Vine source-data backfills running.
