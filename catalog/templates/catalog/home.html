@@ -1,145 +1,366 @@
 {% extends "base.html" %}
+{% load static %}
 
 {% block title %}Home - EzyReadComics{% endblock %}
 
 {% block content %}
-<div class="row align-items-center g-4 mb-5">
-    <div class="col-lg-8">
-        <p class="text-primary fw-semibold mb-2">EzyReadComics</p>
-        <h1 class="display-5 fw-bold mb-3">
-            Browse and Track Comics.
-        </h1>
-        <p class="lead text-secondary mb-4">
-            [Future Sub Text]
-        </p>
-        <div class="d-flex flex-wrap gap-2">
-            <a href="{% url 'catalog:browse' %}" class="btn btn-primary">
-                Browse catalog
-            </a>
-            <a href="/admin/" class="btn btn-outline-light">
-                Add or edit data
-            </a>
-        </div>
-    </div>
+<style>
+    .erc-home-hero {
+        position: relative;
+        overflow: hidden;
+        border: 1px solid var(--erc-border);
+        border-radius: 1.35rem;
+        background:
+            radial-gradient(circle at 15% 15%, rgba(76, 201, 240, 0.22), transparent 24rem),
+            radial-gradient(circle at 85% 20%, rgba(139, 92, 246, 0.20), transparent 28rem),
+            linear-gradient(135deg, rgba(23, 28, 40, 0.98), rgba(18, 22, 32, 0.94));
+        box-shadow: 0 1.5rem 4rem rgba(0, 0, 0, 0.28);
+    }
 
-    <div class="col-lg-4">
-        <div class="card border-secondary">
-            <div class="card-body">
-                <h2 class="h5 mb-3">Catalog totals</h2>
+    .erc-home-hero::after {
+        content: "";
+        position: absolute;
+        inset: auto -4rem -9rem auto;
+        width: 20rem;
+        height: 20rem;
+        border-radius: 999px;
+        background: rgba(76, 201, 240, 0.08);
+        filter: blur(0.2rem);
+    }
 
-                <div class="d-flex justify-content-between border-bottom border-secondary py-2">
-                    <span>Publishers</span>
-                    <strong>{{ publisher_count }}</strong>
-                </div>
-                <div class="d-flex justify-content-between border-bottom border-secondary py-2">
-                    <span>Runs</span>
-                    <strong>{{ run_count }}</strong>
-                </div>
-                <div class="d-flex justify-content-between border-bottom border-secondary py-2">
-                    <span>Issues</span>
-                    <strong>{{ issue_count }}</strong>
-                </div>
-                <div class="d-flex justify-content-between py-2">
-                    <span>Collected volumes</span>
-                    <strong>{{ volume_count }}</strong>
-                </div>
+    .erc-home-hero-content {
+        position: relative;
+        z-index: 1;
+    }
+
+    .erc-home-title {
+        max-width: 46rem;
+        letter-spacing: -0.04em;
+    }
+
+    .erc-home-subtitle {
+        max-width: 38rem;
+        color: var(--erc-text-muted);
+    }
+
+    .erc-home-stat-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.75rem;
+    }
+
+    @media (min-width: 768px) {
+        .erc-home-stat-grid {
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+        }
+    }
+
+    .erc-home-stat {
+        border: 1px solid var(--erc-border-soft);
+        border-radius: 1rem;
+        padding: 1rem;
+        background: rgba(255, 255, 255, 0.035);
+    }
+
+    .erc-home-stat-value {
+        font-size: clamp(1.5rem, 3vw, 2.1rem);
+        font-weight: 800;
+        line-height: 1;
+    }
+
+    .erc-home-card {
+        height: 100%;
+        border: 1px solid var(--erc-border);
+        border-radius: 1rem;
+        background: linear-gradient(180deg, var(--erc-surface-soft), var(--erc-surface));
+        transition: 150ms ease-in-out;
+    }
+
+    .erc-home-card:hover {
+        border-color: var(--erc-accent);
+        background: linear-gradient(180deg, rgba(76, 201, 240, 0.08), rgba(18, 22, 32, 0.98));
+        transform: translateY(-1px);
+    }
+
+    .erc-home-card-icon {
+        width: 2.4rem;
+        height: 2.4rem;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 0.8rem;
+        color: var(--erc-accent-strong);
+        background: var(--erc-accent-soft);
+        border: 1px solid rgba(76, 201, 240, 0.24);
+        font-weight: 800;
+    }
+
+    .erc-home-toggle {
+        border-color: var(--erc-border);
+        color: #d7deeb;
+        background: rgba(255, 255, 255, 0.025);
+    }
+
+    .erc-home-toggle:hover,
+    .erc-home-toggle:focus {
+        border-color: var(--erc-accent);
+        color: #ffffff;
+        background: var(--erc-accent-soft);
+    }
+
+    .erc-home-toggle.active {
+        border-color: var(--erc-accent);
+        color: #ffffff;
+        background: var(--erc-accent-soft);
+    }
+
+    .erc-home-list {
+        display: grid;
+        gap: 0.75rem;
+    }
+
+    .erc-home-list-item {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 1rem;
+        align-items: center;
+        border: 1px solid var(--erc-border-soft);
+        border-radius: 0.95rem;
+        padding: 0.95rem 1rem;
+        background: rgba(255, 255, 255, 0.025);
+    }
+
+    .erc-home-list-item:hover {
+        background: var(--erc-accent-soft);
+    }
+
+    .erc-home-list-meta {
+        color: var(--erc-text-muted);
+        font-size: 0.9rem;
+    }
+
+    .erc-home-arrow {
+        color: var(--erc-accent);
+        font-size: 1.35rem;
+    }
+</style>
+
+<div class="d-flex flex-column gap-4">
+    <section class="erc-home-hero p-4 p-lg-5">
+        <div class="erc-home-hero-content">
+            <p class="erc-page-kicker mb-3">EzyReadComics</p>
+
+            <h1 class="erc-home-title display-4 fw-bold mb-3">
+                Find comic runs. Track your reading.
+            </h1>
+
+            <p class="erc-home-subtitle lead mb-4">
+                Browse confirmed catalog data, follow runs, and keep issue and volume progress in one place.
+            </p>
+
+            <div class="d-flex flex-wrap gap-2">
+                <a href="{% url 'catalog:browse' %}" class="btn btn-primary btn-lg">
+                    Browse catalog
+                </a>
+
+                {% if request.user.is_authenticated %}
+                    <a href="{% url 'reading:my_comics' %}" class="btn btn-outline-light btn-lg">
+                        My Comics
+                    </a>
+                {% else %}
+                    <a href="{% url 'signup' %}" class="btn btn-outline-light btn-lg">
+                        Create account
+                    </a>
+                {% endif %}
             </div>
         </div>
-    </div>
-</div>
+    </section>
 
-<div class="row g-4">
-    <div class="col-lg-6">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <h2 class="h4 mb-0">Recently updated runs</h2>
-            <a href="{% url 'catalog:browse' %}" class="btn btn-outline-secondary btn-sm">
-                View all
-            </a>
+    <section class="erc-home-stat-grid">
+        <div class="erc-home-stat">
+            <div class="erc-home-stat-value">{{ publisher_count }}</div>
+            <div class="erc-muted mt-2">Publishers</div>
         </div>
 
-        <div class="card border-secondary">
-            <div class="table-responsive">
-                <table class="table table-dark table-hover align-middle mb-0">
-                    <thead>
-                    <tr>
-                        <th>Run</th>
-                        <th>Publisher</th>
-                        <th>Issues</th>
-                    </tr>
-                    </thead>
-                    <tbody>
+        <div class="erc-home-stat">
+            <div class="erc-home-stat-value">{{ run_count }}</div>
+            <div class="erc-muted mt-2">Runs</div>
+        </div>
+
+        <div class="erc-home-stat">
+            <div class="erc-home-stat-value">{{ issue_count }}</div>
+            <div class="erc-muted mt-2">Issues</div>
+        </div>
+
+        <div class="erc-home-stat">
+            <div class="erc-home-stat-value">{{ volume_count }}</div>
+            <div class="erc-muted mt-2">Volumes</div>
+        </div>
+    </section>
+
+    <section>
+        <div class="row g-3">
+            <div class="col-md-4">
+                <a href="{% url 'catalog:browse' %}" class="text-reset">
+                    <div class="erc-home-card p-4">
+                        <div class="erc-home-card-icon mb-3">1</div>
+                        <h2 class="h5 fw-bold mb-2">Browse runs</h2>
+                        <p class="erc-muted mb-0">
+                            Search by publisher, run, or collected volume.
+                        </p>
+                    </div>
+                </a>
+            </div>
+
+            <div class="col-md-4">
+                {% if request.user.is_authenticated %}
+                    <a href="{% url 'reading:my_comics' %}" class="text-reset">
+                {% else %}
+                    <a href="{% url 'signup' %}" class="text-reset">
+                {% endif %}
+                    <div class="erc-home-card p-4">
+                        <div class="erc-home-card-icon mb-3">2</div>
+                        <h2 class="h5 fw-bold mb-2">Follow comics</h2>
+                        <p class="erc-muted mb-0">
+                            Save runs, issues, and volumes to your list.
+                        </p>
+                    </div>
+                </a>
+            </div>
+
+            <div class="col-md-4">
+                <a href="{% url 'catalog:browse' %}" class="text-reset">
+                    <div class="erc-home-card p-4">
+                        <div class="erc-home-card-icon mb-3">3</div>
+                        <h2 class="h5 fw-bold mb-2">Track progress</h2>
+                        <p class="erc-muted mb-0">
+                            Mark comics as planned, reading, or read.
+                        </p>
+                    </div>
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <section class="card erc-panel">
+        <div class="card-body p-4">
+            <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-end gap-3 mb-4">
+                <div>
+                    <p class="erc-page-kicker mb-2">Catalog pulse</p>
+                    <h2 class="h3 fw-bold mb-0">Recently updated</h2>
+                </div>
+
+                <div class="d-flex flex-wrap gap-2" role="tablist" aria-label="Recently updated catalog sections">
+                    <button
+                        type="button"
+                        class="btn btn-sm erc-home-toggle active"
+                        data-home-toggle="runs"
+                        aria-controls="home-runs-panel"
+                        aria-selected="true"
+                    >
+                        Runs
+                    </button>
+
+                    <button
+                        type="button"
+                        class="btn btn-sm erc-home-toggle"
+                        data-home-toggle="issues"
+                        aria-controls="home-issues-panel"
+                        aria-selected="false"
+                    >
+                        Issues
+                    </button>
+                </div>
+            </div>
+
+            <div id="home-runs-panel" data-home-panel="runs">
+                <div class="erc-home-list">
                     {% for run in recent_runs %}
-                        <tr
-                            class="clickable-row"
+                        <div
+                            class="erc-home-list-item clickable-row"
                             data-row-url="{% url 'catalog:run_details' run.id %}"
+                            tabindex="0"
+                            role="button"
+                            aria-label="Open run details for {{ run }}"
                         >
-                            <td>
-                                <a href="{% url 'catalog:run_details' run.id %}">
-                                    {{ run }}
-                                </a>
-                            </td>
-                            <td>{{ run.publisher.name }}</td>
-                            <td>{{ run.issue_count|default:"—" }}</td>
-                        </tr>
-                    {% empty %}
-                        <tr>
-                            <td colspan="3" class="text-secondary">
-                                No runs have been added yet.
-                            </td>
-                        </tr>
-                    {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
+                            <div>
+                                <div class="fw-semibold">
+                                    <a href="{% url 'catalog:run_details' run.id %}">
+                                        {{ run }}
+                                    </a>
+                                </div>
 
-    <div class="col-lg-6">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <h2 class="h4 mb-0">Recently updated issues</h2>
-            <a href="{% url 'catalog:browse' %}" class="btn btn-outline-secondary btn-sm">
-                View all
-            </a>
-        </div>
-
-        <div class="card border-secondary">
-            <div class="table-responsive">
-                <table class="table table-dark table-hover align-middle mb-0">
-                    <thead>
-                    <tr>
-                        <th>Issue</th>
-                        <th>Run</th>
-                        <th>Store date</th>
-                    </tr>
-                    </thead>
-                    <tbody>
-                    {% for issue in recent_issues %}
-                        <tr
-                            class="clickable-row"
-                            data-row-url="{% url 'catalog:issue_details' issue.id %}"
-                        >
-                            <td>
-                                <a href="{% url 'catalog:issue_details' issue.id %}">
-                                    #{{ issue.issue_number }}
-                                    {% if issue.title %}
-                                        — {{ issue.title }}
+                                <div class="erc-home-list-meta">
+                                    {{ run.publisher.name }}
+                                    {% if run.status %}
+                                        · {{ run.get_status_display }}
                                     {% endif %}
-                                </a>
-                            </td>
-                            <td>{{ issue.run }}</td>
-                            <td>{{ issue.store_date|date:"Y-m-d"|default:"—" }}</td>
-                        </tr>
+                                    {% if run.issue_count %}
+                                        · {{ run.issue_count }} issues
+                                    {% endif %}
+                                </div>
+                            </div>
+
+                            <div class="erc-home-arrow">›</div>
+                        </div>
                     {% empty %}
-                        <tr>
-                            <td colspan="3" class="text-secondary">
-                                No issues have been added yet.
-                            </td>
-                        </tr>
+                        <div class="erc-muted">
+                            No runs have been added yet.
+                        </div>
                     {% endfor %}
-                    </tbody>
-                </table>
+                </div>
+            </div>
+
+            <div id="home-issues-panel" class="d-none" data-home-panel="issues">
+                <div class="erc-home-list">
+                    {% for issue in recent_issues %}
+                        <div
+                            class="erc-home-list-item clickable-row"
+                            data-row-url="{% url 'catalog:issue_details' issue.id %}"
+                            tabindex="0"
+                            role="button"
+                            aria-label="Open issue details for issue {{ issue.issue_number }}"
+                        >
+                            <div>
+                                <div class="fw-semibold">
+                                    <a href="{% url 'catalog:issue_details' issue.id %}">
+                                        {{ issue.run }} #{{ issue.issue_number }}
+                                    </a>
+                                </div>
+
+                                <div class="erc-home-list-meta">
+                                    {% if issue.published_date %}
+                                        {{ issue.published_date|date:"Y-m-d" }}
+                                    {% else %}
+                                        Date unknown
+                                    {% endif %}
+
+                                    {% if issue.display_writers %}
+                                        · {{ issue.display_writers }}
+                                    {% endif %}
+                                </div>
+                            </div>
+
+                            <div class="erc-home-arrow">›</div>
+                        </div>
+                    {% empty %}
+                        <div class="erc-muted">
+                            No issues have been added yet.
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="mt-4">
+                <a href="{% url 'catalog:browse' %}" class="btn btn-outline-light">
+                    Open browse
+                </a>
             </div>
         </div>
-    </div>
+    </section>
 </div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{% static 'js/catalog/home.js' %}"></script>
 {% endblock %}

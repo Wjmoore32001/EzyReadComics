@@ -666,7 +666,7 @@ def build_issue_row_item(issue):
         "aria_label": f"Open issue details for issue {issue.issue_number}",
         "year": issue.run.start_year or "Unknown",
         "year_muted": not bool(issue.run.start_year),
-        "run": str(issue.run),
+        "run": issue.run.title,
         "issue": f"#{issue.issue_number}",
         "published_date": format_date_or_unknown(issue.published_date),
         "published_date_muted": not bool(issue.published_date),
