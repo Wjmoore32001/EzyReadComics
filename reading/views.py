@@ -4,8 +4,10 @@ from urllib.parse import urlencode
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
+from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
@@ -35,6 +37,16 @@ def my_comics(request):
     ).select_related(
         "run",
         "run__publisher",
+    ).annotate(
+        catalog_issue_count=Count(
+            "run__issues",
+            distinct=True,
+        ),
+        tracked_issue_count=Count(
+            "run__issues__user_progress",
+            filter=Q(run__issues__user_progress__user=request.user),
+            distinct=True,
+        ),
     )
 
     volume_progress = VolumeProgress.objects.filter(
@@ -98,7 +110,7 @@ def set_run_status(request, run_id):
         return redirect(get_safe_next_url(request, reverse("catalog:run_details", args=[run.id])))
 
     new_status = form.cleaned_data["status"]
-    confirm_clear_issues = request.POST.get("confirm_clear_issues") == "1"
+    apply_to_issues = request.POST.get("apply_to_issues") == "1"
 
     with transaction.atomic():
         followed_run, created = FollowedRun.objects.select_for_update().get_or_create(
@@ -111,56 +123,46 @@ def set_run_status(request, run_id):
 
         previous_status = followed_run.status
 
-        needs_issue_clear_confirmation = (
-            not created
-            and previous_status == FollowedRun.STATUS_READ
-            and new_status != FollowedRun.STATUS_READ
-            and IssueProgress.objects.filter(
-                user=request.user,
-                issue__run=run,
-            ).exists()
-        )
-
-        if needs_issue_clear_confirmation and not confirm_clear_issues:
-            messages.warning(
-                request,
-                "This run is marked read. Confirm the status change to remove the saved issue statuses for this run.",
-            )
-            return redirect(get_safe_next_url(request, reverse("catalog:run_details", args=[run.id])))
-
         if not created and previous_status != new_status:
             followed_run.status = new_status
             followed_run.save(update_fields=["status", "updated_at"])
 
-        marked_issue_count = 0
-        removed_issue_count = 0
+        changed_issue_count = 0
 
-        if new_status == FollowedRun.STATUS_READ:
-            marked_issue_count = mark_run_issues_read(request.user, run)
+        if new_status == FollowedRun.STATUS_READ and apply_to_issues:
+            changed_issue_count = set_all_run_issues_status(
+                user=request.user,
+                run=run,
+                status=IssueProgress.STATUS_READ,
+            )
         elif (
             not created
             and previous_status == FollowedRun.STATUS_READ
             and new_status != FollowedRun.STATUS_READ
+            and apply_to_issues
         ):
-            removed_issue_count, _ = IssueProgress.objects.filter(
+            changed_issue_count = update_existing_run_issue_statuses(
                 user=request.user,
-                issue__run=run,
-            ).delete()
+                run=run,
+                status=new_status,
+            )
+        elif apply_to_issues:
+            changed_issue_count = set_all_run_issues_status(
+                user=request.user,
+                run=run,
+                status=new_status,
+            )
 
-    if marked_issue_count:
-        issue_label = "issue status" if marked_issue_count == 1 else "issue statuses"
+    status_label = get_status_label(FollowedRun.STATUS_CHOICES, new_status)
+
+    if changed_issue_count:
+        issue_label = "issue status" if changed_issue_count == 1 else "issue statuses"
         messages.success(
             request,
-            f"{run} was marked as read, and {marked_issue_count} {issue_label} were marked as read.",
-        )
-    elif removed_issue_count:
-        issue_label = "issue status" if removed_issue_count == 1 else "issue statuses"
-        messages.success(
-            request,
-            f"{run} was updated, and {removed_issue_count} {issue_label} were removed.",
+            f"{run} was saved as {status_label}, and {changed_issue_count} {issue_label} were updated.",
         )
     else:
-        messages.success(request, f"Your status for {run} was saved.")
+        messages.success(request, f"Your status for {run} was saved as {status_label}.")
 
     return redirect(get_safe_next_url(request, reverse("catalog:run_details", args=[run.id])))
 
@@ -169,13 +171,29 @@ def set_run_status(request, run_id):
 @require_POST
 def unfollow_run(request, run_id):
     run = get_object_or_404(ComicRun, id=run_id)
+    remove_issues = request.POST.get("remove_issues") == "1"
 
-    deleted_count, _ = FollowedRun.objects.filter(
-        user=request.user,
-        run=run,
-    ).delete()
+    with transaction.atomic():
+        deleted_count, _ = FollowedRun.objects.filter(
+            user=request.user,
+            run=run,
+        ).delete()
 
-    if deleted_count:
+        removed_issue_count = 0
+
+        if remove_issues:
+            removed_issue_count = remove_run_issue_statuses(
+                user=request.user,
+                run=run,
+            )
+
+    if deleted_count and removed_issue_count:
+        issue_label = "issue status" if removed_issue_count == 1 else "issue statuses"
+        messages.success(
+            request,
+            f"{run} was unfollowed, and {removed_issue_count} {issue_label} were removed.",
+        )
+    elif deleted_count:
         messages.success(request, f"{run} was removed from your followed runs.")
     else:
         messages.info(request, f"{run} was not in your followed runs.")
@@ -317,8 +335,8 @@ def remove_volume_status(request, volume_id):
     return redirect(get_safe_next_url(request, reverse("reading:my_comics")))
 
 
-def mark_run_issues_read(user, run):
-    marked_issue_count = 0
+def set_all_run_issues_status(*, user, run, status):
+    changed_issue_count = 0
 
     issues = ComicIssue.objects.filter(
         run=run,
@@ -332,12 +350,31 @@ def mark_run_issues_read(user, run):
             user=user,
             issue=issue,
             defaults={
-                "status": IssueProgress.STATUS_READ,
+                "status": status,
             },
         )
-        marked_issue_count += 1
+        changed_issue_count += 1
 
-    return marked_issue_count
+    return changed_issue_count
+
+
+def update_existing_run_issue_statuses(*, user, run, status):
+    return IssueProgress.objects.filter(
+        user=user,
+        issue__run=run,
+    ).update(
+        status=status,
+        updated_at=timezone.now(),
+    )
+
+
+def remove_run_issue_statuses(*, user, run):
+    deleted_count, _ = IssueProgress.objects.filter(
+        user=user,
+        issue__run=run,
+    ).delete()
+
+    return deleted_count
 
 
 def get_status_post_data(request, default_status):
@@ -347,6 +384,10 @@ def get_status_post_data(request, default_status):
         data["status"] = default_status
 
     return data
+
+
+def get_status_label(status_choices, status):
+    return dict(status_choices).get(status, status)
 
 
 def get_safe_next_url(request, fallback_url):
