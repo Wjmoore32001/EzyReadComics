@@ -107,6 +107,8 @@ class ComicIssue(ImageUrlFields):
     cover_date = models.DateField(null=True, blank=True)
     store_date = models.DateField(null=True, blank=True)
 
+    is_released = models.BooleanField(default=True, db_index=True)
+
     description = models.TextField(blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
