@@ -1,3 +1,4 @@
+{% load static %}
 <!doctype html>
 <html lang="en" data-bs-theme="dark">
 <head>
@@ -300,27 +301,7 @@
 <script
     src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
 ></script>
-<script>
-document.addEventListener("DOMContentLoaded", function () {
-    document.querySelectorAll("[data-row-url]").forEach((row) => {
-        row.addEventListener("click", (event) => {
-            if (event.target.closest("a, button, input, select, textarea, label")) {
-                return;
-            }
-
-            window.location.href = row.dataset.rowUrl;
-        });
-
-        row.addEventListener("keydown", (event) => {
-            if (event.key !== "Enter" && event.key !== " ") {
-                return;
-            }
-
-            event.preventDefault();
-            window.location.href = row.dataset.rowUrl;
-        });
-    });
-});
-</script>
+<script src="{% static 'js/base.js' %}"></script>
+{% block extra_scripts %}{% endblock %}
 </body>
 </html>
