@@ -219,3 +219,6 @@ __marimo__/
 
 # PyCharm / JetBrains project files
 .idea/
+
+#Notes
+docs/notes.md

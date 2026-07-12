@@ -29,12 +29,14 @@
                     action="{% url 'reading:set_run_status' run.id %}"
                     method="post"
                     class="d-flex gap-2 align-items-center"
-                    data-confirm-run-read-reset
+                    data-run-status-form
                     data-current-status="{{ current_run_progress.status }}"
+                    data-run-issue-count="{{ run.catalog_issue_count|default:0 }}"
+                    data-tracked-issue-count="{{ run.tracked_issue_count|default:0 }}"
                 >
                     {% csrf_token %}
                     <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                    <input type="hidden" name="confirm_clear_issues" value="">
+                    <input type="hidden" name="apply_to_issues" value="">
                     <select name="status" class="form-select form-select-sm" data-auto-submit>
                         {% for value, label in run_status_choices %}
                             <option value="{{ value }}" {% if current_run_progress.status == value %}selected{% endif %}>
@@ -44,9 +46,16 @@
                     </select>
                 </form>
             {% else %}
-                <form action="{% url 'reading:set_run_status' run.id %}" method="post">
+                <form
+                    action="{% url 'reading:set_run_status' run.id %}"
+                    method="post"
+                    data-run-follow-form
+                    data-run-issue-count="{{ run.catalog_issue_count|default:0 }}"
+                    data-tracked-issue-count="{{ run.tracked_issue_count|default:0 }}"
+                >
                     {% csrf_token %}
                     <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                    <input type="hidden" name="apply_to_issues" value="">
                     <button type="submit" class="btn btn-outline-light">
                         Follow
                     </button>
@@ -310,37 +319,112 @@
 
 <script>
 document.addEventListener("DOMContentLoaded", function () {
+    function getCount(form, name) {
+        const value = Number(form.dataset[name] || "0");
+
+        if (Number.isNaN(value)) {
+            return 0;
+        }
+
+        return value;
+    }
+
+    function issueLabel(count) {
+        return count === 1 ? "issue" : "issues";
+    }
+
+    function statusLabel(status) {
+        const labels = {
+            planned: "Planned to read",
+            reading: "Reading",
+            read: "Read",
+        };
+
+        return labels[status] || status;
+    }
+
+    function applyStatusMessage(status, totalIssues, trackedIssues) {
+        if (totalIssues <= 0) {
+            return "";
+        }
+
+        const label = statusLabel(status);
+
+        if (status === "read") {
+            if (trackedIssues >= totalIssues) {
+                return `Mark all ${totalIssues} followed ${issueLabel(totalIssues)} in this run as Read too?`;
+            }
+
+            if (trackedIssues === 0) {
+                return `You are not following any issues in this run yet. Follow all ${totalIssues} ${issueLabel(totalIssues)} and mark them Read too?`;
+            }
+
+            const missingIssues = totalIssues - trackedIssues;
+
+            return `You follow ${trackedIssues} of ${totalIssues} ${issueLabel(totalIssues)} in this run. Follow the remaining ${missingIssues} and mark all ${totalIssues} as Read too?`;
+        }
+
+        if (trackedIssues >= totalIssues) {
+            return `Also change all ${totalIssues} followed ${issueLabel(totalIssues)} in this run to ${label}?`;
+        }
+
+        if (trackedIssues === 0) {
+            return `Also follow all ${totalIssues} ${issueLabel(totalIssues)} in this run and set them to ${label}?`;
+        }
+
+        const missingIssues = totalIssues - trackedIssues;
+
+        return `You follow ${trackedIssues} of ${totalIssues} ${issueLabel(totalIssues)} in this run. Follow the remaining ${missingIssues} and set all ${totalIssues} to ${label}?`;
+    }
+
+    function bindRunTrackingForm(form) {
+        form.addEventListener("submit", function () {
+            const applyToIssuesInput = form.querySelector("input[name='apply_to_issues']");
+            const totalIssues = getCount(form, "runIssueCount");
+            const trackedIssues = getCount(form, "trackedIssueCount");
+
+            if (!applyToIssuesInput) {
+                return;
+            }
+
+            applyToIssuesInput.value = "";
+
+            if (form.dataset.runFollowForm !== undefined) {
+                if (totalIssues > 0) {
+                    const confirmed = window.confirm(
+                        `Also follow all ${totalIssues} ${issueLabel(totalIssues)} in this run as Planned to read?`
+                    );
+
+                    if (confirmed) {
+                        applyToIssuesInput.value = "1";
+                    }
+                }
+
+                return;
+            }
+
+            const select = form.querySelector("select[name='status']");
+            const currentStatus = form.dataset.currentStatus;
+
+            if (!select || select.value === currentStatus) {
+                return;
+            }
+
+            const message = applyStatusMessage(select.value, totalIssues, trackedIssues);
+
+            if (message && window.confirm(message)) {
+                applyToIssuesInput.value = "1";
+            }
+        });
+    }
+
     document.querySelectorAll("[data-auto-submit]").forEach(function (select) {
         select.addEventListener("change", function () {
             select.form.requestSubmit();
         });
     });
 
-    document.querySelectorAll("[data-confirm-run-read-reset]").forEach(function (form) {
-        form.addEventListener("submit", function (event) {
-            const select = form.querySelector("select[name='status']");
-            const confirmInput = form.querySelector("input[name='confirm_clear_issues']");
-            const currentStatus = form.dataset.currentStatus;
-
-            if (!select || !confirmInput) {
-                return;
-            }
-
-            if (currentStatus === "read" && select.value !== "read" && confirmInput.value !== "1") {
-                const confirmed = window.confirm(
-                    "This run is marked read, so all issues in this run were marked read. Changing this status will remove those saved issue statuses. Continue?"
-                );
-
-                if (!confirmed) {
-                    event.preventDefault();
-                    select.value = currentStatus;
-                    return;
-                }
-
-                confirmInput.value = "1";
-            }
-        });
-    });
+    document.querySelectorAll("[data-run-status-form], [data-run-follow-form]").forEach(bindRunTrackingForm);
 });
 </script>
 {% endblock %}

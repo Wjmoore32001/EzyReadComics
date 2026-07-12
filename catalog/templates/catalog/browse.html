@@ -463,12 +463,14 @@
                                             action="{% url 'reading:set_run_status' run.id %}"
                                             method="post"
                                             class="erc-track-form"
-                                            data-confirm-run-read-reset
+                                            data-run-status-form
                                             data-current-status="{{ run.user_tracking.status }}"
+                                            data-run-issue-count="{{ run.catalog_issue_count|default:0 }}"
+                                            data-tracked-issue-count="{{ run.tracked_issue_count|default:0 }}"
                                         >
                                             {% csrf_token %}
                                             <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                                            <input type="hidden" name="confirm_clear_issues" value="">
+                                            <input type="hidden" name="apply_to_issues" value="">
                                             <select name="status" class="form-select form-select-sm" data-auto-submit>
                                                 {% for value, label in run_status_choices %}
                                                     <option value="{{ value }}" {% if run.user_tracking.status == value %}selected{% endif %}>
@@ -482,9 +484,13 @@
                                             action="{% url 'reading:set_run_status' run.id %}"
                                             method="post"
                                             class="erc-track-form"
+                                            data-run-follow-form
+                                            data-run-issue-count="{{ run.catalog_issue_count|default:0 }}"
+                                            data-tracked-issue-count="{{ run.tracked_issue_count|default:0 }}"
                                         >
                                             {% csrf_token %}
                                             <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                            <input type="hidden" name="apply_to_issues" value="">
                                             <button type="submit" class="btn btn-outline-light btn-sm erc-track-button">
                                                 Follow
                                             </button>
@@ -942,6 +948,105 @@ document.addEventListener("DOMContentLoaded", function () {
         });
     });
 
+    function getCountFromDataset(source, name) {
+        const value = Number(source.dataset[name] || "0");
+
+        if (Number.isNaN(value)) {
+            return 0;
+        }
+
+        return value;
+    }
+
+    function issueLabel(count) {
+        return count === 1 ? "issue" : "issues";
+    }
+
+    function statusLabel(status) {
+        const labels = {
+            planned: "Planned to read",
+            reading: "Reading",
+            read: "Read",
+        };
+
+        return labels[status] || status;
+    }
+
+    function applyStatusMessage(status, totalIssues, trackedIssues) {
+        if (totalIssues <= 0) {
+            return "";
+        }
+
+        const label = statusLabel(status);
+
+        if (status === "read") {
+            if (trackedIssues >= totalIssues) {
+                return `Mark all ${totalIssues} followed ${issueLabel(totalIssues)} in this run as Read too?`;
+            }
+
+            if (trackedIssues === 0) {
+                return `You are not following any issues in this run yet. Follow all ${totalIssues} ${issueLabel(totalIssues)} and mark them Read too?`;
+            }
+
+            const missingIssues = totalIssues - trackedIssues;
+
+            return `You follow ${trackedIssues} of ${totalIssues} ${issueLabel(totalIssues)} in this run. Follow the remaining ${missingIssues} and mark all ${totalIssues} as Read too?`;
+        }
+
+        if (trackedIssues >= totalIssues) {
+            return `Also change all ${totalIssues} followed ${issueLabel(totalIssues)} in this run to ${label}?`;
+        }
+
+        if (trackedIssues === 0) {
+            return `Also follow all ${totalIssues} ${issueLabel(totalIssues)} in this run and set them to ${label}?`;
+        }
+
+        const missingIssues = totalIssues - trackedIssues;
+
+        return `You follow ${trackedIssues} of ${totalIssues} ${issueLabel(totalIssues)} in this run. Follow the remaining ${missingIssues} and set all ${totalIssues} to ${label}?`;
+    }
+
+    function bindRunTrackingForm(form) {
+        form.addEventListener("submit", function () {
+            const applyToIssuesInput = form.querySelector("input[name='apply_to_issues']");
+            const totalIssues = getCountFromDataset(form, "runIssueCount");
+            const trackedIssues = getCountFromDataset(form, "trackedIssueCount");
+
+            if (!applyToIssuesInput) {
+                return;
+            }
+
+            applyToIssuesInput.value = "";
+
+            if (form.dataset.runFollowForm !== undefined) {
+                if (totalIssues > 0) {
+                    const confirmed = window.confirm(
+                        `Also follow all ${totalIssues} ${issueLabel(totalIssues)} in this run as Planned to read?`
+                    );
+
+                    if (confirmed) {
+                        applyToIssuesInput.value = "1";
+                    }
+                }
+
+                return;
+            }
+
+            const select = form.querySelector("select[name='status']");
+            const currentStatus = form.dataset.currentStatus;
+
+            if (!select || select.value === currentStatus) {
+                return;
+            }
+
+            const message = applyStatusMessage(select.value, totalIssues, trackedIssues);
+
+            if (message && window.confirm(message)) {
+                applyToIssuesInput.value = "1";
+            }
+        });
+    }
+
     function addCell(row, text, options) {
         const cell = document.createElement("td");
         const cellOptions = options || {};
@@ -998,32 +1103,6 @@ document.addEventListener("DOMContentLoaded", function () {
         return window.location.pathname + window.location.search;
     }
 
-    function bindTrackingForm(form) {
-        form.addEventListener("submit", function (event) {
-            const select = form.querySelector("select[name='status']");
-            const confirmInput = form.querySelector("input[name='confirm_clear_issues']");
-            const currentStatus = form.dataset.currentStatus;
-
-            if (!select || !confirmInput) {
-                return;
-            }
-
-            if (currentStatus === "read" && select.value !== "read" && confirmInput.value !== "1") {
-                const confirmed = window.confirm(
-                    "This run is marked read, so all issues in this run were marked read. Changing this status will remove those saved issue statuses. Continue?"
-                );
-
-                if (!confirmed) {
-                    event.preventDefault();
-                    select.value = currentStatus;
-                    return;
-                }
-
-                confirmInput.value = "1";
-            }
-        });
-    }
-
     function createHiddenInput(name, value) {
         const input = document.createElement("input");
 
@@ -1046,10 +1125,17 @@ document.addEventListener("DOMContentLoaded", function () {
         form.appendChild(createHiddenInput("csrfmiddlewaretoken", csrfToken));
         form.appendChild(createHiddenInput("next", currentNextValue()));
 
-        if (tracking.item_type === "run" && tracking.tracked) {
-            form.dataset.confirmRunReadReset = "";
-            form.dataset.currentStatus = tracking.status || "";
-            form.appendChild(createHiddenInput("confirm_clear_issues", ""));
+        if (tracking.item_type === "run") {
+            form.dataset.runIssueCount = String(tracking.catalog_issue_count || 0);
+            form.dataset.trackedIssueCount = String(tracking.tracked_issue_count || 0);
+            form.appendChild(createHiddenInput("apply_to_issues", ""));
+
+            if (tracking.tracked) {
+                form.dataset.runStatusForm = "";
+                form.dataset.currentStatus = tracking.status || "";
+            } else {
+                form.dataset.runFollowForm = "";
+            }
         }
 
         if (tracking.tracked) {
@@ -1086,7 +1172,10 @@ document.addEventListener("DOMContentLoaded", function () {
             form.appendChild(button);
         }
 
-        bindTrackingForm(form);
+        if (tracking.item_type === "run") {
+            bindRunTrackingForm(form);
+        }
+
         cell.appendChild(form);
 
         return cell;
@@ -1199,7 +1288,7 @@ document.addEventListener("DOMContentLoaded", function () {
         });
     });
 
-    document.querySelectorAll("[data-confirm-run-read-reset]").forEach(bindTrackingForm);
+    document.querySelectorAll("[data-run-status-form], [data-run-follow-form]").forEach(bindRunTrackingForm);
 
     document.querySelectorAll("[data-load-more]").forEach(function (button) {
         button.addEventListener("click", function () {

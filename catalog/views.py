@@ -624,6 +624,8 @@ def build_run_row_item(run):
             action_url=reverse("reading:set_run_status", args=[run.id]),
             progress=run.user_tracking,
             status_choices=FollowedRun.STATUS_CHOICES,
+            catalog_issue_count=run.catalog_issue_count,
+            tracked_issue_count=run.tracked_issue_count,
         ),
     }
 
@@ -677,13 +679,23 @@ def build_issue_row_item(issue):
     }
 
 
-def build_tracking_data(*, item_type, action_url, progress, status_choices):
+def build_tracking_data(
+    *,
+    item_type,
+    action_url,
+    progress,
+    status_choices,
+    catalog_issue_count=0,
+    tracked_issue_count=0,
+):
     return {
         "item_type": item_type,
         "action_url": action_url,
         "tracked": bool(progress),
         "status": progress.status if progress else "",
         "status_choices": build_status_choices(status_choices),
+        "catalog_issue_count": catalog_issue_count,
+        "tracked_issue_count": tracked_issue_count,
     }
 
 
@@ -700,21 +712,44 @@ def build_status_choices(status_choices):
 def attach_run_tracking(request, runs):
     run_ids = [run.id for run in runs]
 
-    if not request.user.is_authenticated or not run_ids:
-        for run in runs:
-            run.user_tracking = None
+    if not run_ids:
         return
 
-    progress_by_run_id = {
-        progress.run_id: progress
-        for progress in FollowedRun.objects.filter(
-            user=request.user,
+    catalog_issue_counts = {
+        row["run_id"]: row["issue_total"]
+        for row in ComicIssue.objects.filter(
             run_id__in=run_ids,
         )
+        .values("run_id")
+        .annotate(issue_total=Count("id"))
     }
+
+    progress_by_run_id = {}
+    tracked_issue_counts = {}
+
+    if request.user.is_authenticated:
+        progress_by_run_id = {
+            progress.run_id: progress
+            for progress in FollowedRun.objects.filter(
+                user=request.user,
+                run_id__in=run_ids,
+            )
+        }
+
+        tracked_issue_counts = {
+            row["issue__run_id"]: row["issue_total"]
+            for row in IssueProgress.objects.filter(
+                user=request.user,
+                issue__run_id__in=run_ids,
+            )
+            .values("issue__run_id")
+            .annotate(issue_total=Count("issue_id", distinct=True))
+        }
 
     for run in runs:
         run.user_tracking = progress_by_run_id.get(run.id)
+        run.catalog_issue_count = catalog_issue_counts.get(run.id, 0)
+        run.tracked_issue_count = tracked_issue_counts.get(run.id, 0)
 
 
 def attach_issue_tracking(request, issues):

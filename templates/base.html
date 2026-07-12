@@ -73,6 +73,32 @@
             border: 1px solid var(--erc-border);
         }
 
+        .btn-outline-light,
+        .btn-outline-secondary {
+            border-color: var(--erc-border);
+            color: #d7deeb;
+            background: rgba(255, 255, 255, 0.025);
+        }
+
+        .btn-outline-light:hover,
+        .btn-outline-light:focus,
+        .btn-outline-secondary:hover,
+        .btn-outline-secondary:focus {
+            border-color: var(--erc-accent);
+            color: #ffffff;
+            background: var(--erc-accent-soft);
+            box-shadow: 0 0 0 0.12rem rgba(76, 201, 240, 0.12);
+        }
+
+        .btn-outline-light:active,
+        .btn-outline-secondary:active,
+        .btn-outline-light.show,
+        .btn-outline-secondary.show {
+            border-color: var(--erc-accent-strong) !important;
+            color: #ffffff !important;
+            background: rgba(76, 201, 240, 0.20) !important;
+        }
+
         .erc-filter-button {
             border-color: var(--erc-border);
             color: #d7deeb;
