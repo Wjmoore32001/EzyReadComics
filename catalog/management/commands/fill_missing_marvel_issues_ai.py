@@ -139,6 +139,7 @@ class Command(BaseCommand):
             publisher_name=publisher_name,
             run_id=run_id,
             limit_runs=limit_runs,
+            dry_run=dry_run,
         )
 
         self.write_header(
@@ -276,7 +277,7 @@ class Command(BaseCommand):
         if dry_run:
             self.stdout.write("Dry run only. No catalog issues were created or updated.")
 
-    def get_runs_to_check(self, *, publisher_name, run_id, limit_runs):
+    def get_runs_to_check(self, *, publisher_name, run_id, limit_runs, dry_run):
         runs = (
             ComicRun.objects.select_related("publisher")
             .annotate(attached_issue_count=Count("issues", distinct=True))
@@ -291,6 +292,9 @@ class Command(BaseCommand):
         runs_to_check = []
 
         for run in runs:
+            if normalize_run_status_before_issue_fill(run=run, dry_run=dry_run):
+                continue
+
             existing_issues = list(run.issues.all())
 
             has_missing_issue_count = (
@@ -603,6 +607,33 @@ Rules:
 
 Return compact JSON only.
 """.strip()
+
+
+def normalize_run_status_before_issue_fill(*, run, dry_run):
+    today = date.today()
+
+    if run.first_issue_date is not None and run.first_issue_date > today and run.attached_issue_count == 0:
+        if run.status != ComicRun.STATUS_UPCOMING:
+            run.status = ComicRun.STATUS_UPCOMING
+
+            if not dry_run:
+                run.save(update_fields=["status", "updated_at"])
+
+        return True
+
+    if run.status == ComicRun.STATUS_UPCOMING:
+        if run.first_issue_date is None:
+            return True
+
+        if run.first_issue_date > today:
+            return True
+
+        run.status = ComicRun.STATUS_ONGOING
+
+        if not dry_run:
+            run.save(update_fields=["status", "updated_at"])
+
+    return False
 
 
 def build_target_issue_numbers(*, run, existing_issues):

@@ -51,7 +51,7 @@ RESULT_SCHEMA = {
 
 class Command(BaseCommand):
     help = (
-        "Find current Marvel comic runs missing from catalog using OpenAI web search. "
+        "Find current or upcoming Marvel comic runs missing from catalog using OpenAI web search. "
         "Default mode creates missing ComicRun rows. Use --dry-run to print only."
     )
 
@@ -428,9 +428,13 @@ class Command(BaseCommand):
 
 def build_broad_prompt(*, publisher_name, existing_runs, limit):
     existing_runs_text = build_existing_runs_text(existing_runs)
+    today = date.today().isoformat()
 
     return f"""
 Find up to {limit} current or upcoming {publisher_name} numbered comic runs that are not already in the catalog.
+
+Today:
+{today}
 
 Existing catalog runs to exclude:
 {existing_runs_text}
@@ -448,7 +452,8 @@ Rules:
 - Search the open web broadly.
 - Do not restrict the search to specific websites.
 - Only use results that clearly match the publisher, run title, and start year.
-- status must be ongoing or upcoming.
+- status must be upcoming if issue #1 has a future on-sale date.
+- status must be ongoing if issue #1 is already on sale and the run is not completed.
 - issue_count is the count of released plus officially solicited issues for the current run.
 - first_issue_date is the issue #1 on-sale date.
 - last_issue_date is the latest released or officially solicited issue on-sale date.
@@ -464,6 +469,7 @@ Return compact JSON only.
 
 def build_repair_prompt(*, publisher_name, existing_runs, repair_targets):
     existing_runs_text = build_existing_runs_text(existing_runs)
+    today = date.today().isoformat()
 
     target_lines = []
 
@@ -485,6 +491,9 @@ def build_repair_prompt(*, publisher_name, existing_runs, repair_targets):
     return f"""
 Find missing fields for these incomplete {publisher_name} run candidates.
 
+Today:
+{today}
+
 Existing catalog runs to exclude:
 {existing_runs_text}
 
@@ -505,7 +514,8 @@ Rules:
 - Do not restrict the search to specific websites.
 - Only use results that clearly match the publisher, run title, and start year.
 - Preserve known values unless a better confirmed value is found.
-- status must be ongoing or upcoming.
+- status must be upcoming if issue #1 has a future on-sale date.
+- status must be ongoing if issue #1 is already on sale and the run is not completed.
 - issue_count is the count of released plus officially solicited issues for the current run.
 - first_issue_date is the issue #1 on-sale date.
 - last_issue_date is the latest released or officially solicited issue on-sale date.
@@ -688,7 +698,10 @@ def get_or_create_publisher(name):
 def map_catalog_status(value):
     status = clean_text(value).lower()
 
-    if status in ["ongoing", "upcoming"]:
+    if status == "upcoming":
+        return ComicRun.STATUS_UPCOMING
+
+    if status == "ongoing":
         return ComicRun.STATUS_ONGOING
 
     return ComicRun.STATUS_UNKNOWN
