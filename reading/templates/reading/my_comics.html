@@ -22,10 +22,7 @@
 
     <section>
         <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-end gap-2 mb-3">
-            <div>
-                <p class="erc-page-kicker mb-1">Followed runs</p>
-                <h2 class="h4 fw-bold mb-0">Runs you follow</h2>
-            </div>
+            <p class="erc-page-kicker mb-0">Followed runs</p>
 
             <p class="erc-muted mb-0">
                 {{ followed_runs|length }} result{% if followed_runs|length != 1 %}s{% endif %}
@@ -42,8 +39,6 @@
                             <th scope="col">Publisher</th>
                             <th scope="col">My Status</th>
                             <th scope="col">Issues</th>
-                            <th scope="col">Followed</th>
-                            <th scope="col" class="text-end">Action</th>
                         </tr>
                         </thead>
                         <tbody>
@@ -68,16 +63,15 @@
                                         {% csrf_token %}
                                         <input type="hidden" name="next" value="{{ request.get_full_path }}">
                                         <input type="hidden" name="apply_to_issues" value="">
-                                        <select name="status" class="form-select form-select-sm">
+                                        <input type="hidden" name="remove_issues" value="">
+                                        <select name="status" class="form-select form-select-sm" data-auto-submit>
                                             {% for value, label in run_status_choices %}
                                                 <option value="{{ value }}" {% if followed_run.status == value %}selected{% endif %}>
                                                     {{ label }}
                                                 </option>
                                             {% endfor %}
+                                            <option value="{{ unfollow_status_value }}">Unfollow</option>
                                         </select>
-                                        <button type="submit" class="btn btn-outline-light btn-sm">
-                                            Update
-                                        </button>
                                     </form>
                                 </td>
                                 <td>
@@ -87,28 +81,10 @@
                                         <span class="erc-muted">Unknown</span>
                                     {% endif %}
                                 </td>
-                                <td>{{ followed_run.followed_at|date:"Y-m-d" }}</td>
-                                <td class="text-end">
-                                    <form
-                                        action="{% url 'reading:unfollow_run' followed_run.run.id %}"
-                                        method="post"
-                                        class="d-inline"
-                                        data-unfollow-run-form
-                                        data-run-issue-count="{{ followed_run.catalog_issue_count|default:0 }}"
-                                        data-tracked-issue-count="{{ followed_run.tracked_issue_count|default:0 }}"
-                                    >
-                                        {% csrf_token %}
-                                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                                        <input type="hidden" name="remove_issues" value="">
-                                        <button type="submit" class="btn btn-outline-secondary btn-sm">
-                                            Unfollow
-                                        </button>
-                                    </form>
-                                </td>
                             </tr>
                         {% empty %}
                             <tr>
-                                <td colspan="6" class="text-center erc-muted py-4">
+                                <td colspan="4" class="text-center erc-muted py-4">
                                     You are not following any runs yet.
                                 </td>
                             </tr>
@@ -122,10 +98,7 @@
 
     <section>
         <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-end gap-2 mb-3">
-            <div>
-                <p class="erc-page-kicker mb-1">Volume progress</p>
-                <h2 class="h4 fw-bold mb-0">Saved volume statuses</h2>
-            </div>
+            <p class="erc-page-kicker mb-0">Volume progress</p>
 
             <p class="erc-muted mb-0">
                 {{ volume_progress|length }} result{% if volume_progress|length != 1 %}s{% endif %}
@@ -142,8 +115,6 @@
                             <th scope="col">Run</th>
                             <th scope="col">Release Date</th>
                             <th scope="col">Status</th>
-                            <th scope="col">Updated</th>
-                            <th scope="col" class="text-end">Action</th>
                         </tr>
                         </thead>
                         <tbody>
@@ -174,36 +145,20 @@
                                     >
                                         {% csrf_token %}
                                         <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                                        <select name="status" class="form-select form-select-sm">
+                                        <select name="status" class="form-select form-select-sm" data-auto-submit>
                                             {% for value, label in volume_status_choices %}
                                                 <option value="{{ value }}" {% if progress.status == value %}selected{% endif %}>
                                                     {{ label }}
                                                 </option>
                                             {% endfor %}
+                                            <option value="{{ unfollow_status_value }}">Remove</option>
                                         </select>
-                                        <button type="submit" class="btn btn-outline-light btn-sm">
-                                            Update
-                                        </button>
-                                    </form>
-                                </td>
-                                <td>{{ progress.updated_at|date:"Y-m-d" }}</td>
-                                <td class="text-end">
-                                    <form
-                                        action="{% url 'reading:remove_volume_status' progress.volume.id %}"
-                                        method="post"
-                                        class="d-inline"
-                                    >
-                                        {% csrf_token %}
-                                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                                        <button type="submit" class="btn btn-outline-secondary btn-sm">
-                                            Remove
-                                        </button>
                                     </form>
                                 </td>
                             </tr>
                         {% empty %}
                             <tr>
-                                <td colspan="6" class="text-center erc-muted py-4">
+                                <td colspan="4" class="text-center erc-muted py-4">
                                     You have not saved any volume statuses yet.
                                 </td>
                             </tr>
@@ -217,10 +172,7 @@
 
     <section>
         <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-end gap-2 mb-3">
-            <div>
-                <p class="erc-page-kicker mb-1">Issue progress</p>
-                <h2 class="h4 fw-bold mb-0">Saved issue statuses</h2>
-            </div>
+            <p class="erc-page-kicker mb-0">Issue progress</p>
 
             <p class="erc-muted mb-0">
                 {{ issue_progress|length }} result{% if issue_progress|length != 1 %}s{% endif %}
@@ -237,8 +189,6 @@
                             <th scope="col">Run</th>
                             <th scope="col">Published Date</th>
                             <th scope="col">Status</th>
-                            <th scope="col">Updated</th>
-                            <th scope="col" class="text-end">Action</th>
                         </tr>
                         </thead>
                         <tbody>
@@ -269,36 +219,20 @@
                                     >
                                         {% csrf_token %}
                                         <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                                        <select name="status" class="form-select form-select-sm">
+                                        <select name="status" class="form-select form-select-sm" data-auto-submit>
                                             {% for value, label in issue_status_choices %}
                                                 <option value="{{ value }}" {% if progress.status == value %}selected{% endif %}>
                                                     {{ label }}
                                                 </option>
                                             {% endfor %}
+                                            <option value="{{ unfollow_status_value }}">Unfollow</option>
                                         </select>
-                                        <button type="submit" class="btn btn-outline-light btn-sm">
-                                            Update
-                                        </button>
-                                    </form>
-                                </td>
-                                <td>{{ progress.updated_at|date:"Y-m-d" }}</td>
-                                <td class="text-end">
-                                    <form
-                                        action="{% url 'reading:remove_issue_status' progress.issue.id %}"
-                                        method="post"
-                                        class="d-inline"
-                                    >
-                                        {% csrf_token %}
-                                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                                        <button type="submit" class="btn btn-outline-secondary btn-sm">
-                                            Remove
-                                        </button>
                                     </form>
                                 </td>
                             </tr>
                         {% empty %}
                             <tr>
-                                <td colspan="6" class="text-center erc-muted py-4">
+                                <td colspan="4" class="text-center erc-muted py-4">
                                     You have not saved any issue statuses yet.
                                 </td>
                             </tr>
@@ -313,6 +247,8 @@
 
 <script>
 document.addEventListener("DOMContentLoaded", function () {
+    const unfollowStatusValue = "{{ unfollow_status_value }}";
+
     function getCount(form, name) {
         const value = Number(form.dataset[name] || "0");
 
@@ -337,85 +273,118 @@ document.addEventListener("DOMContentLoaded", function () {
         return labels[status] || status;
     }
 
-    function readApplyMessage(totalIssues, trackedIssues) {
+    function applyStatusMessage(status, totalIssues, trackedIssues) {
         if (totalIssues <= 0) {
             return "";
         }
 
+        const label = statusLabel(status);
+
+        if (status === "read") {
+            if (trackedIssues >= totalIssues) {
+                return `Mark all ${totalIssues} followed ${issueLabel(totalIssues)} in this run as Read too?`;
+            }
+
+            if (trackedIssues === 0) {
+                return `You are not following any issues in this run yet. Follow all ${totalIssues} ${issueLabel(totalIssues)} and mark them Read too?`;
+            }
+
+            const missingIssues = totalIssues - trackedIssues;
+
+            return `You follow ${trackedIssues} of ${totalIssues} ${issueLabel(totalIssues)} in this run. Follow the remaining ${missingIssues} and mark all ${totalIssues} as Read too?`;
+        }
+
         if (trackedIssues >= totalIssues) {
-            return `Mark all ${totalIssues} followed ${issueLabel(totalIssues)} in this run as Read too?`;
+            return `Also change all ${totalIssues} followed ${issueLabel(totalIssues)} in this run to ${label}?`;
         }
 
         if (trackedIssues === 0) {
-            return `You are not following any issues in this run yet. Follow all ${totalIssues} ${issueLabel(totalIssues)} and mark them Read too?`;
+            return `Also follow all ${totalIssues} ${issueLabel(totalIssues)} in this run and set them to ${label}?`;
         }
 
         const missingIssues = totalIssues - trackedIssues;
 
-        return `You follow ${trackedIssues} of ${totalIssues} ${issueLabel(totalIssues)} in this run. Follow the remaining ${missingIssues} and mark all ${totalIssues} as Read too?`;
+        return `You follow ${trackedIssues} of ${totalIssues} ${issueLabel(totalIssues)} in this run. Follow the remaining ${missingIssues} and set all ${totalIssues} to ${label}?`;
     }
 
+    document.querySelectorAll("[data-auto-submit]").forEach(function (select) {
+        select.addEventListener("change", function () {
+            select.form.requestSubmit();
+        });
+    });
+
     document.querySelectorAll("[data-run-status-form]").forEach(function (form) {
-        form.addEventListener("submit", function () {
+        form.addEventListener("submit", function (event) {
             const select = form.querySelector("select[name='status']");
             const applyToIssuesInput = form.querySelector("input[name='apply_to_issues']");
+            const removeIssuesInput = form.querySelector("input[name='remove_issues']");
             const currentStatus = form.dataset.currentStatus;
             const totalIssues = getCount(form, "runIssueCount");
             const trackedIssues = getCount(form, "trackedIssueCount");
 
-            if (!select || !applyToIssuesInput) {
+            if (!select || !applyToIssuesInput || !removeIssuesInput) {
                 return;
             }
 
             applyToIssuesInput.value = "";
+            removeIssuesInput.value = "";
 
             if (select.value === currentStatus) {
                 return;
             }
 
-            if (select.value === "read") {
-                const message = readApplyMessage(totalIssues, trackedIssues);
+            if (select.value === unfollowStatusValue) {
+                const confirmed = window.confirm("Unfollow this run?");
 
-                if (message && window.confirm(message)) {
-                    applyToIssuesInput.value = "1";
+                if (!confirmed) {
+                    event.preventDefault();
+                    select.value = currentStatus;
+                    return;
+                }
+
+                if (trackedIssues > 0) {
+                    const removeIssues = window.confirm(
+                        `Also unfollow the ${trackedIssues} saved ${issueLabel(trackedIssues)} from this run?`
+                    );
+
+                    if (removeIssues) {
+                        removeIssuesInput.value = "1";
+                    }
                 }
 
                 return;
             }
 
-            if (currentStatus === "read" && select.value !== "read" && trackedIssues > 0) {
-                const confirmed = window.confirm(
-                    `Also change the ${trackedIssues} saved ${issueLabel(trackedIssues)} in this run to ${statusLabel(select.value)}? Press Cancel to only change the run status.`
-                );
+            const message = applyStatusMessage(select.value, totalIssues, trackedIssues);
 
-                if (confirmed) {
-                    applyToIssuesInput.value = "1";
-                }
+            if (message && window.confirm(message)) {
+                applyToIssuesInput.value = "1";
             }
         });
     });
 
-    document.querySelectorAll("[data-unfollow-run-form]").forEach(function (form) {
-        form.addEventListener("submit", function () {
-            const removeIssuesInput = form.querySelector("input[name='remove_issues']");
-            const trackedIssues = getCount(form, "trackedIssueCount");
+    document.querySelectorAll("select[name='status']").forEach(function (select) {
+        if (select.closest("[data-run-status-form]")) {
+            return;
+        }
 
-            if (!removeIssuesInput) {
+        select.addEventListener("change", function (event) {
+            const previousOption = Array.from(select.options).find(function (option) {
+                return option.defaultSelected;
+            });
+
+            if (select.value !== unfollowStatusValue) {
                 return;
             }
 
-            removeIssuesInput.value = "";
+            const confirmed = window.confirm("Remove this saved status?");
 
-            if (trackedIssues <= 0) {
-                return;
-            }
+            if (!confirmed) {
+                event.preventDefault();
 
-            const confirmed = window.confirm(
-                `Also unfollow the ${trackedIssues} saved ${issueLabel(trackedIssues)} from this run?`
-            );
-
-            if (confirmed) {
-                removeIssuesInput.value = "1";
+                if (previousOption) {
+                    select.value = previousOption.value;
+                }
             }
         });
     });
