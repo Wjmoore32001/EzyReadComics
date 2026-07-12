@@ -10,7 +10,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_GET, require_POST
 
 from catalog.models import ComicIssue, ComicPublisher, ComicRun, ComicVolume, ComicVolumeIssue
 from reading.forms import IssueProgressForm, RunProgressForm, VolumeProgressForm
@@ -115,6 +115,45 @@ def my_comics(request):
     return render(request, "reading/my_comics.html", context)
 
 
+@require_GET
+@signup_required
+def run_follow_options(request, run_id):
+    run = get_object_or_404(ComicRun.objects.select_related("publisher"), id=run_id)
+
+    issues = list(
+        ComicIssue.objects.filter(
+            run=run,
+        ).order_by(
+            "published_date",
+            "issue_number",
+        )
+    )
+
+    progress_by_issue_id = {
+        progress.issue_id: progress
+        for progress in IssueProgress.objects.filter(
+            user=request.user,
+            issue_id__in=[issue.id for issue in issues],
+        )
+    }
+
+    return JsonResponse(
+        {
+            "ok": True,
+            "run": {
+                "id": run.id,
+                "title": str(run),
+            },
+            "run_status_choices": build_status_choices(FollowedRun.STATUS_CHOICES),
+            "issue_status_choices": build_status_choices(IssueProgress.STATUS_CHOICES),
+            "issues": [
+                build_run_follow_issue_option(issue, progress_by_issue_id.get(issue.id))
+                for issue in issues
+            ],
+        }
+    )
+
+
 @require_POST
 @signup_required
 def follow_run(request, run_id):
@@ -125,17 +164,26 @@ def follow_run(request, run_id):
     form = RunProgressForm({"status": status})
 
     if not form.is_valid():
-        messages.error(request, "Choose a valid reading status.")
-        return tracking_response(
+        return invalid_tracking_status_response(
             request,
-            ok=False,
+            error_message="Choose a valid reading status.",
             redirect_url=reverse("catalog:run_details", args=[run.id]),
-            payload={
-                "error": "Choose a valid reading status.",
-            },
         )
 
     status = form.cleaned_data["status"]
+
+    try:
+        issue_status_plan = build_run_issue_status_plan(
+            request=request,
+            run=run,
+            default_status=status,
+        )
+    except ValueError as error:
+        return invalid_tracking_status_response(
+            request,
+            error_message=str(error),
+            redirect_url=reverse("catalog:run_details", args=[run.id]),
+        )
 
     with transaction.atomic():
         followed_run, created = FollowedRun.objects.get_or_create(
@@ -153,10 +201,9 @@ def follow_run(request, run_id):
         changed_issue_count = 0
 
         if apply_to_issues:
-            changed_issue_count = set_all_run_issues_status(
+            changed_issue_count = apply_run_issue_status_plan(
                 user=request.user,
-                run=run,
-                status=status,
+                issue_status_plan=issue_status_plan,
             )
 
     status_label = get_status_label(FollowedRun.STATUS_CHOICES, status)
@@ -198,18 +245,27 @@ def set_run_status(request, run_id):
     form = RunProgressForm({"status": requested_status})
 
     if not form.is_valid():
-        messages.error(request, "Choose a valid reading status.")
-        return tracking_response(
+        return invalid_tracking_status_response(
             request,
-            ok=False,
+            error_message="Choose a valid reading status.",
             redirect_url=reverse("catalog:run_details", args=[run.id]),
-            payload={
-                "error": "Choose a valid reading status.",
-            },
         )
 
     new_status = form.cleaned_data["status"]
     apply_to_issues = request.POST.get("apply_to_issues") == "1"
+
+    try:
+        issue_status_plan = build_run_issue_status_plan(
+            request=request,
+            run=run,
+            default_status=new_status,
+        )
+    except ValueError as error:
+        return invalid_tracking_status_response(
+            request,
+            error_message=str(error),
+            redirect_url=reverse("catalog:run_details", args=[run.id]),
+        )
 
     with transaction.atomic():
         followed_run, created = FollowedRun.objects.select_for_update().get_or_create(
@@ -229,10 +285,9 @@ def set_run_status(request, run_id):
         changed_issue_count = 0
 
         if apply_to_issues:
-            changed_issue_count = set_all_run_issues_status(
+            changed_issue_count = apply_run_issue_status_plan(
                 user=request.user,
-                run=run,
-                status=new_status,
+                issue_status_plan=issue_status_plan,
             )
 
     status_label = get_status_label(FollowedRun.STATUS_CHOICES, new_status)
@@ -322,14 +377,10 @@ def set_issue_status(request, issue_id):
     form = IssueProgressForm({"status": requested_status})
 
     if not form.is_valid():
-        messages.error(request, "Choose a valid reading status.")
-        return tracking_response(
+        return invalid_tracking_status_response(
             request,
-            ok=False,
+            error_message="Choose a valid reading status.",
             redirect_url=reverse("catalog:issue_details", args=[issue.id]),
-            payload={
-                "error": "Choose a valid reading status.",
-            },
         )
 
     status = form.cleaned_data["status"]
@@ -418,14 +469,10 @@ def set_volume_status(request, volume_id):
     form = VolumeProgressForm({"status": requested_status})
 
     if not form.is_valid():
-        messages.error(request, "Choose a valid reading status.")
-        return tracking_response(
+        return invalid_tracking_status_response(
             request,
-            ok=False,
+            error_message="Choose a valid reading status.",
             redirect_url=reverse("catalog:volume_details", args=[volume.id]),
-            payload={
-                "error": "Choose a valid reading status.",
-            },
         )
 
     status = form.cleaned_data["status"]
@@ -518,6 +565,80 @@ def remove_volume_status_from_status_form(request, volume):
             "tracking": build_volume_tracking_payload(request.user, volume),
         },
     )
+
+
+def build_run_issue_status_plan(*, request, run, default_status):
+    if request.POST.get("apply_to_issues") != "1":
+        return []
+
+    issues = list(
+        ComicIssue.objects.filter(
+            run=run,
+        ).order_by(
+            "published_date",
+            "issue_number",
+        )
+    )
+
+    if request.POST.get("issue_status_mode") == "individual":
+        return build_individual_run_issue_status_plan(
+            request=request,
+            issues=issues,
+            default_status=default_status,
+        )
+
+    issue_status = request.POST.get("issue_status") or default_status
+    issue_status = validate_issue_status(issue_status)
+
+    return [
+        {
+            "issue": issue,
+            "status": issue_status,
+        }
+        for issue in issues
+    ]
+
+
+def build_individual_run_issue_status_plan(*, request, issues, default_status):
+    issue_status_plan = []
+
+    for issue in issues:
+        issue_status = request.POST.get(f"issue_status_{issue.id}") or default_status
+        issue_status = validate_issue_status(issue_status)
+
+        issue_status_plan.append(
+            {
+                "issue": issue,
+                "status": issue_status,
+            }
+        )
+
+    return issue_status_plan
+
+
+def validate_issue_status(status):
+    form = IssueProgressForm({"status": status})
+
+    if not form.is_valid():
+        raise ValueError("Choose a valid issue reading status.")
+
+    return form.cleaned_data["status"]
+
+
+def apply_run_issue_status_plan(*, user, issue_status_plan):
+    changed_issue_count = 0
+
+    for issue_status in issue_status_plan:
+        IssueProgress.objects.update_or_create(
+            user=user,
+            issue=issue_status["issue"],
+            defaults={
+                "status": issue_status["status"],
+            },
+        )
+        changed_issue_count += 1
+
+    return changed_issue_count
 
 
 def set_all_run_issues_status(*, user, run, status):
@@ -678,6 +799,15 @@ def get_run_issue_counts(user, run):
     }
 
 
+def build_run_follow_issue_option(issue, issue_progress):
+    return {
+        "id": issue.id,
+        "label": f"#{issue.issue_number}",
+        "meta": format_date_or_unknown(issue.published_date),
+        "status": issue_progress.status if issue_progress else "",
+    }
+
+
 def get_my_comics_filters(request):
     status = request.GET.get("status") or ""
     valid_statuses = {value for value, _label in FollowedRun.STATUS_CHOICES}
@@ -813,6 +943,26 @@ def get_int_query_param(request, name):
         return int(raw_value)
     except (TypeError, ValueError):
         return None
+
+
+def format_date_or_unknown(value):
+    if not value:
+        return "Unknown"
+
+    return value.strftime("%Y-%m-%d")
+
+
+def invalid_tracking_status_response(request, *, error_message, redirect_url):
+    messages.error(request, error_message)
+
+    return tracking_response(
+        request,
+        ok=False,
+        redirect_url=redirect_url,
+        payload={
+            "error": error_message,
+        },
+    )
 
 
 def is_ajax_request(request):

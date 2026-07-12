@@ -1,277 +1,593 @@
 document.addEventListener("DOMContentLoaded", function () {
-  const unfollowStatusValue = "__unfollow__";
-  const statusModalElement = document.getElementById("tracking-status-modal");
-  const statusModalTitle = document.getElementById(
-    "tracking-status-modal-title",
-  );
-  const statusModalCopy = document.getElementById("tracking-status-modal-copy");
-  const statusModalSelect = document.getElementById("tracking-status-select");
-  const statusModalConfirm = document.querySelector(
-    "[data-status-modal-confirm]",
-  );
-  const statusModal = statusModalElement
-    ? bootstrap.Modal.getOrCreateInstance(statusModalElement)
-    : null;
+    const unfollowStatusValue = "__unfollow__";
+    const statusModalElement = document.getElementById("tracking-status-modal");
+    const statusModalTitle = document.getElementById("tracking-status-modal-title");
+    const statusModalCopy = document.getElementById("tracking-status-modal-copy");
+    const statusModalSelect = document.getElementById("tracking-status-select");
+    const statusModalConfirm = document.querySelector("[data-status-modal-confirm]");
+    const statusModal = statusModalElement ? bootstrap.Modal.getOrCreateInstance(statusModalElement) : null;
 
-  let statusModalResolve = null;
+    let statusModalResolve = null;
+    let statusModalContext = null;
+    let statusModalControls = null;
 
-  function getCount(form, name) {
-    const value = Number(form.dataset[name] || "0");
+    function getCount(form, name) {
+        const value = Number(form.dataset[name] || "0");
 
-    if (Number.isNaN(value)) {
-      return 0;
+        if (Number.isNaN(value)) {
+            return 0;
+        }
+
+        return value;
     }
 
-    return value;
-  }
-
-  function issueLabel(count) {
-    return count === 1 ? "issue" : "issues";
-  }
-
-  function statusLabel(status) {
-    const labels = {
-      planned: "Planned to read",
-      reading: "Reading",
-      read: "Read",
-    };
-
-    return labels[status] || status;
-  }
-
-  function itemTypeLabel(itemType) {
-    const labels = {
-      run: "run",
-      issue: "issue",
-    };
-
-    return labels[itemType] || "item";
-  }
-
-  function applyStatusMessage(status, totalIssues, trackedIssues) {
-    if (totalIssues <= 0) {
-      return "";
+    function issueLabel(count) {
+        return count === 1 ? "issue" : "issues";
     }
 
-    const label = statusLabel(status);
+    function statusLabel(status) {
+        const labels = {
+            planned: "Planned to read",
+            reading: "Reading",
+            read: "Read",
+        };
 
-    if (status === "read") {
-      if (trackedIssues >= totalIssues) {
-        return `Mark all ${totalIssues} followed ${issueLabel(totalIssues)} in this run as Read too?`;
-      }
-
-      if (trackedIssues === 0) {
-        return `You are not following any issues in this run yet. Follow all ${totalIssues} ${issueLabel(totalIssues)} and mark them Read too?`;
-      }
-
-      const missingIssues = totalIssues - trackedIssues;
-
-      return `You follow ${trackedIssues} of ${totalIssues} ${issueLabel(totalIssues)} in this run. Follow the remaining ${missingIssues} and mark all ${totalIssues} as Read too?`;
+        return labels[status] || status;
     }
 
-    if (trackedIssues >= totalIssues) {
-      return `Also change all ${totalIssues} followed ${issueLabel(totalIssues)} in this run to ${label}?`;
+    function itemTypeLabel(itemType) {
+        const labels = {
+            run: "run",
+            issue: "issue",
+        };
+
+        return labels[itemType] || "item";
     }
 
-    if (trackedIssues === 0) {
-      return `Also follow all ${totalIssues} ${issueLabel(totalIssues)} in this run and set them to ${label}?`;
+    function applyStatusMessage(status, totalIssues, trackedIssues) {
+        if (totalIssues <= 0) {
+            return "";
+        }
+
+        const label = statusLabel(status);
+
+        if (status === "read") {
+            if (trackedIssues >= totalIssues) {
+                return `Mark all ${totalIssues} followed ${issueLabel(totalIssues)} in this run as Read too?`;
+            }
+
+            if (trackedIssues === 0) {
+                return `You are not following any issues in this run yet. Follow all ${totalIssues} ${issueLabel(totalIssues)} and mark them Read too?`;
+            }
+
+            const missingIssues = totalIssues - trackedIssues;
+
+            return `You follow ${trackedIssues} of ${totalIssues} ${issueLabel(totalIssues)} in this run. Follow the remaining ${missingIssues} and mark all ${totalIssues} as Read too?`;
+        }
+
+        if (trackedIssues >= totalIssues) {
+            return `Also change all ${totalIssues} followed ${issueLabel(totalIssues)} in this run to ${label}?`;
+        }
+
+        if (trackedIssues === 0) {
+            return `Also follow all ${totalIssues} ${issueLabel(totalIssues)} in this run and set them to ${label}?`;
+        }
+
+        const missingIssues = totalIssues - trackedIssues;
+
+        return `You follow ${trackedIssues} of ${totalIssues} ${issueLabel(totalIssues)} in this run. Follow the remaining ${missingIssues} and set all ${totalIssues} to ${label}?`;
     }
 
-    const missingIssues = totalIssues - trackedIssues;
-
-    return `You follow ${trackedIssues} of ${totalIssues} ${issueLabel(totalIssues)} in this run. Follow the remaining ${missingIssues} and set all ${totalIssues} to ${label}?`;
-  }
-
-  function openStatusModal(itemType) {
-    if (!statusModal || !statusModalElement || !statusModalSelect) {
-      return Promise.resolve("planned");
+    function clearElement(element) {
+        while (element.firstChild) {
+            element.removeChild(element.firstChild);
+        }
     }
 
-    statusModalTitle.textContent = `Follow ${itemTypeLabel(itemType)}`;
-    statusModalCopy.textContent = `Choose the status to save for this ${itemTypeLabel(itemType)}.`;
-    statusModalSelect.value = "planned";
-
-    statusModal.show();
-
-    return new Promise(function (resolve) {
-      statusModalResolve = resolve;
-    });
-  }
-
-  function resolveStatusModal(value) {
-    if (!statusModalResolve) {
-      return;
+    function optionObjectsFromSelect(select) {
+        return Array.from(select.options)
+            .filter(function (option) {
+                return option.value !== unfollowStatusValue;
+            })
+            .map(function (option) {
+                return {
+                    value: option.value,
+                    label: option.textContent.trim(),
+                };
+            });
     }
 
-    const resolve = statusModalResolve;
-    statusModalResolve = null;
+    function populateSelect(select, choices, selectedValue) {
+        clearElement(select);
 
-    statusModal.hide();
-    resolve(value);
-  }
+        choices.forEach(function (choice) {
+            const option = document.createElement("option");
 
-  if (statusModalConfirm) {
-    statusModalConfirm.addEventListener("click", function () {
-      resolveStatusModal(statusModalSelect.value);
-    });
-  }
+            option.value = choice.value;
+            option.textContent = choice.label;
 
-  if (statusModalElement) {
-    statusModalElement.addEventListener("hidden.bs.modal", function () {
-      if (statusModalResolve) {
+            if (choice.value === selectedValue) {
+                option.selected = true;
+            }
+
+            select.appendChild(option);
+        });
+    }
+
+    function ensureStatusModalControls() {
+        if (statusModalControls) {
+            return statusModalControls;
+        }
+
+        const body = statusModalElement.querySelector(".modal-body");
+        const error = document.createElement("div");
+        const runOptions = document.createElement("div");
+        const followIssuesCheck = document.createElement("div");
+        const followIssuesInput = document.createElement("input");
+        const followIssuesLabel = document.createElement("label");
+        const followIssuesSettings = document.createElement("div");
+        const individualCheck = document.createElement("div");
+        const individualInput = document.createElement("input");
+        const individualLabel = document.createElement("label");
+        const sharedIssueStatusGroup = document.createElement("div");
+        const sharedIssueStatusLabel = document.createElement("label");
+        const sharedIssueStatusSelect = document.createElement("select");
+        const individualIssueStatusGroup = document.createElement("div");
+        const individualIssueStatusLabel = document.createElement("div");
+        const individualIssueStatusList = document.createElement("div");
+
+        error.className = "alert alert-danger d-none";
+        error.dataset.statusModalError = "";
+        body.insertBefore(error, body.firstChild);
+
+        runOptions.className = "mt-4 d-none";
+        runOptions.dataset.runFollowOptions = "";
+
+        followIssuesCheck.className = "form-check";
+        followIssuesInput.type = "checkbox";
+        followIssuesInput.className = "form-check-input";
+        followIssuesInput.id = "tracking-follow-issues";
+        followIssuesInput.dataset.followIssuesCheckbox = "";
+        followIssuesLabel.className = "form-check-label";
+        followIssuesLabel.setAttribute("for", "tracking-follow-issues");
+        followIssuesLabel.textContent = "Follow all issues in this run too";
+        followIssuesCheck.appendChild(followIssuesInput);
+        followIssuesCheck.appendChild(followIssuesLabel);
+
+        followIssuesSettings.className = "mt-3 d-none";
+        followIssuesSettings.dataset.followIssuesSettings = "";
+
+        individualCheck.className = "form-check";
+        individualInput.type = "checkbox";
+        individualInput.className = "form-check-input";
+        individualInput.id = "tracking-individual-issue-statuses";
+        individualInput.dataset.individualIssueStatusesCheckbox = "";
+        individualLabel.className = "form-check-label";
+        individualLabel.setAttribute("for", "tracking-individual-issue-statuses");
+        individualLabel.textContent = "Set status for individual issues";
+        individualCheck.appendChild(individualInput);
+        individualCheck.appendChild(individualLabel);
+
+        sharedIssueStatusGroup.className = "mt-3";
+        sharedIssueStatusGroup.dataset.sharedIssueStatusGroup = "";
+        sharedIssueStatusLabel.className = "form-label erc-muted";
+        sharedIssueStatusLabel.setAttribute("for", "tracking-issue-status-select");
+        sharedIssueStatusLabel.textContent = "Issue status";
+        sharedIssueStatusSelect.id = "tracking-issue-status-select";
+        sharedIssueStatusSelect.className = "form-select";
+        sharedIssueStatusSelect.dataset.issueStatusSelect = "";
+        sharedIssueStatusGroup.appendChild(sharedIssueStatusLabel);
+        sharedIssueStatusGroup.appendChild(sharedIssueStatusSelect);
+
+        individualIssueStatusGroup.className = "mt-3 d-none";
+        individualIssueStatusGroup.dataset.individualIssueStatusGroup = "";
+        individualIssueStatusLabel.className = "form-label erc-muted";
+        individualIssueStatusLabel.textContent = "Issue statuses";
+        individualIssueStatusList.dataset.individualIssueStatusList = "";
+        individualIssueStatusGroup.appendChild(individualIssueStatusLabel);
+        individualIssueStatusGroup.appendChild(individualIssueStatusList);
+
+        followIssuesSettings.appendChild(individualCheck);
+        followIssuesSettings.appendChild(sharedIssueStatusGroup);
+        followIssuesSettings.appendChild(individualIssueStatusGroup);
+        runOptions.appendChild(followIssuesCheck);
+        runOptions.appendChild(followIssuesSettings);
+        body.appendChild(runOptions);
+
+        statusModalControls = {
+            error,
+            runOptions,
+            followIssuesInput,
+            followIssuesSettings,
+            individualInput,
+            sharedIssueStatusGroup,
+            sharedIssueStatusSelect,
+            individualIssueStatusGroup,
+            individualIssueStatusList,
+        };
+
+        followIssuesInput.addEventListener("change", function () {
+            followIssuesSettings.classList.toggle("d-none", !followIssuesInput.checked);
+        });
+
+        individualInput.addEventListener("change", function () {
+            sharedIssueStatusGroup.classList.toggle("d-none", individualInput.checked);
+            individualIssueStatusGroup.classList.toggle("d-none", !individualInput.checked);
+        });
+
+        statusModalSelect.addEventListener("change", function () {
+            if (!followIssuesInput.checked) {
+                sharedIssueStatusSelect.value = statusModalSelect.value;
+            }
+        });
+
+        return statusModalControls;
+    }
+
+    function hideStatusModalError() {
+        const controls = ensureStatusModalControls();
+
+        controls.error.classList.add("d-none");
+        controls.error.textContent = "";
+    }
+
+    function showStatusModalError(message) {
+        const controls = ensureStatusModalControls();
+
+        controls.error.textContent = message;
+        controls.error.classList.remove("d-none");
+    }
+
+    function renderIndividualIssueStatusRows(issues, choices, defaultStatus) {
+        const controls = ensureStatusModalControls();
+
+        clearElement(controls.individualIssueStatusList);
+
+        if (!issues.length) {
+            const emptyMessage = document.createElement("p");
+
+            emptyMessage.className = "erc-muted mb-0";
+            emptyMessage.textContent = "No issues are currently in this run.";
+            controls.individualIssueStatusList.appendChild(emptyMessage);
+            return;
+        }
+
+        issues.forEach(function (issue) {
+            const row = document.createElement("div");
+            const labelWrap = document.createElement("div");
+            const label = document.createElement("div");
+            const meta = document.createElement("div");
+            const select = document.createElement("select");
+            const selectedStatus = issue.status || defaultStatus;
+
+            row.className = "d-flex flex-column flex-md-row gap-2 justify-content-between align-items-md-center py-2 border-top border-secondary";
+            labelWrap.className = "me-md-3";
+            label.className = "fw-semibold";
+            label.textContent = issue.label || `Issue ${issue.id}`;
+            meta.className = "erc-muted small";
+            meta.textContent = issue.meta || "";
+            select.className = "form-select form-select-sm";
+            select.name = `issue_status_${issue.id}`;
+            select.dataset.issueId = issue.id;
+
+            populateSelect(select, choices, selectedStatus);
+
+            labelWrap.appendChild(label);
+            labelWrap.appendChild(meta);
+            row.appendChild(labelWrap);
+            row.appendChild(select);
+            controls.individualIssueStatusList.appendChild(row);
+        });
+    }
+
+    function resetRunModalControls(options) {
+        const controls = ensureStatusModalControls();
+        const issues = options && options.issues ? options.issues : [];
+        const issueChoices = options && options.issue_status_choices ? options.issue_status_choices : optionObjectsFromSelect(statusModalSelect);
+
+        controls.runOptions.classList.add("d-none");
+        controls.followIssuesInput.checked = false;
+        controls.followIssuesInput.disabled = false;
+        controls.followIssuesSettings.classList.add("d-none");
+        controls.individualInput.checked = false;
+        controls.sharedIssueStatusGroup.classList.remove("d-none");
+        controls.individualIssueStatusGroup.classList.add("d-none");
+
+        populateSelect(controls.sharedIssueStatusSelect, issueChoices, statusModalSelect.value);
+        renderIndividualIssueStatusRows(issues, issueChoices, statusModalSelect.value);
+
+        if (statusModalContext && statusModalContext.itemType === "run") {
+            controls.runOptions.classList.remove("d-none");
+
+            if (!issues.length) {
+                controls.followIssuesInput.disabled = true;
+            }
+        }
+    }
+
+    function buildStatusModalResult() {
+        const controls = ensureStatusModalControls();
+
+        if (!statusModalContext || statusModalContext.itemType !== "run") {
+            return {
+                status: statusModalSelect.value,
+            };
+        }
+
+        const individualIssueStatuses = [];
+
+        controls.individualIssueStatusList.querySelectorAll("select[data-issue-id]").forEach(function (select) {
+            individualIssueStatuses.push({
+                issueId: select.dataset.issueId,
+                status: select.value,
+            });
+        });
+
+        return {
+            status: statusModalSelect.value,
+            followIssues: controls.followIssuesInput.checked,
+            issueStatusMode: controls.individualInput.checked ? "individual" : "single",
+            issueStatus: controls.sharedIssueStatusSelect.value || statusModalSelect.value,
+            individualIssueStatuses,
+        };
+    }
+
+    function openStatusModal(itemType, options) {
+        if (!statusModal || !statusModalElement || !statusModalSelect) {
+            return Promise.resolve({ status: "planned" });
+        }
+
+        statusModalContext = {
+            itemType,
+            options: options || {},
+        };
+
+        hideStatusModalError();
+
+        statusModalTitle.textContent = `Follow ${itemTypeLabel(itemType)}`;
+        statusModalCopy.textContent = `Choose the status to save for this ${itemTypeLabel(itemType)}.`;
+        statusModalSelect.value = "planned";
+
+        resetRunModalControls(options || {});
+
+        if (options && options.error) {
+            showStatusModalError(options.error);
+        }
+
+        statusModal.show();
+
+        return new Promise(function (resolve) {
+            statusModalResolve = resolve;
+        });
+    }
+
+    function resolveStatusModal(value) {
+        if (!statusModalResolve) {
+            return;
+        }
+
         const resolve = statusModalResolve;
         statusModalResolve = null;
-        resolve(null);
-      }
+
+        statusModal.hide();
+        resolve(value);
+    }
+
+    if (statusModalConfirm) {
+        statusModalConfirm.addEventListener("click", function () {
+            resolveStatusModal(buildStatusModalResult());
+        });
+    }
+
+    if (statusModalElement) {
+        statusModalElement.addEventListener("hidden.bs.modal", function () {
+            if (statusModalResolve) {
+                const resolve = statusModalResolve;
+                statusModalResolve = null;
+                resolve(null);
+            }
+
+            statusModalContext = null;
+        });
+    }
+
+    document.querySelectorAll("[data-auto-submit]").forEach(function (select) {
+        select.addEventListener("change", function () {
+            select.form.requestSubmit();
+        });
     });
-  }
 
-  document.querySelectorAll("[data-auto-submit]").forEach(function (select) {
-    select.addEventListener("change", function () {
-      select.form.requestSubmit();
+    document.querySelectorAll("[data-run-status-form]").forEach(function (form) {
+        form.addEventListener("submit", function (event) {
+            const select = form.querySelector("select[name='status']");
+            const applyToIssuesInput = form.querySelector("input[name='apply_to_issues']");
+            const removeIssuesInput = form.querySelector("input[name='remove_issues']");
+            const currentStatus = form.dataset.currentStatus;
+            const totalIssues = getCount(form, "runIssueCount");
+            const trackedIssues = getCount(form, "trackedIssueCount");
+
+            if (!select || !applyToIssuesInput || !removeIssuesInput) {
+                return;
+            }
+
+            applyToIssuesInput.value = "";
+            removeIssuesInput.value = "";
+
+            if (select.value === currentStatus) {
+                return;
+            }
+
+            if (select.value === unfollowStatusValue) {
+                const confirmed = window.confirm("Are you sure you want to unfollow this run?");
+
+                if (!confirmed) {
+                    event.preventDefault();
+                    select.value = currentStatus;
+                    return;
+                }
+
+                if (trackedIssues > 0) {
+                    const removeIssues = window.confirm(
+                        `Also unfollow the ${trackedIssues} saved ${issueLabel(trackedIssues)} from this run?`
+                    );
+
+                    if (removeIssues) {
+                        removeIssuesInput.value = "1";
+                    }
+                }
+
+                return;
+            }
+
+            const message = applyStatusMessage(select.value, totalIssues, trackedIssues);
+
+            if (message && window.confirm(message)) {
+                applyToIssuesInput.value = "1";
+            }
+        });
     });
-  });
 
-  document.querySelectorAll("[data-run-status-form]").forEach(function (form) {
-    form.addEventListener("submit", function (event) {
-      const select = form.querySelector("select[name='status']");
-      const applyToIssuesInput = form.querySelector(
-        "input[name='apply_to_issues']",
-      );
-      const removeIssuesInput = form.querySelector(
-        "input[name='remove_issues']",
-      );
-      const currentStatus = form.dataset.currentStatus;
-      const totalIssues = getCount(form, "runIssueCount");
-      const trackedIssues = getCount(form, "trackedIssueCount");
+    function runFollowOptionsUrl(actionUrl) {
+        const url = new URL(actionUrl, window.location.origin);
 
-      if (!select || !applyToIssuesInput || !removeIssuesInput) {
-        return;
-      }
+        url.pathname = url.pathname.replace(/\/status\/?$/, "/follow-options/");
 
-      applyToIssuesInput.value = "";
-      removeIssuesInput.value = "";
+        return url;
+    }
 
-      if (select.value === currentStatus) {
-        return;
-      }
+    async function fetchRunFollowOptions(form) {
+        const response = await fetch(runFollowOptionsUrl(form.action).toString(), {
+            headers: {
+                "X-Requested-With": "XMLHttpRequest",
+            },
+        });
 
-      if (select.value === unfollowStatusValue) {
-        const confirmed = window.confirm(
-          "Are you sure you want to unfollow this run?",
-        );
+        const data = await response.json();
 
-        if (!confirmed) {
-          event.preventDefault();
-          select.value = currentStatus;
-          return;
+        if (response.status === 401 && data && data.redirect_url) {
+            window.location.href = data.redirect_url;
+            return null;
         }
 
-        if (trackedIssues > 0) {
-          const removeIssues = window.confirm(
-            `Also unfollow the ${trackedIssues} saved ${issueLabel(trackedIssues)} from this run?`,
-          );
-
-          if (removeIssues) {
-            removeIssuesInput.value = "1";
-          }
+        if (!response.ok || !data || data.ok === false) {
+            throw new Error("Could not load the issues for this run.");
         }
 
-        return;
-      }
+        return data;
+    }
 
-      const message = applyStatusMessage(
-        select.value,
-        totalIssues,
-        trackedIssues,
-      );
+    function removeGeneratedIssueStatusInputs(form) {
+        form.querySelectorAll("[data-generated-run-follow-input]").forEach(function (input) {
+            input.remove();
+        });
+    }
 
-      if (message && window.confirm(message)) {
-        applyToIssuesInput.value = "1";
-      }
-    });
-  });
+    function addHiddenInput(form, name, value) {
+        const input = document.createElement("input");
 
-  document.querySelectorAll("[data-run-follow-form]").forEach(function (form) {
-    form.addEventListener("submit", async function (event) {
-      event.preventDefault();
+        input.type = "hidden";
+        input.name = name;
+        input.value = value;
+        input.dataset.generatedRunFollowInput = "";
 
-      const statusInput = form.querySelector("input[name='status']");
-      const applyToIssuesInput = form.querySelector(
-        "input[name='apply_to_issues']",
-      );
-      const totalIssues = getCount(form, "runIssueCount");
-      const trackedIssues = getCount(form, "trackedIssueCount");
+        form.appendChild(input);
+    }
 
-      if (!statusInput || !applyToIssuesInput) {
-        return;
-      }
-
-      const selectedStatus = await openStatusModal("run");
-
-      if (!selectedStatus) {
-        return;
-      }
-
-      statusInput.value = selectedStatus;
-      applyToIssuesInput.value = "";
-
-      const message = applyStatusMessage(
-        selectedStatus,
-        totalIssues,
-        trackedIssues,
-      );
-
-      if (message && window.confirm(message)) {
-        applyToIssuesInput.value = "1";
-      }
-
-      HTMLFormElement.prototype.submit.call(form);
-    });
-  });
-
-  document
-    .querySelectorAll("[data-issue-follow-form]")
-    .forEach(function (form) {
-      form.addEventListener("submit", async function (event) {
-        event.preventDefault();
-
+    function applyRunFollowModalResultToForm(form, selectedStatus) {
         const statusInput = form.querySelector("input[name='status']");
+        const applyToIssuesInput = form.querySelector("input[name='apply_to_issues']");
 
-        if (!statusInput) {
-          return;
+        removeGeneratedIssueStatusInputs(form);
+
+        statusInput.value = selectedStatus.status;
+        applyToIssuesInput.value = selectedStatus.followIssues ? "1" : "";
+
+        if (!selectedStatus.followIssues) {
+            return;
         }
 
-        const selectedStatus = await openStatusModal("issue");
+        addHiddenInput(form, "issue_status_mode", selectedStatus.issueStatusMode);
 
-        if (!selectedStatus) {
-          return;
+        if (selectedStatus.issueStatusMode === "individual") {
+            selectedStatus.individualIssueStatuses.forEach(function (issueStatus) {
+                addHiddenInput(form, `issue_status_${issueStatus.issueId}`, issueStatus.status);
+            });
+
+            return;
         }
 
-        statusInput.value = selectedStatus;
-        HTMLFormElement.prototype.submit.call(form);
-      });
+        addHiddenInput(form, "issue_status", selectedStatus.issueStatus || selectedStatus.status);
+    }
+
+    document.querySelectorAll("[data-run-follow-form]").forEach(function (form) {
+        form.addEventListener("submit", async function (event) {
+            event.preventDefault();
+
+            const statusInput = form.querySelector("input[name='status']");
+            const applyToIssuesInput = form.querySelector("input[name='apply_to_issues']");
+
+            if (!statusInput || !applyToIssuesInput) {
+                return;
+            }
+
+            let followOptions = {};
+
+            try {
+                followOptions = await fetchRunFollowOptions(form);
+            } catch (error) {
+                followOptions = {
+                    error: error.message || "Could not load the issues for this run.",
+                    issues: [],
+                };
+            }
+
+            const selectedStatus = await openStatusModal("run", followOptions || {});
+
+            if (!selectedStatus) {
+                return;
+            }
+
+            applyRunFollowModalResultToForm(form, selectedStatus);
+            HTMLFormElement.prototype.submit.call(form);
+        });
     });
 
-  document
-    .querySelectorAll("[data-issue-status-form]")
-    .forEach(function (form) {
-      form.addEventListener("submit", function (event) {
-        const select = form.querySelector("select[name='status']");
-        const currentStatus = form.dataset.currentStatus;
+    document.querySelectorAll("[data-issue-follow-form]").forEach(function (form) {
+        form.addEventListener("submit", async function (event) {
+            event.preventDefault();
 
-        if (!select || select.value !== unfollowStatusValue) {
-          return;
-        }
+            const statusInput = form.querySelector("input[name='status']");
 
-        const confirmed = window.confirm(
-          "Are you sure you want to unfollow this issue?",
-        );
+            if (!statusInput) {
+                return;
+            }
 
-        if (!confirmed) {
-          event.preventDefault();
-          select.value = currentStatus;
-        }
-      });
+            const selectedStatus = await openStatusModal("issue", {});
+
+            if (!selectedStatus) {
+                return;
+            }
+
+            statusInput.value = selectedStatus.status;
+            HTMLFormElement.prototype.submit.call(form);
+        });
+    });
+
+    document.querySelectorAll("[data-issue-status-form]").forEach(function (form) {
+        form.addEventListener("submit", function (event) {
+            const select = form.querySelector("select[name='status']");
+            const currentStatus = form.dataset.currentStatus;
+
+            if (!select || select.value !== unfollowStatusValue) {
+                return;
+            }
+
+            const confirmed = window.confirm("Are you sure you want to unfollow this issue?");
+
+            if (!confirmed) {
+                event.preventDefault();
+                select.value = currentStatus;
+            }
+        });
     });
 });
