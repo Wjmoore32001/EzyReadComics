@@ -83,6 +83,51 @@ document.addEventListener("DOMContentLoaded", function () {
         }
     }
 
+    function bindFilterDropdown(dropdown) {
+        const searchInput = dropdown.querySelector("[data-dropdown-search]");
+        const options = Array.from(dropdown.querySelectorAll("[data-dropdown-option]"));
+        const noResults = dropdown.querySelector("[data-no-results]");
+
+        if (!searchInput || !options.length) {
+            return;
+        }
+
+        function filterOptions() {
+            const searchValue = searchInput.value.trim().toLowerCase();
+            let visibleCount = 0;
+
+            options.forEach(function (option) {
+                const label = (option.dataset.searchLabel || option.textContent || "").toLowerCase();
+                const isVisible = !searchValue || label.includes(searchValue);
+
+                option.classList.toggle("d-none", !isVisible);
+
+                if (isVisible) {
+                    visibleCount += 1;
+                }
+            });
+
+            if (noResults) {
+                noResults.classList.toggle("d-none", visibleCount > 0);
+            }
+        }
+
+        searchInput.addEventListener("input", filterOptions);
+
+        dropdown.addEventListener("shown.bs.dropdown", function () {
+            searchInput.focus();
+            searchInput.select();
+            filterOptions();
+        });
+
+        dropdown.addEventListener("hidden.bs.dropdown", function () {
+            searchInput.value = "";
+            filterOptions();
+        });
+    }
+
+    document.querySelectorAll("[data-my-comics-filter-dropdown]").forEach(bindFilterDropdown);
+
     document.querySelectorAll("[data-run-status-form]").forEach(function (form) {
         form.addEventListener("submit", function (event) {
             const select = form.querySelector("select[name='status']");
