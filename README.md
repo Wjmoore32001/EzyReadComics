@@ -61,9 +61,13 @@ Route:
 Current browse behavior:
 
 - Publisher, run, and collected-volume filters are searchable.
+- Filter dropdown searches return a limited set of matching options so large catalogs do not overload the page.
 - Run and volume filters can be used directly.
 - Selecting a run shows the selected run, related volumes, and issues.
 - Selecting a collected volume shows the selected volume and the issues collected in it.
+- Browse initially loads a small mobile-friendly set of runs, collected volumes, and issues.
+- Run, volume, and issue sections can load more rows or hide rows without a full page reload.
+- Runs, volumes, and issues are ordered newest-first by run start year where applicable.
 - Rows are clickable and open the matching detail page.
 - Filters can be cleared individually or all at once.
 - Issue tables show issue number, published date, and Writer when available.

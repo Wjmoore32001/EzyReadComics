@@ -16,6 +16,7 @@ Current project areas:
 - `ingestion` stores source-to-catalog staging records and confirmed run candidates.
 - `reading` stores user-specific comic tracking data.
 - The site currently has catalog home, browse, run details, issue details, collected-volume details, and My Comics pages.
+- Browse is being kept mobile-friendly by limiting initial catalog rows and loading more rows only when requested.
 - Comic Vine backfill/import work is ongoing.
 - Comic Vine run and issue ingestion supports confirmed source-to-catalog promotion.
 - AI-assisted Marvel catalog commands now support missing run discovery and official Marvel.com issue metadata filling.
@@ -27,6 +28,12 @@ Current project areas:
 
 ### 2026-07-12
 
+- Updated Browse for large catalog performance and mobile use:
+  - Initial browse page load shows a small capped set of runs, collected volumes, and issues.
+  - Filter dropdown searches return a limited set of matching options.
+  - Run, volume, and issue sections can load more rows without a full page reload.
+  - Run, volume, and issue sections can hide rows back down toward the initial view.
+  - Browse ordering is newest-first by run start year where applicable.
 - Added AI-assisted missing Marvel run discovery through `find_missing_marvel_runs_ai`.
 - The missing-run finder creates missing `ComicRun` rows only.
 - The missing-run finder does not create issues from OpenAI.
