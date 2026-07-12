@@ -55,9 +55,9 @@
                 <h2 class="h3 fw-bold mb-0 erc-section-title">Filters</h2>
 
                 {% if selected_publisher or selected_run or selected_volume %}
-                    <a href="{% url 'catalog:browse' %}" class="btn btn-outline-secondary">
-                        Clear filters
-                    </a>
+                <a href="{% url 'catalog:browse' %}" class="btn btn-outline-secondary">
+                    Clear filters
+                </a>
                 {% endif %}
             </div>
 
@@ -68,39 +68,39 @@
                     </label>
 
                     <div
-                        class="dropdown searchable-dropdown"
-                        data-options-kind="publisher"
-                        data-options-url="{% url 'catalog:browse_options' %}"
-                        data-selected-id="{{ selected_publisher_id|default_if_none:'' }}"
+                            class="dropdown searchable-dropdown"
+                            data-options-kind="publisher"
+                            data-options-url="{% url 'catalog:browse_options' %}"
+                            data-selected-id="{{ selected_publisher_id|default_if_none:'' }}"
                     >
                         <button
-                            class="btn erc-filter-button dropdown-toggle text-start w-100"
-                            type="button"
-                            id="publisher-dropdown-browse"
-                            data-bs-toggle="dropdown"
-                            data-bs-auto-close="outside"
-                            aria-expanded="false"
+                                class="btn erc-filter-button dropdown-toggle text-start w-100"
+                                type="button"
+                                id="publisher-dropdown-browse"
+                                data-bs-toggle="dropdown"
+                                data-bs-auto-close="outside"
+                                aria-expanded="false"
                         >
                             {% if selected_publisher %}
-                                {{ selected_publisher.name }}
+                            {{ selected_publisher.name }}
                             {% else %}
-                                All publishers
+                            All publishers
                             {% endif %}
                         </button>
 
                         <div class="dropdown-menu p-2" aria-labelledby="publisher-dropdown-browse">
                             <input
-                                type="search"
-                                id="publisher-search-browse"
-                                class="form-control mb-2"
-                                placeholder="Search publishers..."
-                                autocomplete="off"
-                                data-dropdown-search
+                                    type="search"
+                                    id="publisher-search-browse"
+                                    class="form-control mb-2"
+                                    placeholder="Search publishers..."
+                                    autocomplete="off"
+                                    data-dropdown-search
                             >
 
                             <a
-                                href="{% url 'catalog:browse' %}"
-                                class="dropdown-item rounded {% if not selected_publisher %}active{% endif %}"
+                                    href="{% url 'catalog:browse' %}"
+                                    class="dropdown-item rounded {% if not selected_publisher %}active{% endif %}"
                             >
                                 All publishers
                             </a>
@@ -109,18 +109,18 @@
 
                             <div data-dropdown-options style="max-height: 18rem; overflow-y: auto;">
                                 {% for publisher in publishers %}
-                                    <a
+                                <a
                                         href="{% url 'catalog:browse' %}?publisher={{ publisher.id }}"
                                         class="dropdown-item rounded {% if selected_publisher_id == publisher.id %}active{% endif %}"
                                         data-dropdown-option
                                         data-search-label="{{ publisher.name }}"
-                                    >
-                                        <span class="fw-semibold">{{ publisher.name }}</span>
-                                        <span class="erc-muted">
+                                >
+                                    <span class="fw-semibold">{{ publisher.name }}</span>
+                                    <span class="erc-muted">
                                             · {{ publisher.run_total }} runs
                                             · {{ publisher.volume_total }} volumes
                                         </span>
-                                    </a>
+                                </a>
                                 {% endfor %}
                             </div>
 
@@ -137,68 +137,68 @@
                     </label>
 
                     <div
-                        class="dropdown searchable-dropdown"
-                        data-options-kind="run"
-                        data-options-url="{% url 'catalog:browse_options' %}"
-                        data-selected-id="{{ selected_run_id|default_if_none:'' }}"
-                        data-filter-publisher-id="{{ selected_publisher_id|default_if_none:'' }}"
+                            class="dropdown searchable-dropdown"
+                            data-options-kind="run"
+                            data-options-url="{% url 'catalog:browse_options' %}"
+                            data-selected-id="{{ selected_run_id|default_if_none:'' }}"
+                            data-filter-publisher-id="{{ selected_publisher_id|default_if_none:'' }}"
                     >
                         <button
-                            class="btn erc-filter-button dropdown-toggle text-start w-100"
-                            type="button"
-                            id="run-dropdown-browse"
-                            data-bs-toggle="dropdown"
-                            data-bs-auto-close="outside"
-                            aria-expanded="false"
+                                class="btn erc-filter-button dropdown-toggle text-start w-100"
+                                type="button"
+                                id="run-dropdown-browse"
+                                data-bs-toggle="dropdown"
+                                data-bs-auto-close="outside"
+                                aria-expanded="false"
                         >
                             {% if selected_run %}
-                                {% if selected_run.start_year %}
-                                    {{ selected_run.start_year }} —
-                                {% endif %}
-                                {{ selected_run.title }}
+                            {% if selected_run.start_year %}
+                            {{ selected_run.start_year }} —
+                            {% endif %}
+                            {{ selected_run.title }}
                             {% elif selected_publisher %}
-                                All {{ selected_publisher.name }} runs
+                            All {{ selected_publisher.name }} runs
                             {% else %}
-                                All runs
+                            All runs
                             {% endif %}
                         </button>
 
                         <div class="dropdown-menu p-2" aria-labelledby="run-dropdown-browse">
                             <input
-                                type="search"
-                                id="run-search-browse"
-                                class="form-control mb-2"
-                                placeholder="Search runs..."
-                                autocomplete="off"
-                                data-dropdown-search
+                                    type="search"
+                                    id="run-search-browse"
+                                    class="form-control mb-2"
+                                    placeholder="Search runs..."
+                                    autocomplete="off"
+                                    data-dropdown-search
                             >
 
                             {% if selected_publisher %}
-                                <a
+                            <a
                                     href="{% url 'catalog:browse' %}?publisher={{ selected_publisher.id }}"
                                     class="dropdown-item rounded {% if not selected_run %}active{% endif %}"
-                                >
-                                    All {{ selected_publisher.name }} runs
-                                </a>
+                            >
+                                All {{ selected_publisher.name }} runs
+                            </a>
                             {% else %}
-                                <a
+                            <a
                                     href="{% url 'catalog:browse' %}"
                                     class="dropdown-item rounded {% if not selected_run %}active{% endif %}"
-                                >
-                                    All runs
-                                </a>
+                            >
+                                All runs
+                            </a>
                             {% endif %}
 
                             <div class="dropdown-divider"></div>
 
                             <div data-dropdown-options style="max-height: 22rem; overflow-y: auto;">
                                 {% for run in run_options %}
-                                    <a
+                                <a
                                         href="{% url 'catalog:browse' %}?run={{ run.id }}"
                                         class="dropdown-item rounded {% if selected_run_id == run.id %}active{% endif %}"
                                         data-dropdown-option
                                         data-search-label="{{ run.title }} {{ run.start_year }} {{ run.publisher.name }}"
-                                    >
+                                >
                                         <span class="fw-semibold">
                                             {% if run.start_year %}
                                                 {{ run.start_year }}
@@ -206,10 +206,10 @@
                                                 Unknown year
                                             {% endif %}
                                         </span>
-                                        —
-                                        {{ run.title }}
+                                    —
+                                    {{ run.title }}
 
-                                        <span class="erc-muted">
+                                    <span class="erc-muted">
                                             · {{ run.publisher.name }}
                                             {% if run.issue_count %}
                                                 · {{ run.issue_count }} issues
@@ -217,7 +217,7 @@
                                                 · issue count unknown
                                             {% endif %}
                                         </span>
-                                    </a>
+                                </a>
                                 {% endfor %}
                             </div>
 
@@ -234,84 +234,84 @@
                     </label>
 
                     <div
-                        class="dropdown searchable-dropdown"
-                        data-options-kind="volume"
-                        data-options-url="{% url 'catalog:browse_options' %}"
-                        data-selected-id="{{ selected_volume_id|default_if_none:'' }}"
-                        data-filter-publisher-id="{{ selected_publisher_id|default_if_none:'' }}"
-                        data-filter-run-id="{{ selected_run_id|default_if_none:'' }}"
+                            class="dropdown searchable-dropdown"
+                            data-options-kind="volume"
+                            data-options-url="{% url 'catalog:browse_options' %}"
+                            data-selected-id="{{ selected_volume_id|default_if_none:'' }}"
+                            data-filter-publisher-id="{{ selected_publisher_id|default_if_none:'' }}"
+                            data-filter-run-id="{{ selected_run_id|default_if_none:'' }}"
                     >
                         <button
-                            class="btn erc-filter-button dropdown-toggle text-start w-100"
-                            type="button"
-                            id="volume-dropdown-browse"
-                            data-bs-toggle="dropdown"
-                            data-bs-auto-close="outside"
-                            aria-expanded="false"
+                                class="btn erc-filter-button dropdown-toggle text-start w-100"
+                                type="button"
+                                id="volume-dropdown-browse"
+                                data-bs-toggle="dropdown"
+                                data-bs-auto-close="outside"
+                                aria-expanded="false"
                         >
                             {% if selected_volume %}
-                                {{ selected_volume }}
+                            {{ selected_volume }}
                             {% elif selected_run %}
-                                All volumes in this run
+                            All volumes in this run
                             {% elif selected_publisher %}
-                                All {{ selected_publisher.name }} volumes
+                            All {{ selected_publisher.name }} volumes
                             {% else %}
-                                All volumes
+                            All volumes
                             {% endif %}
                         </button>
 
                         <div class="dropdown-menu p-2" aria-labelledby="volume-dropdown-browse">
                             <input
-                                type="search"
-                                id="volume-search-browse"
-                                class="form-control mb-2"
-                                placeholder="Search volumes..."
-                                autocomplete="off"
-                                data-dropdown-search
+                                    type="search"
+                                    id="volume-search-browse"
+                                    class="form-control mb-2"
+                                    placeholder="Search volumes..."
+                                    autocomplete="off"
+                                    data-dropdown-search
                             >
 
                             {% if selected_run %}
-                                <a
+                            <a
                                     href="{% url 'catalog:browse' %}?run={{ selected_run.id }}"
                                     class="dropdown-item rounded {% if not selected_volume %}active{% endif %}"
-                                >
-                                    All volumes in this run
-                                </a>
+                            >
+                                All volumes in this run
+                            </a>
                             {% elif selected_publisher %}
-                                <a
+                            <a
                                     href="{% url 'catalog:browse' %}?publisher={{ selected_publisher.id }}"
                                     class="dropdown-item rounded {% if not selected_volume %}active{% endif %}"
-                                >
-                                    All {{ selected_publisher.name }} volumes
-                                </a>
+                            >
+                                All {{ selected_publisher.name }} volumes
+                            </a>
                             {% else %}
-                                <a
+                            <a
                                     href="{% url 'catalog:browse' %}"
                                     class="dropdown-item rounded {% if not selected_volume %}active{% endif %}"
-                                >
-                                    All volumes
-                                </a>
+                            >
+                                All volumes
+                            </a>
                             {% endif %}
 
                             <div class="dropdown-divider"></div>
 
                             <div data-dropdown-options style="max-height: 22rem; overflow-y: auto;">
                                 {% for volume in volume_options %}
-                                    <a
+                                <a
                                         href="{% url 'catalog:browse' %}?volume={{ volume.id }}"
                                         class="dropdown-item rounded {% if selected_volume_id == volume.id %}active{% endif %}"
                                         data-dropdown-option
                                         data-search-label="{{ volume.title }} {{ volume.run.title }} {{ volume.volume_number }} {{ volume.publisher.name }}"
-                                    >
-                                        <span class="fw-semibold">{{ volume }}</span>
-                                        <span class="erc-muted">
+                                >
+                                    <span class="fw-semibold">{{ volume }}</span>
+                                    <span class="erc-muted">
                                             · {{ volume.publisher.name }}
                                             · {{ volume.run }}
                                             {% if volume.issue_count %}
                                                 · {{ volume.issue_count }} issues
                                             {% endif %}
                                         </span>
-                                    </a>
+                                </a>
                                 {% endfor %}
                             </div>
 
@@ -324,32 +324,32 @@
             </div>
 
             {% if selected_publisher or selected_run or selected_volume %}
-                <div class="d-flex flex-wrap gap-2 mt-4">
-                    {% if selected_run %}
-                        <a
-                            href="{% if selected_publisher %}{% url 'catalog:browse' %}?publisher={{ selected_publisher.id }}{% else %}{% url 'catalog:browse' %}{% endif %}"
-                            class="btn btn-sm btn-outline-secondary"
-                        >
-                            Clear run
-                        </a>
-                    {% endif %}
+            <div class="d-flex flex-wrap gap-2 mt-4">
+                {% if selected_run %}
+                <a
+                        href="{% if selected_publisher %}{% url 'catalog:browse' %}?publisher={{ selected_publisher.id }}{% else %}{% url 'catalog:browse' %}{% endif %}"
+                        class="btn btn-sm btn-outline-secondary"
+                >
+                    Clear run
+                </a>
+                {% endif %}
 
-                    {% if selected_volume %}
-                        <a
-                            href="{% if selected_run %}{% url 'catalog:browse' %}?run={{ selected_run.id }}{% elif selected_publisher %}{% url 'catalog:browse' %}?publisher={{ selected_publisher.id }}{% else %}{% url 'catalog:browse' %}{% endif %}"
-                            class="btn btn-sm btn-outline-secondary"
-                        >
-                            Clear volume
-                        </a>
-                    {% endif %}
+                {% if selected_volume %}
+                <a
+                        href="{% if selected_run %}{% url 'catalog:browse' %}?run={{ selected_run.id }}{% elif selected_publisher %}{% url 'catalog:browse' %}?publisher={{ selected_publisher.id }}{% else %}{% url 'catalog:browse' %}{% endif %}"
+                        class="btn btn-sm btn-outline-secondary"
+                >
+                    Clear volume
+                </a>
+                {% endif %}
 
-                    {% for item in selected_items %}
-                        <span class="erc-filter-chip">
+                {% for item in selected_items %}
+                <span class="erc-filter-chip">
                             <span class="erc-filter-chip-label">{{ item.label }}</span>
                             {{ item.value }}
                         </span>
-                    {% endfor %}
-                </div>
+                {% endfor %}
+            </div>
             {% endif %}
         </div>
     </section>
@@ -377,80 +377,81 @@
 
                     <tbody data-load-target>
                     {% for run in runs %}
-                        <tr
+                    <tr
                             class="clickable-row"
                             data-row-url="{% url 'catalog:run_details' run.id %}"
                             tabindex="0"
                             aria-label="Open run details for {{ run }}"
-                        >
-                            <td class="fw-semibold">
-                                <a href="{% url 'catalog:run_details' run.id %}" class="erc-data-link">
-                                    {{ run.title }}
-                                </a>
-                            </td>
-                            <td>
-                                {{ run.publisher.name }}
-                                <span class="erc-muted">· {{ run.get_status_display }}</span>
-                            </td>
-                            <td>
-                                {% if run.issue_count %}
-                                    {{ run.issue_count }}
-                                {% else %}
-                                    <span class="erc-muted">Unknown</span>
-                                {% endif %}
-                            </td>
-                            <td class="text-end erc-track-cell">
-                                {% if run.user_tracking %}
-                                    <form
-                                        action="{% url 'reading:set_run_status' run.id %}"
-                                        method="post"
-                                        class="erc-track-form"
-                                        data-tracking-form
-                                        data-item-type="run"
-                                        data-current-status="{{ run.user_tracking.status }}"
-                                        data-run-issue-count="{{ run.catalog_issue_count|default:0 }}"
-                                        data-tracked-issue-count="{{ run.tracked_issue_count|default:0 }}"
-                                    >
-                                        {% csrf_token %}
-                                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                                        <input type="hidden" name="apply_to_issues" value="">
-                                        <input type="hidden" name="remove_issues" value="">
-                                        <select name="status" class="form-select form-select-sm" data-auto-submit>
-                                            {% for value, label in run_status_choices %}
-                                                <option value="{{ value }}" {% if run.user_tracking.status == value %}selected{% endif %}>
-                                                    {{ label }}
-                                                </option>
-                                            {% endfor %}
-                                            <option value="__unfollow__">Unfollow</option>
-                                        </select>
-                                    </form>
-                                {% else %}
-                                    <form
-                                        action="{% url 'reading:set_run_status' run.id %}"
-                                        method="post"
-                                        class="erc-track-form"
-                                        data-tracking-form
-                                        data-item-type="run"
-                                        data-track-follow
-                                        data-run-issue-count="{{ run.catalog_issue_count|default:0 }}"
-                                        data-tracked-issue-count="{{ run.tracked_issue_count|default:0 }}"
-                                    >
-                                        {% csrf_token %}
-                                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                                        <input type="hidden" name="apply_to_issues" value="">
-                                        <button type="submit" class="btn btn-outline-light btn-sm erc-track-button">
-                                            Follow
-                                        </button>
-                                    </form>
-                                {% endif %}
-                            </td>
-                        </tr>
+                    >
+                        <td class="fw-semibold">
+                            <a href="{% url 'catalog:run_details' run.id %}" class="erc-data-link">
+                                {% if run.start_year %}{{ run.start_year }} — {% endif %}{{ run.title }}
+                            </a>
+                        </td>
+                        <td>
+                            {{ run.publisher.name }}
+                            <span class="erc-muted">· {{ run.get_status_display }}</span>
+                        </td>
+                        <td>
+                            {% if run.issue_count %}
+                            {{ run.issue_count }}
+                            {% else %}
+                            <span class="erc-muted">Unknown</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-end erc-track-cell">
+                            {% if run.user_tracking %}
+                            <form
+                                    action="{% url 'reading:set_run_status' run.id %}"
+                                    method="post"
+                                    class="erc-track-form"
+                                    data-tracking-form
+                                    data-item-type="run"
+                                    data-current-status="{{ run.user_tracking.status }}"
+                                    data-run-issue-count="{{ run.catalog_issue_count|default:0 }}"
+                                    data-tracked-issue-count="{{ run.tracked_issue_count|default:0 }}"
+                            >
+                                {% csrf_token %}
+                                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                <input type="hidden" name="apply_to_issues" value="">
+                                <input type="hidden" name="remove_issues" value="">
+                                <select name="status" class="form-select form-select-sm" data-auto-submit>
+                                    {% for value, label in run_status_choices %}
+                                    <option value="{{ value }}" {% if run.user_tracking.status== value %}selected{%
+                                            endif %}>
+                                        {{ label }}
+                                    </option>
+                                    {% endfor %}
+                                    <option value="__unfollow__">Unfollow</option>
+                                </select>
+                            </form>
+                            {% else %}
+                            <form
+                                    action="{% url 'reading:set_run_status' run.id %}"
+                                    method="post"
+                                    class="erc-track-form"
+                                    data-tracking-form
+                                    data-item-type="run"
+                                    data-track-follow
+                                    data-run-issue-count="{{ run.catalog_issue_count|default:0 }}"
+                                    data-tracked-issue-count="{{ run.tracked_issue_count|default:0 }}"
+                            >
+                                {% csrf_token %}
+                                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                <input type="hidden" name="apply_to_issues" value="">
+                                <button type="submit" class="btn btn-outline-light btn-sm erc-track-button">
+                                    Follow
+                                </button>
+                            </form>
+                            {% endif %}
+                        </td>
+                    </tr>
                     {% empty %}
-                        <tr>
-                            <td colspan="4" class="text-center erc-muted py-4">
-                                No runs match this filter.
-                            </td>
-                        </tr>
+                    <tr>
+                        <td colspan="4" class="text-center erc-muted py-4">
+                            No runs match this filter.
+                        </td>
+                    </tr>
                     {% endfor %}
                     </tbody>
                 </table>
@@ -458,25 +459,25 @@
 
             <div class="erc-load-actions mt-3">
                 <button
-                    type="button"
-                    class="btn erc-load-button {% if not has_more_runs %}d-none{% endif %}"
-                    data-load-more
-                    data-kind="runs"
-                    data-offset="{{ runs|length }}"
-                    data-items-url="{% url 'catalog:browse_items' %}"
-                    data-filter-publisher-id="{{ selected_publisher_id|default_if_none:'' }}"
-                    data-filter-run-id="{{ selected_run_id|default_if_none:'' }}"
-                    data-filter-volume-id="{{ selected_volume_id|default_if_none:'' }}"
+                        type="button"
+                        class="btn erc-load-button {% if not has_more_runs %}d-none{% endif %}"
+                        data-load-more
+                        data-kind="runs"
+                        data-offset="{{ runs|length }}"
+                        data-items-url="{% url 'catalog:browse_items' %}"
+                        data-filter-publisher-id="{{ selected_publisher_id|default_if_none:'' }}"
+                        data-filter-run-id="{{ selected_run_id|default_if_none:'' }}"
+                        data-filter-volume-id="{{ selected_volume_id|default_if_none:'' }}"
                 >
                     Load {{ browse_load_more_limit }} more runs
                 </button>
 
                 <button
-                    type="button"
-                    class="btn erc-hide-button d-none"
-                    data-hide-more
-                    data-min-visible="{{ browse_initial_limit }}"
-                    data-hide-count="{{ browse_load_more_limit }}"
+                        type="button"
+                        class="btn erc-hide-button d-none"
+                        data-hide-more
+                        data-min-visible="{{ browse_initial_limit }}"
+                        data-hide-count="{{ browse_load_more_limit }}"
                 >
                     Hide {{ browse_load_more_limit }} runs
                 </button>
@@ -507,74 +508,75 @@
 
                     <tbody data-load-target>
                     {% for volume in volumes %}
-                        <tr
+                    <tr
                             class="clickable-row"
                             data-row-url="{% url 'catalog:volume_details' volume.id %}"
                             tabindex="0"
                             aria-label="Open volume details for {{ volume }}"
-                        >
-                            <td class="fw-semibold">
-                                <a href="{% url 'catalog:volume_details' volume.id %}" class="erc-data-link">
-                                    {{ volume }}
-                                </a>
-                            </td>
-                            <td>
-                                <a href="{% url 'catalog:run_details' volume.run.id %}" class="erc-data-link">
-                                    {{ volume.run }}
-                                </a>
-                            </td>
-                            <td>
-                                {% if volume.release_date %}
-                                    {{ volume.release_date|date:"Y-m-d" }}
-                                {% else %}
-                                    <span class="erc-muted">Unknown</span>
-                                {% endif %}
-                            </td>
-                            <td class="text-end erc-track-cell">
-                                {% if volume.user_tracking %}
-                                    <form
-                                        action="{% url 'reading:set_volume_status' volume.id %}"
-                                        method="post"
-                                        class="erc-track-form"
-                                        data-tracking-form
-                                        data-item-type="volume"
-                                        data-current-status="{{ volume.user_tracking.status }}"
-                                    >
-                                        {% csrf_token %}
-                                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                                        <select name="status" class="form-select form-select-sm" data-auto-submit>
-                                            {% for value, label in volume_status_choices %}
-                                                <option value="{{ value }}" {% if volume.user_tracking.status == value %}selected{% endif %}>
-                                                    {{ label }}
-                                                </option>
-                                            {% endfor %}
-                                            <option value="__unfollow__">Remove</option>
-                                        </select>
-                                    </form>
-                                {% else %}
-                                    <form
-                                        action="{% url 'reading:set_volume_status' volume.id %}"
-                                        method="post"
-                                        class="erc-track-form"
-                                        data-tracking-form
-                                        data-item-type="volume"
-                                        data-track-follow
-                                    >
-                                        {% csrf_token %}
-                                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                                        <button type="submit" class="btn btn-outline-light btn-sm erc-track-button">
-                                            Follow
-                                        </button>
-                                    </form>
-                                {% endif %}
-                            </td>
-                        </tr>
+                    >
+                        <td class="fw-semibold">
+                            <a href="{% url 'catalog:volume_details' volume.id %}" class="erc-data-link">
+                                {{ volume }}
+                            </a>
+                        </td>
+                        <td>
+                            <a href="{% url 'catalog:run_details' volume.run.id %}" class="erc-data-link">
+                                {{ volume.run }}
+                            </a>
+                        </td>
+                        <td>
+                            {% if volume.release_date %}
+                            {{ volume.release_date|date:"Y-m-d" }}
+                            {% else %}
+                            <span class="erc-muted">Unknown</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-end erc-track-cell">
+                            {% if volume.user_tracking %}
+                            <form
+                                    action="{% url 'reading:set_volume_status' volume.id %}"
+                                    method="post"
+                                    class="erc-track-form"
+                                    data-tracking-form
+                                    data-item-type="volume"
+                                    data-current-status="{{ volume.user_tracking.status }}"
+                            >
+                                {% csrf_token %}
+                                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                <select name="status" class="form-select form-select-sm" data-auto-submit>
+                                    {% for value, label in volume_status_choices %}
+                                    <option value="{{ value }}" {% if volume.user_tracking.status== value %}selected{%
+                                            endif %}>
+                                        {{ label }}
+                                    </option>
+                                    {% endfor %}
+                                    <option value="__unfollow__">Remove</option>
+                                </select>
+                            </form>
+                            {% else %}
+                            <form
+                                    action="{% url 'reading:set_volume_status' volume.id %}"
+                                    method="post"
+                                    class="erc-track-form"
+                                    data-tracking-form
+                                    data-item-type="volume"
+                                    data-track-follow
+                            >
+                                {% csrf_token %}
+                                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                <button type="submit" class="btn btn-outline-light btn-sm erc-track-button">
+                                    Follow
+                                </button>
+                            </form>
+                            {% endif %}
+                        </td>
+                    </tr>
                     {% empty %}
-                        <tr>
-                            <td colspan="4" class="text-center erc-muted py-4">
-                                No collected volumes match this filter.
-                            </td>
-                        </tr>
+                    <tr>
+                        <td colspan="4" class="text-center erc-muted py-4">
+                            No collected volumes match this filter.
+                        </td>
+                    </tr>
                     {% endfor %}
                     </tbody>
                 </table>
@@ -582,25 +584,25 @@
 
             <div class="erc-load-actions mt-3">
                 <button
-                    type="button"
-                    class="btn erc-load-button {% if not has_more_volumes %}d-none{% endif %}"
-                    data-load-more
-                    data-kind="volumes"
-                    data-offset="{{ volumes|length }}"
-                    data-items-url="{% url 'catalog:browse_items' %}"
-                    data-filter-publisher-id="{{ selected_publisher_id|default_if_none:'' }}"
-                    data-filter-run-id="{{ selected_run_id|default_if_none:'' }}"
-                    data-filter-volume-id="{{ selected_volume_id|default_if_none:'' }}"
+                        type="button"
+                        class="btn erc-load-button {% if not has_more_volumes %}d-none{% endif %}"
+                        data-load-more
+                        data-kind="volumes"
+                        data-offset="{{ volumes|length }}"
+                        data-items-url="{% url 'catalog:browse_items' %}"
+                        data-filter-publisher-id="{{ selected_publisher_id|default_if_none:'' }}"
+                        data-filter-run-id="{{ selected_run_id|default_if_none:'' }}"
+                        data-filter-volume-id="{{ selected_volume_id|default_if_none:'' }}"
                 >
                     Load {{ browse_load_more_limit }} more volumes
                 </button>
 
                 <button
-                    type="button"
-                    class="btn erc-hide-button d-none"
-                    data-hide-more
-                    data-min-visible="{{ browse_initial_limit }}"
-                    data-hide-count="{{ browse_load_more_limit }}"
+                        type="button"
+                        class="btn erc-hide-button d-none"
+                        data-hide-more
+                        data-min-visible="{{ browse_initial_limit }}"
+                        data-hide-count="{{ browse_load_more_limit }}"
                 >
                     Hide {{ browse_load_more_limit }} volumes
                 </button>
@@ -630,74 +632,75 @@
                     </thead>
                     <tbody data-load-target>
                     {% for issue in issues %}
-                        <tr
+                    <tr
                             class="clickable-row"
                             data-row-url="{% url 'catalog:issue_details' issue.id %}"
                             tabindex="0"
                             aria-label="Open issue details for issue {{ issue.issue_number }}"
-                        >
-                            <td class="fw-semibold">
-                                <a href="{% url 'catalog:issue_details' issue.id %}" class="erc-data-link">
-                                    #{{ issue.issue_number }}
-                                </a>
-                            </td>
-                            <td>
-                                <a href="{% url 'catalog:run_details' issue.run.id %}" class="erc-data-link">
-                                    {{ issue.run }}
-                                </a>
-                            </td>
-                            <td>
-                                {% if issue.published_date %}
-                                    {{ issue.published_date|date:"Y-m-d" }}
-                                {% else %}
-                                    <span class="erc-muted">Unknown</span>
-                                {% endif %}
-                            </td>
-                            <td class="text-end erc-track-cell">
-                                {% if issue.user_tracking %}
-                                    <form
-                                        action="{% url 'reading:set_issue_status' issue.id %}"
-                                        method="post"
-                                        class="erc-track-form"
-                                        data-tracking-form
-                                        data-item-type="issue"
-                                        data-current-status="{{ issue.user_tracking.status }}"
-                                    >
-                                        {% csrf_token %}
-                                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                                        <select name="status" class="form-select form-select-sm" data-auto-submit>
-                                            {% for value, label in issue_status_choices %}
-                                                <option value="{{ value }}" {% if issue.user_tracking.status == value %}selected{% endif %}>
-                                                    {{ label }}
-                                                </option>
-                                            {% endfor %}
-                                            <option value="__unfollow__">Unfollow</option>
-                                        </select>
-                                    </form>
-                                {% else %}
-                                    <form
-                                        action="{% url 'reading:set_issue_status' issue.id %}"
-                                        method="post"
-                                        class="erc-track-form"
-                                        data-tracking-form
-                                        data-item-type="issue"
-                                        data-track-follow
-                                    >
-                                        {% csrf_token %}
-                                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                                        <button type="submit" class="btn btn-outline-light btn-sm erc-track-button">
-                                            Follow
-                                        </button>
-                                    </form>
-                                {% endif %}
-                            </td>
-                        </tr>
+                    >
+                        <td class="fw-semibold">
+                            <a href="{% url 'catalog:issue_details' issue.id %}" class="erc-data-link">
+                                #{{ issue.issue_number }}
+                            </a>
+                        </td>
+                        <td>
+                            <a href="{% url 'catalog:run_details' issue.run.id %}" class="erc-data-link">
+                                {{ issue.run }}
+                            </a>
+                        </td>
+                        <td>
+                            {% if issue.published_date %}
+                            {{ issue.published_date|date:"Y-m-d" }}
+                            {% else %}
+                            <span class="erc-muted">Unknown</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-end erc-track-cell">
+                            {% if issue.user_tracking %}
+                            <form
+                                    action="{% url 'reading:set_issue_status' issue.id %}"
+                                    method="post"
+                                    class="erc-track-form"
+                                    data-tracking-form
+                                    data-item-type="issue"
+                                    data-current-status="{{ issue.user_tracking.status }}"
+                            >
+                                {% csrf_token %}
+                                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                <select name="status" class="form-select form-select-sm" data-auto-submit>
+                                    {% for value, label in issue_status_choices %}
+                                    <option value="{{ value }}" {% if issue.user_tracking.status== value %}selected{%
+                                            endif %}>
+                                        {{ label }}
+                                    </option>
+                                    {% endfor %}
+                                    <option value="__unfollow__">Unfollow</option>
+                                </select>
+                            </form>
+                            {% else %}
+                            <form
+                                    action="{% url 'reading:set_issue_status' issue.id %}"
+                                    method="post"
+                                    class="erc-track-form"
+                                    data-tracking-form
+                                    data-item-type="issue"
+                                    data-track-follow
+                            >
+                                {% csrf_token %}
+                                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                <button type="submit" class="btn btn-outline-light btn-sm erc-track-button">
+                                    Follow
+                                </button>
+                            </form>
+                            {% endif %}
+                        </td>
+                    </tr>
                     {% empty %}
-                        <tr>
-                            <td colspan="4" class="text-center erc-muted py-4">
-                                No issues match this filter.
-                            </td>
-                        </tr>
+                    <tr>
+                        <td colspan="4" class="text-center erc-muted py-4">
+                            No issues match this filter.
+                        </td>
+                    </tr>
                     {% endfor %}
                     </tbody>
                 </table>
@@ -705,25 +708,25 @@
 
             <div class="erc-load-actions mt-3">
                 <button
-                    type="button"
-                    class="btn erc-load-button {% if not has_more_issues %}d-none{% endif %}"
-                    data-load-more
-                    data-kind="issues"
-                    data-offset="{{ issues|length }}"
-                    data-items-url="{% url 'catalog:browse_items' %}"
-                    data-filter-publisher-id="{{ selected_publisher_id|default_if_none:'' }}"
-                    data-filter-run-id="{{ selected_run_id|default_if_none:'' }}"
-                    data-filter-volume-id="{{ selected_volume_id|default_if_none:'' }}"
+                        type="button"
+                        class="btn erc-load-button {% if not has_more_issues %}d-none{% endif %}"
+                        data-load-more
+                        data-kind="issues"
+                        data-offset="{{ issues|length }}"
+                        data-items-url="{% url 'catalog:browse_items' %}"
+                        data-filter-publisher-id="{{ selected_publisher_id|default_if_none:'' }}"
+                        data-filter-run-id="{{ selected_run_id|default_if_none:'' }}"
+                        data-filter-volume-id="{{ selected_volume_id|default_if_none:'' }}"
                 >
                     Load {{ browse_load_more_limit }} more issues
                 </button>
 
                 <button
-                    type="button"
-                    class="btn erc-hide-button d-none"
-                    data-hide-more
-                    data-min-visible="{{ browse_initial_limit }}"
-                    data-hide-count="{{ browse_load_more_limit }}"
+                        type="button"
+                        class="btn erc-hide-button d-none"
+                        data-hide-more
+                        data-min-visible="{{ browse_initial_limit }}"
+                        data-hide-count="{{ browse_load_more_limit }}"
                 >
                     Hide {{ browse_load_more_limit }} issues
                 </button>
@@ -732,7 +735,8 @@
     </section>
 </div>
 
-<div class="modal fade" id="tracking-status-modal" tabindex="-1" aria-labelledby="tracking-status-modal-title" aria-hidden="true">
+<div class="modal fade" id="tracking-status-modal" tabindex="-1" aria-labelledby="tracking-status-modal-title"
+     aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content erc-panel">
             <div class="modal-header border-secondary">

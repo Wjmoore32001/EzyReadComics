@@ -18,7 +18,6 @@ from ._local_comicvine_helpers import (
     parse_date,
 )
 
-
 DEFAULT_MODEL = "gpt-5.6-luna"
 DEFAULT_PUBLISHER_NAME = "Marvel"
 DEFAULT_BATCH_SIZE = 5
@@ -179,8 +178,7 @@ class Command(BaseCommand):
 
         existing_runs = list_existing_runs(publisher_name=publisher_name)
         existing_run_keys = {
-            run_key(run.title, run.start_year)
-            for run in existing_runs
+            run_key(run.title, run.start_year) for run in existing_runs
         }
 
         self.write_header(
@@ -207,9 +205,7 @@ class Command(BaseCommand):
         for batch_number in range(1, max_batches + 1):
             self.stdout.write("")
             self.stdout.write(
-                self.style.WARNING(
-                    f"AI candidate batch {batch_number}/{max_batches}"
-                )
+                self.style.WARNING(f"AI candidate batch {batch_number}/{max_batches}")
             )
 
             data = self.call_run_search(
@@ -285,7 +281,11 @@ class Command(BaseCommand):
             break
 
         self.stdout.write("")
-        self.stdout.write(self.style.SUCCESS("Apply complete." if not dry_run else "Dry run complete."))
+        self.stdout.write(
+            self.style.SUCCESS(
+                "Apply complete." if not dry_run else "Dry run complete."
+            )
+        )
         self.stdout.write(f"OpenAI API calls made: {api_calls}")
         self.stdout.write(f"Created runs: {0 if dry_run else created_count}")
         self.stdout.write(f"Would create runs: {created_count if dry_run else 0}")
@@ -315,7 +315,9 @@ class Command(BaseCommand):
         self.stdout.write(
             f"Catalog writes: {'none' if dry_run else 'create missing ComicRun rows only'}"
         )
-        self.stdout.write("Run description: blank until catalog issue #1 has a description")
+        self.stdout.write(
+            "Run description: blank until catalog issue #1 has a description"
+        )
         self.stdout.write("Creates issues from OpenAI: no")
         self.stdout.write(
             "Local Comic Vine issue copy: "
@@ -329,9 +331,13 @@ class Command(BaseCommand):
         self.stdout.write(f"Batch size: {batch_size}")
         self.stdout.write(f"Max batches: {max_batches}")
         self.stdout.write(f"New run create limit: {limit}")
-        self.stdout.write(f"Existing catalog runs checked locally: {len(existing_runs)}")
+        self.stdout.write(
+            f"Existing catalog runs checked locally: {len(existing_runs)}"
+        )
         self.stdout.write("Existing catalog runs sent to AI: no")
-        self.stdout.write(f"Local Comic Vine match display limit: {comicvine_match_limit}")
+        self.stdout.write(
+            f"Local Comic Vine match display limit: {comicvine_match_limit}"
+        )
         self.stdout.write("")
 
     def call_run_search(
@@ -388,9 +394,7 @@ class Command(BaseCommand):
 
     def print_result(self, *, candidates, verbose):
         ready_count = sum(
-            1
-            for candidate in candidates
-            if candidate_has_required_fields(candidate)
+            1 for candidate in candidates if candidate_has_required_fields(candidate)
         )
         incomplete_titles = [
             candidate.get("title") or "[blank title]"
@@ -424,8 +428,12 @@ class Command(BaseCommand):
                 "   Issue count: "
                 f"{candidate.get('issue_count') if candidate.get('issue_count') is not None else 'unknown'}"
             )
-            self.stdout.write(f"   First issue date: {candidate.get('first_issue_date') or 'unknown'}")
-            self.stdout.write(f"   Last issue date: {candidate.get('last_issue_date') or 'unknown'}")
+            self.stdout.write(
+                f"   First issue date: {candidate.get('first_issue_date') or 'unknown'}"
+            )
+            self.stdout.write(
+                f"   Last issue date: {candidate.get('last_issue_date') or 'unknown'}"
+            )
 
             if missing_fields:
                 self.stdout.write("   Still missing: " + ", ".join(missing_fields))
@@ -446,9 +454,7 @@ class Command(BaseCommand):
         self.stdout.write(self.style.WARNING("Dry-run new runs that would be created"))
 
         for candidate in candidates:
-            self.stdout.write(
-                f"- {candidate['title']} ({candidate['start_year']})"
-            )
+            self.stdout.write(f"- {candidate['title']} ({candidate['start_year']})")
 
         if skip_comicvine_match:
             return
@@ -499,7 +505,9 @@ class Command(BaseCommand):
             if candidate_key in existing_run_keys:
                 continue
 
-            if find_existing_catalog_run_match(candidate=candidate, existing_runs=existing_runs):
+            if find_existing_catalog_run_match(
+                candidate=candidate, existing_runs=existing_runs
+            ):
                 continue
 
             with transaction.atomic():
@@ -690,11 +698,14 @@ def build_rejected_candidates_text(rejected_candidates):
     if not rejected_candidates:
         return "none"
 
-    return "; ".join(
-        f"{item['title']} ({item.get('start_year') or 'unknown'})"
-        for item in rejected_candidates[-30:]
-        if item.get("title")
-    ) or "none"
+    return (
+        "; ".join(
+            f"{item['title']} ({item.get('start_year') or 'unknown'})"
+            for item in rejected_candidates[-30:]
+            if item.get("title")
+        )
+        or "none"
+    )
 
 
 def classify_candidates(*, candidates, existing_runs, seen_candidate_keys):
@@ -841,7 +852,10 @@ def get_missing_candidate_fields(candidate):
         missing_fields.append("issue_count")
 
     for field_name in DATE_FIELDS:
-        if parse_date(candidate.get(field_name)) is None and field_name not in missing_fields:
+        if (
+            parse_date(candidate.get(field_name)) is None
+            and field_name not in missing_fields
+        ):
             missing_fields.append(field_name)
 
     status = clean_text(candidate.get("status")).lower()
