@@ -3,6 +3,40 @@
 {% block title %}Browse - EzyReadComics{% endblock %}
 
 {% block content %}
+<style>
+    .erc-load-actions {
+        display: flex;
+        gap: 0.75rem;
+        justify-content: center;
+    }
+
+    @media (max-width: 575.98px) {
+        .erc-load-actions {
+            flex-direction: column;
+        }
+    }
+
+    .erc-load-button,
+    .erc-hide-button {
+        border-color: var(--erc-border);
+        color: #d7deeb;
+        background: rgba(255, 255, 255, 0.02);
+    }
+
+    .erc-load-button:hover,
+    .erc-load-button:focus,
+    .erc-hide-button:hover,
+    .erc-hide-button:focus {
+        border-color: var(--erc-accent);
+        color: #ffffff;
+        background: var(--erc-accent-soft);
+    }
+
+    .erc-hide-button {
+        border-color: rgba(156, 167, 186, 0.45);
+    }
+</style>
+
 <div class="d-flex flex-column gap-4">
     <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-end gap-3">
         <div>
@@ -413,23 +447,31 @@
                     </table>
                 </div>
 
-                {% if has_more_runs %}
-                    <div class="d-grid mt-3">
-                        <button
-                            type="button"
-                            class="btn btn-outline-light"
-                            data-load-more
-                            data-kind="runs"
-                            data-offset="{{ runs|length }}"
-                            data-items-url="{% url 'catalog:browse_items' %}"
-                            data-filter-publisher-id="{{ selected_publisher_id|default_if_none:'' }}"
-                            data-filter-run-id="{{ selected_run_id|default_if_none:'' }}"
-                            data-filter-volume-id="{{ selected_volume_id|default_if_none:'' }}"
-                        >
-                            Load {{ browse_load_more_limit }} more runs
-                        </button>
-                    </div>
-                {% endif %}
+                <div class="erc-load-actions mt-3">
+                    <button
+                        type="button"
+                        class="btn erc-load-button {% if not has_more_runs %}d-none{% endif %}"
+                        data-load-more
+                        data-kind="runs"
+                        data-offset="{{ runs|length }}"
+                        data-items-url="{% url 'catalog:browse_items' %}"
+                        data-filter-publisher-id="{{ selected_publisher_id|default_if_none:'' }}"
+                        data-filter-run-id="{{ selected_run_id|default_if_none:'' }}"
+                        data-filter-volume-id="{{ selected_volume_id|default_if_none:'' }}"
+                    >
+                        Load {{ browse_load_more_limit }} more runs
+                    </button>
+
+                    <button
+                        type="button"
+                        class="btn erc-hide-button d-none"
+                        data-hide-more
+                        data-min-visible="{{ browse_initial_limit }}"
+                        data-hide-count="{{ browse_load_more_limit }}"
+                    >
+                        Hide {{ browse_load_more_limit }} runs
+                    </button>
+                </div>
             </div>
         </div>
     </section>
@@ -517,23 +559,31 @@
                     </table>
                 </div>
 
-                {% if has_more_volumes %}
-                    <div class="d-grid mt-3">
-                        <button
-                            type="button"
-                            class="btn btn-outline-light"
-                            data-load-more
-                            data-kind="volumes"
-                            data-offset="{{ volumes|length }}"
-                            data-items-url="{% url 'catalog:browse_items' %}"
-                            data-filter-publisher-id="{{ selected_publisher_id|default_if_none:'' }}"
-                            data-filter-run-id="{{ selected_run_id|default_if_none:'' }}"
-                            data-filter-volume-id="{{ selected_volume_id|default_if_none:'' }}"
-                        >
-                            Load {{ browse_load_more_limit }} more volumes
-                        </button>
-                    </div>
-                {% endif %}
+                <div class="erc-load-actions mt-3">
+                    <button
+                        type="button"
+                        class="btn erc-load-button {% if not has_more_volumes %}d-none{% endif %}"
+                        data-load-more
+                        data-kind="volumes"
+                        data-offset="{{ volumes|length }}"
+                        data-items-url="{% url 'catalog:browse_items' %}"
+                        data-filter-publisher-id="{{ selected_publisher_id|default_if_none:'' }}"
+                        data-filter-run-id="{{ selected_run_id|default_if_none:'' }}"
+                        data-filter-volume-id="{{ selected_volume_id|default_if_none:'' }}"
+                    >
+                        Load {{ browse_load_more_limit }} more volumes
+                    </button>
+
+                    <button
+                        type="button"
+                        class="btn erc-hide-button d-none"
+                        data-hide-more
+                        data-min-visible="{{ browse_initial_limit }}"
+                        data-hide-count="{{ browse_load_more_limit }}"
+                    >
+                        Hide {{ browse_load_more_limit }} volumes
+                    </button>
+                </div>
             </div>
         </div>
     </section>
@@ -606,23 +656,31 @@
                     </table>
                 </div>
 
-                {% if has_more_issues %}
-                    <div class="d-grid mt-3">
-                        <button
-                            type="button"
-                            class="btn btn-outline-light"
-                            data-load-more
-                            data-kind="issues"
-                            data-offset="{{ issues|length }}"
-                            data-items-url="{% url 'catalog:browse_items' %}"
-                            data-filter-publisher-id="{{ selected_publisher_id|default_if_none:'' }}"
-                            data-filter-run-id="{{ selected_run_id|default_if_none:'' }}"
-                            data-filter-volume-id="{{ selected_volume_id|default_if_none:'' }}"
-                        >
-                            Load {{ browse_load_more_limit }} more issues
-                        </button>
-                    </div>
-                {% endif %}
+                <div class="erc-load-actions mt-3">
+                    <button
+                        type="button"
+                        class="btn erc-load-button {% if not has_more_issues %}d-none{% endif %}"
+                        data-load-more
+                        data-kind="issues"
+                        data-offset="{{ issues|length }}"
+                        data-items-url="{% url 'catalog:browse_items' %}"
+                        data-filter-publisher-id="{{ selected_publisher_id|default_if_none:'' }}"
+                        data-filter-run-id="{{ selected_run_id|default_if_none:'' }}"
+                        data-filter-volume-id="{{ selected_volume_id|default_if_none:'' }}"
+                    >
+                        Load {{ browse_load_more_limit }} more issues
+                    </button>
+
+                    <button
+                        type="button"
+                        class="btn erc-hide-button d-none"
+                        data-hide-more
+                        data-min-visible="{{ browse_initial_limit }}"
+                        data-hide-count="{{ browse_load_more_limit }}"
+                    >
+                        Hide {{ browse_load_more_limit }} issues
+                    </button>
+                </div>
             </div>
         </div>
     </section>
@@ -631,7 +689,6 @@
 <script>
 document.addEventListener("DOMContentLoaded", function () {
     const dropdowns = Array.from(document.querySelectorAll(".searchable-dropdown"));
-    const loadMoreButtons = Array.from(document.querySelectorAll("[data-load-more]"));
 
     function clearElement(element) {
         while (element.firstChild) {
@@ -867,28 +924,59 @@ document.addEventListener("DOMContentLoaded", function () {
         return createIssueRow(item);
     }
 
-    loadMoreButtons.forEach(function (button) {
+    function updateSectionControls(section) {
+        const target = section.querySelector("[data-load-target]");
+        const loadedCount = section.querySelector("[data-loaded-count]");
+        const loadButton = section.querySelector("[data-load-more]");
+        const hideButton = section.querySelector("[data-hide-more]");
+
+        if (!target) {
+            return;
+        }
+
+        const visibleCount = target.querySelectorAll("tr").length;
+
+        if (loadedCount) {
+            loadedCount.textContent = "Showing " + visibleCount + " loaded";
+        }
+
+        if (loadButton) {
+            loadButton.dataset.offset = String(visibleCount);
+        }
+
+        if (hideButton) {
+            const minVisible = Number(hideButton.dataset.minVisible || "5");
+            hideButton.classList.toggle("d-none", visibleCount <= minVisible);
+        }
+    }
+
+    function buildItemsUrl(button) {
+        const url = new URL(button.dataset.itemsUrl, window.location.origin);
+
+        url.searchParams.set("kind", button.dataset.kind);
+        url.searchParams.set("offset", button.dataset.offset || "0");
+
+        if (button.dataset.filterPublisherId) {
+            url.searchParams.set("publisher", button.dataset.filterPublisherId);
+        }
+
+        if (button.dataset.filterRunId) {
+            url.searchParams.set("run", button.dataset.filterRunId);
+        }
+
+        if (button.dataset.filterVolumeId) {
+            url.searchParams.set("volume", button.dataset.filterVolumeId);
+        }
+
+        return url;
+    }
+
+    document.querySelectorAll("[data-load-more]").forEach(function (button) {
         button.addEventListener("click", function () {
             const section = button.closest("[data-load-section]");
             const target = section.querySelector("[data-load-target]");
-            const loadedCount = section.querySelector("[data-loaded-count]");
             const originalText = button.textContent;
-            const url = new URL(button.dataset.itemsUrl, window.location.origin);
-
-            url.searchParams.set("kind", button.dataset.kind);
-            url.searchParams.set("offset", button.dataset.offset || "0");
-
-            if (button.dataset.filterPublisherId) {
-                url.searchParams.set("publisher", button.dataset.filterPublisherId);
-            }
-
-            if (button.dataset.filterRunId) {
-                url.searchParams.set("run", button.dataset.filterRunId);
-            }
-
-            if (button.dataset.filterVolumeId) {
-                url.searchParams.set("volume", button.dataset.filterVolumeId);
-            }
+            const url = buildItemsUrl(button);
 
             button.disabled = true;
             button.textContent = "Loading...";
@@ -912,28 +1000,44 @@ document.addEventListener("DOMContentLoaded", function () {
                         target.appendChild(createRow(button.dataset.kind, item));
                     });
 
-                    const previousOffset = Number(button.dataset.offset || "0");
-                    const nextOffset = previousOffset + items.length;
-
-                    button.dataset.offset = String(nextOffset);
-
-                    if (loadedCount) {
-                        loadedCount.textContent = "Showing " + nextOffset + " loaded";
-                    }
-
-                    if (!data.has_more || items.length === 0) {
-                        button.closest(".d-grid").remove();
-                        return;
-                    }
-
                     button.disabled = false;
                     button.textContent = originalText;
+                    button.classList.toggle("d-none", !data.has_more || items.length === 0);
+
+                    updateSectionControls(section);
                 })
                 .catch(function () {
                     button.disabled = false;
                     button.textContent = "Could not load more. Try again.";
                 });
         });
+    });
+
+    document.querySelectorAll("[data-hide-more]").forEach(function (button) {
+        button.addEventListener("click", function () {
+            const section = button.closest("[data-load-section]");
+            const target = section.querySelector("[data-load-target]");
+            const loadButton = section.querySelector("[data-load-more]");
+            const minVisible = Number(button.dataset.minVisible || "5");
+            const hideCount = Number(button.dataset.hideCount || "10");
+            const rows = Array.from(target.querySelectorAll("tr"));
+            const removableCount = Math.min(hideCount, Math.max(rows.length - minVisible, 0));
+
+            for (let index = 0; index < removableCount; index += 1) {
+                rows[rows.length - 1 - index].remove();
+            }
+
+            if (loadButton) {
+                loadButton.classList.remove("d-none");
+                loadButton.disabled = false;
+            }
+
+            updateSectionControls(section);
+        });
+    });
+
+    document.querySelectorAll("[data-load-section]").forEach(function (section) {
+        updateSectionControls(section);
     });
 });
 </script>
