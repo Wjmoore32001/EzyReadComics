@@ -1,76 +1,95 @@
 {% extends "base.html" %}
 
-{% block title %}Sign up | EzyReadComics{% endblock %}
+{% block title %}Sign up - EzyReadComics{% endblock %}
 
 {% block content %}
-<div class="card border-secondary bg-body-tertiary mx-auto" style="max-width: 32rem;">
-    <div class="card-body p-4 p-md-5">
-        <p class="text-uppercase text-secondary fw-semibold mb-2">
-            Account
-        </p>
+<div class="erc-page-shell">
+    <section class="erc-hero p-4 p-lg-5">
+        <div class="erc-hero-content">
+            <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-end gap-4">
+                <div>
+                    <p class="erc-page-kicker mb-3">Account</p>
+                    <h1 class="erc-hero-title display-5 fw-bold mb-3">
+                        Create an account
+                    </h1>
+                    <p class="erc-hero-subtitle lead mb-0">
+                        Sign up to follow comics and track your reading.
+                    </p>
+                </div>
 
-        <h1 class="h2 fw-bold mb-3">Create an account</h1>
-
-        <p class="text-secondary mb-4">
-            Sign up to follow comics and track your reading.
-        </p>
-
-        <div class="alert alert-info mb-4">
-            Email is optional. You can leave it blank. No verification email will be sent right now.
+                <div class="d-flex flex-wrap gap-2">
+                    <a href="{{ login_url }}" class="btn btn-outline-light">
+                        Log in
+                    </a>
+                </div>
+            </div>
         </div>
+    </section>
 
-        <form method="post" novalidate>
-            {% csrf_token %}
-            <input type="hidden" name="next" value="{{ next_url }}">
-
-            {% if form.website %}
-                <div class="visually-hidden" aria-hidden="true">
-                    <label for="{{ form.website.id_for_label }}">
-                        {{ form.website.label }}
-                    </label>
-                    {{ form.website }}
+    <section class="card erc-panel erc-auth-card mx-auto" style="max-width: 36rem;">
+        <div class="card-body p-4 p-md-5">
+            <div class="erc-section-header">
+                <div>
+                    <h2 class="h3 fw-bold mb-2 erc-section-title">Account details</h2>
+                    <p class="erc-muted mb-0">
+                        Email is optional. No verification email will be sent right now.
+                    </p>
                 </div>
-            {% endif %}
+            </div>
 
-            {% if form.non_field_errors %}
-                <div class="alert alert-danger">
-                    {{ form.non_field_errors }}
-                </div>
-            {% endif %}
+            <form method="post" novalidate class="mt-4">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ next_url }}">
 
-            {% for field in form %}
-                {% if field.name != "website" %}
-                    <div class="mb-3">
-                        <label class="form-label" for="{{ field.id_for_label }}">
-                            {{ field.label }}
+                {% if form.website %}
+                    <div class="visually-hidden" aria-hidden="true">
+                        <label for="{{ form.website.id_for_label }}">
+                            {{ form.website.label }}
                         </label>
-
-                        {{ field }}
-
-                        {% if field.help_text %}
-                            <div class="form-text">
-                                {{ field.help_text }}
-                            </div>
-                        {% endif %}
-
-                        {% if field.errors %}
-                            {{ field.errors }}
-                        {% endif %}
+                        {{ form.website }}
                     </div>
                 {% endif %}
-            {% endfor %}
 
-            <button type="submit" class="btn btn-primary w-100">
-                Create account
-            </button>
-        </form>
+                {% if form.non_field_errors %}
+                    <div class="alert alert-danger">
+                        {{ form.non_field_errors }}
+                    </div>
+                {% endif %}
 
-        <hr class="border-secondary my-4">
+                {% for field in form %}
+                    {% if field.name != "website" %}
+                        <div class="mb-3">
+                            <label class="form-label" for="{{ field.id_for_label }}">
+                                {{ field.label }}
+                            </label>
 
-        <p class="text-secondary mb-0">
-            Already have an account?
-            <a href="{{ login_url }}">Log in</a>
-        </p>
-    </div>
+                            {{ field }}
+
+                            {% if field.help_text %}
+                                <div class="form-text">
+                                    {{ field.help_text }}
+                                </div>
+                            {% endif %}
+
+                            {% if field.errors %}
+                                {{ field.errors }}
+                            {% endif %}
+                        </div>
+                    {% endif %}
+                {% endfor %}
+
+                <button type="submit" class="btn btn-outline-light w-100">
+                    Create account
+                </button>
+            </form>
+
+            <hr class="border-secondary my-4">
+
+            <p class="erc-muted mb-0">
+                Already have an account?
+                <a href="{{ login_url }}" class="erc-data-link">Log in</a>
+            </p>
+        </div>
+    </section>
 </div>
 {% endblock %}
