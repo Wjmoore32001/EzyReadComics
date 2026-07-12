@@ -10,33 +10,16 @@
             <h1 class="display-6 fw-bold mb-1">{{ run }}</h1>
             <p class="erc-muted mb-0">
                 {{ run.publisher.name }}
-                {% if run.start_year %}
-                    · Started {{ run.start_year }}
+                {% if run.status %}
+                    · {{ run.get_status_display }}
+                {% endif %}
+                {% if run.issue_count %}
+                    · {{ run.issue_count }} issues
                 {% endif %}
             </p>
         </div>
 
         <div class="d-flex flex-wrap gap-2">
-            {% if request.user.is_authenticated %}
-                {% if is_following_run %}
-                    <form action="{% url 'reading:unfollow_run' run.id %}" method="post">
-                        {% csrf_token %}
-                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                        <button type="submit" class="btn btn-outline-secondary">
-                            Following
-                        </button>
-                    </form>
-                {% else %}
-                    <form action="{% url 'reading:follow_run' run.id %}" method="post">
-                        {% csrf_token %}
-                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                        <button type="submit" class="btn btn-primary">
-                            Follow run
-                        </button>
-                    </form>
-                {% endif %}
-            {% endif %}
-
             <a href="{% url 'catalog:browse' %}?run={{ run.id }}" class="btn btn-outline-secondary">
                 Back to browse
             </a>
@@ -52,8 +35,8 @@
                 <div class="col-md-3">
                     <div class="card erc-panel-flat h-100">
                         <div class="card-body">
-                            <div class="small-muted">Status</div>
-                            <div class="h5 mb-0">{{ run.get_status_display }}</div>
+                            <div class="small-muted">Publisher</div>
+                            <div class="h5 mb-0">{{ run.publisher.name }}</div>
                         </div>
                     </div>
                 </div>
@@ -61,14 +44,8 @@
                 <div class="col-md-3">
                     <div class="card erc-panel-flat h-100">
                         <div class="card-body">
-                            <div class="small-muted">Issue count</div>
-                            <div class="h5 mb-0">
-                                {% if run.issue_count %}
-                                    {{ run.issue_count }}
-                                {% else %}
-                                    <span class="erc-muted">Unknown</span>
-                                {% endif %}
-                            </div>
+                            <div class="small-muted">Status</div>
+                            <div class="h5 mb-0">{{ run.get_status_display }}</div>
                         </div>
                     </div>
                 </div>
@@ -91,7 +68,7 @@
                 <div class="col-md-3">
                     <div class="card erc-panel-flat h-100">
                         <div class="card-body">
-                            <div class="small-muted">Last issue date</div>
+                            <div class="small-muted">Latest issue date</div>
                             <div class="h5 mb-0">
                                 {% if run.last_issue_date %}
                                     {{ run.last_issue_date|date:"Y-m-d" }}
@@ -113,62 +90,92 @@
         </div>
     </section>
 
-    {% if default_credits %}
-        <section>
-            <div class="mb-3">
-                <p class="erc-page-kicker mb-1">Credits</p>
-                <h2 class="h4 fw-bold mb-0">Main credits</h2>
-            </div>
-
-            <div class="card erc-panel-flat">
-                <div class="card-body">
-                    <div class="table-responsive">
-                        <table class="table table-dark align-middle mb-0">
-                            <thead>
-                            <tr>
-                                <th scope="col">Role</th>
-                                <th scope="col">Person</th>
-                            </tr>
-                            </thead>
-                            <tbody>
-                            {% for credit in default_credits %}
-                                <tr>
-                                    <td>{{ credit.role.name }}</td>
-                                    <td class="fw-semibold">{{ credit.person.name }}</td>
-                                </tr>
-                            {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-
-                    {% if all_credits|length > default_credits|length %}
-                        <details class="mt-3">
-                            <summary class="erc-muted">Show all credits</summary>
-
-                            <div class="table-responsive mt-3">
-                                <table class="table table-dark align-middle mb-0">
-                                    <thead>
-                                    <tr>
-                                        <th scope="col">Role</th>
-                                        <th scope="col">Person</th>
-                                    </tr>
-                                    </thead>
-                                    <tbody>
-                                    {% for credit in all_credits %}
-                                        <tr>
-                                            <td>{{ credit.role.name }}</td>
-                                            <td class="fw-semibold">{{ credit.person.name }}</td>
-                                        </tr>
-                                    {% endfor %}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </details>
-                    {% endif %}
+    {% if request.user.is_authenticated %}
+        <section class="card erc-panel-flat">
+            <div class="card-body d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
+                <div>
+                    <p class="erc-page-kicker mb-1">My tracking</p>
+                    <h2 class="h5 fw-bold mb-1">Follow this run</h2>
+                    <p class="erc-muted mb-0">
+                        {% if is_following_run %}
+                            You are following this run.
+                        {% else %}
+                            Save this run to My Comics.
+                        {% endif %}
+                    </p>
                 </div>
             </div>
         </section>
     {% endif %}
+
+    <section>
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-end gap-2 mb-3">
+            <div>
+                <p class="erc-page-kicker mb-1">Single issues</p>
+                <h2 class="h4 fw-bold mb-0">Issues</h2>
+            </div>
+
+            <p class="erc-muted mb-0">
+                {{ issues|length }} result{% if issues|length != 1 %}s{% endif %}
+            </p>
+        </div>
+
+        <div class="card erc-panel-flat">
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-dark table-hover align-middle mb-0">
+                        <thead>
+                        <tr>
+                            <th scope="col">Issue</th>
+                            <th scope="col">Published Date</th>
+                            <th scope="col">Writer</th>
+                            <th scope="col">Penciller</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        {% for issue in issues %}
+                            <tr
+                                class="clickable-row"
+                                data-row-url="{% url 'catalog:issue_details' issue.id %}"
+                                tabindex="0"
+                                aria-label="Open issue details for issue {{ issue.issue_number }}"
+                            >
+                                <td class="fw-semibold">#{{ issue.issue_number }}</td>
+                                <td>
+                                    {% if issue.published_date %}
+                                        {{ issue.published_date|date:"Y-m-d" }}
+                                    {% else %}
+                                        <span class="erc-muted">Unknown</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if issue.display_writers %}
+                                        {{ issue.display_writers }}
+                                    {% else %}
+                                        <span class="erc-muted">Unknown</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if issue.display_pencillers %}
+                                        {{ issue.display_pencillers }}
+                                    {% else %}
+                                        <span class="erc-muted">Unknown</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% empty %}
+                            <tr>
+                                <td colspan="4" class="text-center erc-muted py-4">
+                                    No issues have been added for this run.
+                                </td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </section>
 
     <section>
         <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-end gap-2 mb-3">
@@ -228,7 +235,7 @@
                         {% empty %}
                             <tr>
                                 <td colspan="4" class="text-center erc-muted py-4">
-                                    No collected volumes have been added for this run yet.
+                                    No collected volumes have been added for this run.
                                 </td>
                             </tr>
                         {% endfor %}
@@ -239,73 +246,61 @@
         </div>
     </section>
 
-    <section>
-        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-end gap-2 mb-3">
-            <div>
-                <p class="erc-page-kicker mb-1">Single issues</p>
-                <h2 class="h4 fw-bold mb-0">Issues</h2>
+    {% if default_credits %}
+        <section>
+            <div class="mb-3">
+                <p class="erc-page-kicker mb-1">Credits</p>
+                <h2 class="h4 fw-bold mb-0">Main credits</h2>
             </div>
 
-            <p class="erc-muted mb-0">
-                {{ issues|length }} result{% if issues|length != 1 %}s{% endif %}
-            </p>
-        </div>
-
-        <div class="card erc-panel-flat">
-            <div class="card-body">
-                <div class="table-responsive">
-                    <table class="table table-dark table-hover align-middle mb-0">
-                        <thead>
-                        <tr>
-                            <th scope="col">Issue</th>
-                            <th scope="col">Title</th>
-                            <th scope="col">Store Date</th>
-                            <th scope="col">Cover Date</th>
-                        </tr>
-                        </thead>
-                        <tbody>
-                        {% for issue in issues %}
-                            <tr
-                                class="clickable-row"
-                                data-row-url="{% url 'catalog:issue_details' issue.id %}"
-                                tabindex="0"
-                                aria-label="Open issue details for issue {{ issue.issue_number }}"
-                            >
-                                <td class="fw-semibold">#{{ issue.issue_number }}</td>
-                                <td>
-                                    {% if issue.title %}
-                                        {{ issue.title }}
-                                    {% else %}
-                                        <span class="erc-muted">Untitled</span>
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    {% if issue.store_date %}
-                                        {{ issue.store_date|date:"Y-m-d" }}
-                                    {% else %}
-                                        <span class="erc-muted">Unknown</span>
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    {% if issue.cover_date %}
-                                        {{ issue.cover_date|date:"Y-m-d" }}
-                                    {% else %}
-                                        <span class="erc-muted">Unknown</span>
-                                    {% endif %}
-                                </td>
-                            </tr>
-                        {% empty %}
+            <div class="card erc-panel-flat">
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-dark align-middle mb-0">
+                            <thead>
                             <tr>
-                                <td colspan="4" class="text-center erc-muted py-4">
-                                    No issues have been added for this run yet.
-                                </td>
+                                <th scope="col">Role</th>
+                                <th scope="col">Person</th>
                             </tr>
-                        {% endfor %}
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody>
+                            {% for credit in default_credits %}
+                                <tr>
+                                    <td>{{ credit.role.name }}</td>
+                                    <td class="fw-semibold">{{ credit.person.name }}</td>
+                                </tr>
+                            {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {% if all_credits|length > default_credits|length %}
+                        <details class="mt-3">
+                            <summary class="erc-muted">Show all credits</summary>
+
+                            <div class="table-responsive mt-3">
+                                <table class="table table-dark align-middle mb-0">
+                                    <thead>
+                                    <tr>
+                                        <th scope="col">Role</th>
+                                        <th scope="col">Person</th>
+                                    </tr>
+                                    </thead>
+                                    <tbody>
+                                    {% for credit in all_credits %}
+                                        <tr>
+                                            <td>{{ credit.role.name }}</td>
+                                            <td class="fw-semibold">{{ credit.person.name }}</td>
+                                        </tr>
+                                    {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </details>
+                    {% endif %}
                 </div>
             </div>
-        </div>
-    </section>
+        </section>
+    {% endif %}
 </div>
 {% endblock %}

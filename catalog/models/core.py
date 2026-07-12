@@ -104,10 +104,14 @@ class ComicIssue(ImageUrlFields):
     )
 
     issue_number = models.CharField(max_length=50)
+
+    # Kept for legacy/manual data only. New ingestion should leave this blank.
     title = models.CharField(max_length=500, blank=True)
 
+    # Kept for possible future/debug display only. Main app UI should use published_date.
     cover_date = models.DateField(null=True, blank=True)
-    store_date = models.DateField(null=True, blank=True)
+
+    published_date = models.DateField(null=True, blank=True)
 
     is_released = models.BooleanField(default=True, db_index=True)
 
@@ -117,13 +121,28 @@ class ComicIssue(ImageUrlFields):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ["run", "store_date", "issue_number"]
+        ordering = ["run", "published_date", "issue_number"]
         constraints = [
             models.UniqueConstraint(
                 fields=["run", "issue_number"],
                 name="unique_comic_issue_number_per_run",
             )
         ]
+
+    @property
+    def store_date(self):
+        """
+        Temporary compatibility alias.
+
+        The actual model field is published_date now. This lets simple Python code
+        that still reads issue.store_date keep working while old commands/templates
+        are updated.
+        """
+        return self.published_date
+
+    @store_date.setter
+    def store_date(self, value):
+        self.published_date = value
 
     def __str__(self):
         return f"{self.run} #{self.issue_number}"
@@ -205,7 +224,7 @@ class ComicVolumeIssue(models.Model):
     issue_order = models.PositiveIntegerField(null=True, blank=True)
 
     class Meta:
-        ordering = ["volume", "issue_order", "issue__store_date", "issue__issue_number"]
+        ordering = ["volume", "issue_order", "issue__published_date", "issue__issue_number"]
         constraints = [
             models.UniqueConstraint(
                 fields=["volume", "issue"],

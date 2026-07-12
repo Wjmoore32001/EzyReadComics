@@ -76,7 +76,7 @@ class IssueProgress(models.Model):
         ordering = [
             "issue__run__publisher__name",
             "issue__run__title",
-            "issue__store_date",
+            "issue__published_date",
             "issue__issue_number",
         ]
         constraints = [

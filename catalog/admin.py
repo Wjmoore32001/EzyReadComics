@@ -92,14 +92,14 @@ class ComicIssueAdmin(admin.ModelAdmin):
         "run",
         "issue_number",
         "title",
-        "store_date",
+        "published_date",
         "cover_date",
         "created_at",
         "updated_at",
     ]
     list_filter = [
         "run__publisher",
-        "store_date",
+        "published_date",
         "cover_date",
     ]
     search_fields = [
