@@ -152,10 +152,7 @@
                             aria-expanded="false"
                         >
                             {% if selected_run %}
-                                {% if selected_run.start_year %}
-                                    {{ selected_run.start_year }} —
-                                {% endif %}
-                                {{ selected_run.title }}
+                                {{ selected_run.title }}{% if selected_run.start_year %} ({{ selected_run.start_year }}){% endif %}
                             {% elif selected_publisher %}
                                 All {{ selected_publisher.name }} runs
                             {% else %}
@@ -200,14 +197,8 @@
                                         data-search-label="{{ run.title }} {{ run.start_year }} {{ run.publisher.name }}"
                                     >
                                         <span class="fw-semibold">
-                                            {% if run.start_year %}
-                                                {{ run.start_year }}
-                                            {% else %}
-                                                Unknown year
-                                            {% endif %}
+                                            {{ run.title }}{% if run.start_year %} ({{ run.start_year }}){% endif %}
                                         </span>
-                                        —
-                                        {{ run.title }}
 
                                         <span class="erc-muted">
                                             · {{ run.publisher.name }}
@@ -385,7 +376,7 @@
                         >
                             <td class="fw-semibold">
                                 <a href="{% url 'catalog:run_details' run.id %}" class="erc-data-link">
-                                    {% if run.start_year %}{{ run.start_year }} — {% endif %}{{ run.title }}
+                                    {{ run.title }}{% if run.start_year %} ({{ run.start_year }}){% endif %}
                                 </a>
                             </td>
                             <td>
