@@ -1,21 +1,49 @@
 import json
 import os
 import re
-from collections import Counter
 from datetime import date
-from difflib import SequenceMatcher
 
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
-from django.db.models import Count
+from django.db.models import Count, Prefetch
 from openai import OpenAI
 
 from catalog.models import ComicIssue, ComicRun
-from comicvine.models import ComicVineIssue, ComicVineVolume
+
+from ._local_comicvine_helpers import (
+    canonical_issue_number,
+    clean_text,
+    copy_complete_comicvine_issues_to_catalog_run,
+    find_possible_comicvine_volume_matches,
+    format_comicvine_match_line,
+    is_released_from_store_date,
+    normalize_issue_number,
+    parse_date,
+    pure_integer_issue_number,
+    title_needs_repair,
+)
 
 
 DEFAULT_MODEL = "gpt-5.5"
 DEFAULT_PUBLISHER_NAME = "Marvel"
+
+
+ISSUE_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "issue_number": {"type": "string"},
+        "title": {"type": ["string", "null"]},
+        "store_date": {"type": ["string", "null"]},
+        "cover_date": {"type": ["string", "null"]},
+    },
+    "required": [
+        "issue_number",
+        "title",
+        "store_date",
+        "cover_date",
+    ],
+}
 
 
 BROAD_RESULT_SCHEMA = {
@@ -24,22 +52,7 @@ BROAD_RESULT_SCHEMA = {
     "properties": {
         "issues": {
             "type": "array",
-            "items": {
-                "type": "object",
-                "additionalProperties": False,
-                "properties": {
-                    "issue_number": {"type": "string"},
-                    "title": {"type": ["string", "null"]},
-                    "store_date": {"type": ["string", "null"]},
-                    "cover_date": {"type": ["string", "null"]},
-                },
-                "required": [
-                    "issue_number",
-                    "title",
-                    "store_date",
-                    "cover_date",
-                ],
-            },
+            "items": ISSUE_SCHEMA,
         },
     },
     "required": ["issues"],
@@ -53,22 +66,7 @@ REPAIR_RESULT_SCHEMA = {
         "verified_issue_count": {"type": ["integer", "null"]},
         "issues": {
             "type": "array",
-            "items": {
-                "type": "object",
-                "additionalProperties": False,
-                "properties": {
-                    "issue_number": {"type": "string"},
-                    "title": {"type": ["string", "null"]},
-                    "store_date": {"type": ["string", "null"]},
-                    "cover_date": {"type": ["string", "null"]},
-                },
-                "required": [
-                    "issue_number",
-                    "title",
-                    "store_date",
-                    "cover_date",
-                ],
-            },
+            "items": ISSUE_SCHEMA,
         },
     },
     "required": [
@@ -154,26 +152,11 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        api_key = os.getenv("OPENAI_API_KEY")
-
-        if not api_key:
-            raise CommandError(
-                "OPENAI_API_KEY is not set. Add it to your environment before running."
-            )
-
-        model = options["model"]
         publisher_name = clean_text(options["publisher"]) or DEFAULT_PUBLISHER_NAME
         run_id = options.get("run_id")
         forced_issue_numbers = parse_issue_numbers_argument(options.get("issue_numbers"))
         limit_runs = options["limit_runs"]
-        search_context = options["search_context"]
-        skip_comicvine_match = options["skip_comicvine_match"]
         comicvine_match_limit = options["comicvine_match_limit"]
-        skip_repair_pass = options["skip_repair_pass"]
-        include_upcoming = options["include_upcoming"]
-        dry_run = options["dry_run"]
-        print_raw = options["raw"]
-        verbose = options["verbose"]
 
         if forced_issue_numbers and not run_id:
             raise CommandError("--issue-numbers requires --run-id.")
@@ -189,19 +172,19 @@ class Command(BaseCommand):
             run_id=run_id,
             limit_runs=limit_runs,
             forced_issue_numbers=forced_issue_numbers,
-            include_upcoming=include_upcoming,
-            dry_run=dry_run,
+            include_upcoming=options["include_upcoming"],
+            dry_run=options["dry_run"],
         )
 
         self.write_header(
-            dry_run=dry_run,
-            model=model,
+            dry_run=options["dry_run"],
+            model=options["model"],
             publisher_name=publisher_name,
-            search_context=search_context,
-            skip_comicvine_match=skip_comicvine_match,
+            search_context=options["search_context"],
+            skip_comicvine_match=options["skip_comicvine_match"],
             comicvine_match_limit=comicvine_match_limit,
-            skip_repair_pass=skip_repair_pass,
-            include_upcoming=include_upcoming,
+            skip_repair_pass=options["skip_repair_pass"],
+            include_upcoming=options["include_upcoming"],
             run_id=run_id,
             forced_issue_numbers=forced_issue_numbers,
             limit_runs=limit_runs,
@@ -216,20 +199,20 @@ class Command(BaseCommand):
             )
             return
 
-        client = OpenAI(api_key=api_key)
+        totals = {
+            "ai_created": 0,
+            "ai_updated": 0,
+            "ai_skipped": 0,
+            "api_calls": 0,
+            "issue_count_corrections": 0,
+            "local_created": 0,
+            "local_updated": 0,
+        }
 
-        total_created = 0
-        total_updated = 0
-        total_skipped = 0
-        total_api_calls = 0
-        total_issue_count_corrections = 0
-        total_local_created = 0
-        total_local_updated = 0
+        client = None
 
         for run in runs:
             existing_issues = get_existing_issues(run)
-            existing_issue_map = build_existing_issue_map(existing_issues)
-
             target_issue_numbers = build_effective_target_issue_numbers(
                 run=run,
                 existing_issues=existing_issues,
@@ -245,21 +228,19 @@ class Command(BaseCommand):
                 target_issue_numbers=target_issue_numbers,
             )
 
-            if not skip_comicvine_match:
+            if not options["skip_comicvine_match"]:
                 local_result = self.handle_local_comicvine_before_api(
                     run=run,
                     publisher_name=publisher_name,
                     comicvine_match_limit=comicvine_match_limit,
-                    dry_run=dry_run,
-                    verbose=verbose,
+                    dry_run=options["dry_run"],
+                    verbose=options["verbose"],
                 )
 
-                total_local_created += local_result["created"]
-                total_local_updated += local_result["updated"]
+                totals["local_created"] += local_result["created"]
+                totals["local_updated"] += local_result["updated"]
 
                 existing_issues = get_existing_issues(run)
-                existing_issue_map = build_existing_issue_map(existing_issues)
-
                 target_issue_numbers = build_effective_target_issue_numbers(
                     run=run,
                     existing_issues=existing_issues,
@@ -283,121 +264,74 @@ class Command(BaseCommand):
                         + ", ".join(target_issue_numbers)
                     )
 
-            broad_data = self.call_broad_issue_search(
+            client = self.get_openai_client(
+                api_key=os.getenv("OPENAI_API_KEY"),
+                existing_client=client,
+            )
+
+            issue_candidates, verified_issue_count, api_calls = self.run_openai_issue_fill(
                 client=client,
-                model=model,
-                search_context=search_context,
+                model=options["model"],
+                search_context=options["search_context"],
                 run=run,
+                existing_issues=existing_issues,
                 target_issue_numbers=target_issue_numbers,
-            )
-            total_api_calls += 1
-
-            if print_raw:
-                self.stdout.write(self.style.WARNING("Raw broad JSON"))
-                self.stdout.write(json.dumps(broad_data, indent=2, ensure_ascii=False))
-                self.stdout.write("")
-
-            issue_candidates = normalize_candidate_list(broad_data.get("issues", []))
-
-            issue_candidates = ensure_candidates_for_targets(
-                candidates=issue_candidates,
-                target_issue_numbers=target_issue_numbers,
+                skip_repair_pass=options["skip_repair_pass"],
+                print_raw=options["raw"],
+                dry_run=options["dry_run"],
             )
 
-            repair_targets = find_repair_targets(issue_candidates)
-            verified_issue_count = None
+            totals["api_calls"] += api_calls
 
-            if repair_targets and not skip_repair_pass:
-                self.stdout.write(
-                    self.style.WARNING(
-                        "One batch issue-count verification and repair call needed for "
-                        f"{len(repair_targets)} incomplete issue(s)."
-                    )
-                )
-
-                repair_data = self.call_batch_repair_search(
-                    client=client,
-                    model=model,
-                    search_context=search_context,
+            if verified_issue_count is not None:
+                changed = self.reconcile_run_issue_count(
                     run=run,
-                    existing_issues=existing_issues,
-                    repair_targets=repair_targets,
-                )
-                total_api_calls += 1
-
-                if print_raw:
-                    self.stdout.write(self.style.WARNING("Raw batch repair JSON"))
-                    self.stdout.write(json.dumps(repair_data, indent=2, ensure_ascii=False))
-                    self.stdout.write("")
-
-                verified_issue_count = parse_verified_issue_count(
-                    repair_data.get("verified_issue_count")
+                    verified_issue_count=verified_issue_count,
+                    dry_run=options["dry_run"],
                 )
 
-                if verified_issue_count is not None:
-                    issue_count_changed = self.reconcile_run_issue_count(
-                        run=run,
-                        verified_issue_count=verified_issue_count,
-                        dry_run=dry_run,
-                    )
+                if changed:
+                    totals["issue_count_corrections"] += 1
 
-                    if issue_count_changed:
-                        total_issue_count_corrections += 1
-
-                issue_candidates = merge_issue_candidates(
-                    base_candidates=issue_candidates,
-                    repair_candidates=normalize_candidate_list(
-                        repair_data.get("issues", [])
-                    ),
-                )
-
-                if verified_issue_count is not None:
-                    issue_candidates = filter_candidates_by_issue_count(
-                        candidates=issue_candidates,
-                        verified_issue_count=verified_issue_count,
-                    )
-
-            elif repair_targets:
-                self.stdout.write(
-                    self.style.WARNING(
-                        "Skipped batch issue-count verification and repair for "
-                        f"{len(repair_targets)} incomplete issue(s)."
-                    )
+                issue_candidates = filter_candidates_by_issue_count(
+                    candidates=issue_candidates,
+                    verified_issue_count=verified_issue_count,
                 )
 
             self.print_result(
                 run=run,
                 issues=issue_candidates,
                 verified_issue_count=verified_issue_count,
-                verbose=verbose,
+                verbose=options["verbose"],
             )
 
-            if dry_run:
+            if options["dry_run"]:
                 continue
 
             created_count, updated_count, skipped_count = self.apply_issues(
                 run=run,
                 candidates=issue_candidates,
-                existing_issue_map=existing_issue_map,
-                verbose=verbose,
+                existing_issue_map=build_existing_issue_map(get_existing_issues(run)),
+                verbose=options["verbose"],
             )
 
-            total_created += created_count
-            total_updated += updated_count
-            total_skipped += skipped_count
+            totals["ai_created"] += created_count
+            totals["ai_updated"] += updated_count
+            totals["ai_skipped"] += skipped_count
 
-        self.stdout.write("")
-        self.stdout.write(self.style.SUCCESS("Issue fill/repair complete."))
-        self.stdout.write(f"OpenAI API calls made: {total_api_calls}")
-        self.stdout.write(f"Local Comic Vine issues created: {total_local_created}")
-        self.stdout.write(f"Local Comic Vine issues updated: {total_local_updated}")
-        self.stdout.write(f"Run issue-count corrections: {total_issue_count_corrections}")
-        self.stdout.write(f"AI-created issues: {total_created}")
-        self.stdout.write(f"AI-updated issues: {total_updated}")
-        self.stdout.write(f"Skipped AI candidates: {total_skipped}")
+        self.print_summary(totals=totals, dry_run=options["dry_run"])
 
-        if dry_run:
-            self.stdout.write("Dry run only. No catalog data was created or updated.")
+    def get_openai_client(self, *, api_key, existing_client):
+        if existing_client is not None:
+            return existing_client
+
+        if not api_key:
+            raise CommandError(
+                "OPENAI_API_KEY is not set. Local Comic Vine did not fill everything, "
+                "so OpenAI search is required."
+            )
+
+        return OpenAI(api_key=api_key)
 
     def get_runs_to_check(
         self,
@@ -409,8 +343,24 @@ class Command(BaseCommand):
         include_upcoming,
         dry_run,
     ):
+        issue_queryset = ComicIssue.objects.only(
+            "id",
+            "run_id",
+            "issue_number",
+            "title",
+            "store_date",
+            "cover_date",
+            "is_released",
+        )
+
         runs = (
             ComicRun.objects.select_related("publisher")
+            .prefetch_related(
+                Prefetch(
+                    "issues",
+                    queryset=issue_queryset,
+                )
+            )
             .annotate(attached_issue_count=Count("issues", distinct=True))
             .filter(publisher__name__iexact=publisher_name)
             .exclude(issue_count__isnull=True)
@@ -441,7 +391,6 @@ class Command(BaseCommand):
                 run.issue_count is not None
                 and run.attached_issue_count < run.issue_count
             )
-
             has_incomplete_issues = any(
                 existing_issue_needs_repair(issue)
                 for issue in existing_issues
@@ -476,7 +425,7 @@ class Command(BaseCommand):
         self.stdout.write("")
         self.stdout.write(self.style.SUCCESS("Fill/repair missing Marvel issues"))
         self.stdout.write(f"Mode: {'dry run' if dry_run else 'apply'}")
-        self.stdout.write("Source order: local Comic Vine first, OpenAI web search only if still needed")
+        self.stdout.write("Source order: local Comic Vine first, OpenAI only if still needed")
         self.stdout.write(
             "Catalog writes: "
             f"{'none' if dry_run else 'ComicRun issue_count and ComicIssue rows'}"
@@ -564,39 +513,50 @@ class Command(BaseCommand):
             self.stdout.write("Dry run: local Comic Vine issues were not copied.")
             return empty_result
 
-        self.stdout.write("0. Skip local Comic Vine issue copy")
-        choice = input("Select Comic Vine volume to copy issues from before OpenAI search: ").strip()
+        selected_volume = self.get_selected_comicvine_volume(matches)
 
-        if choice in ["", "0"]:
+        if selected_volume is None:
             self.stdout.write("Skipped local Comic Vine issue copy. Continuing to OpenAI search.")
             return empty_result
-
-        try:
-            selected_index = int(choice)
-        except ValueError:
-            self.stdout.write(
-                self.style.WARNING(
-                    "Invalid selection. Skipped local Comic Vine issue copy. Continuing to OpenAI search."
-                )
-            )
-            return empty_result
-
-        if selected_index < 1 or selected_index > len(matches):
-            self.stdout.write(
-                self.style.WARNING(
-                    "Invalid selection. Skipped local Comic Vine issue copy. Continuing to OpenAI search."
-                )
-            )
-            return empty_result
-
-        selected_volume = matches[selected_index - 1]["volume"]
 
         result = copy_complete_comicvine_issues_to_catalog_run(
             catalog_run=run,
             comicvine_volume=selected_volume,
             verbose=verbose,
+            raise_issue_count=True,
         )
 
+        self.print_local_copy_result(
+            selected_volume=selected_volume,
+            result=result,
+        )
+
+        return {
+            "selected": True,
+            "created": result["created"],
+            "updated": result["updated"],
+        }
+
+    def get_selected_comicvine_volume(self, matches):
+        self.stdout.write("0. Skip local Comic Vine issue copy")
+        choice = input("Select Comic Vine volume to copy issues from before OpenAI search: ").strip()
+
+        if choice in ["", "0"]:
+            return None
+
+        try:
+            selected_index = int(choice)
+        except ValueError:
+            self.stdout.write(self.style.WARNING("Invalid selection."))
+            return None
+
+        if selected_index < 1 or selected_index > len(matches):
+            self.stdout.write(self.style.WARNING("Invalid selection."))
+            return None
+
+        return matches[selected_index - 1]["volume"]
+
+    def print_local_copy_result(self, *, selected_volume, result):
         self.stdout.write("")
         self.stdout.write(
             self.style.SUCCESS(
@@ -629,11 +589,82 @@ class Command(BaseCommand):
         for message in result["messages"]:
             self.stdout.write(message)
 
-        return {
-            "selected": True,
-            "created": result["created"],
-            "updated": result["updated"],
-        }
+    def run_openai_issue_fill(
+        self,
+        *,
+        client,
+        model,
+        search_context,
+        run,
+        existing_issues,
+        target_issue_numbers,
+        skip_repair_pass,
+        print_raw,
+        dry_run,
+    ):
+        broad_data = self.call_broad_issue_search(
+            client=client,
+            model=model,
+            search_context=search_context,
+            run=run,
+            target_issue_numbers=target_issue_numbers,
+        )
+        api_calls = 1
+
+        if print_raw:
+            self.stdout.write(self.style.WARNING("Raw broad JSON"))
+            self.stdout.write(json.dumps(broad_data, indent=2, ensure_ascii=False))
+            self.stdout.write("")
+
+        issue_candidates = ensure_candidates_for_targets(
+            candidates=normalize_candidate_list(broad_data.get("issues", [])),
+            target_issue_numbers=target_issue_numbers,
+        )
+
+        repair_targets = find_repair_targets(issue_candidates)
+        verified_issue_count = None
+
+        if repair_targets and skip_repair_pass:
+            self.stdout.write(
+                self.style.WARNING(
+                    "Skipped batch issue-count verification and repair for "
+                    f"{len(repair_targets)} incomplete issue(s)."
+                )
+            )
+            return issue_candidates, verified_issue_count, api_calls
+
+        if repair_targets:
+            self.stdout.write(
+                self.style.WARNING(
+                    "One batch issue-count verification and repair call needed for "
+                    f"{len(repair_targets)} incomplete issue(s)."
+                )
+            )
+
+            repair_data = self.call_batch_repair_search(
+                client=client,
+                model=model,
+                search_context=search_context,
+                run=run,
+                existing_issues=existing_issues,
+                repair_targets=repair_targets,
+            )
+            api_calls += 1
+
+            if print_raw:
+                self.stdout.write(self.style.WARNING("Raw batch repair JSON"))
+                self.stdout.write(json.dumps(repair_data, indent=2, ensure_ascii=False))
+                self.stdout.write("")
+
+            verified_issue_count = parse_verified_issue_count(
+                repair_data.get("verified_issue_count")
+            )
+            issue_candidates = merge_issue_candidates(
+                base_candidates=issue_candidates,
+                repair_candidates=normalize_candidate_list(repair_data.get("issues", [])),
+            )
+
+        return issue_candidates, verified_issue_count, api_calls
 
     def call_broad_issue_search(
         self,
@@ -644,11 +675,6 @@ class Command(BaseCommand):
         run,
         target_issue_numbers,
     ):
-        prompt = build_broad_prompt(
-            run=run,
-            target_issue_numbers=target_issue_numbers,
-        )
-
         try:
             response = client.responses.create(
                 model=model,
@@ -664,13 +690,16 @@ class Command(BaseCommand):
                     {
                         "role": "system",
                         "content": (
-                            "Find confirmed comic issue metadata using web search "
-                            "and return it using the provided schema."
+                            "Find confirmed comic issue metadata. "
+                            "Return compact JSON matching the schema."
                         ),
                     },
                     {
                         "role": "user",
-                        "content": prompt,
+                        "content": build_broad_prompt(
+                            run=run,
+                            target_issue_numbers=target_issue_numbers,
+                        ),
                     },
                 ],
                 text={
@@ -697,12 +726,6 @@ class Command(BaseCommand):
         existing_issues,
         repair_targets,
     ):
-        prompt = build_repair_prompt(
-            run=run,
-            existing_issues=existing_issues,
-            repair_targets=repair_targets,
-        )
-
         try:
             response = client.responses.create(
                 model=model,
@@ -718,13 +741,17 @@ class Command(BaseCommand):
                     {
                         "role": "system",
                         "content": (
-                            "Verify a comic run's current issue count and find missing issue metadata "
-                            "using web search. Return the result using the provided schema."
+                            "Verify a comic run issue count and fill missing issue metadata. "
+                            "Return compact JSON matching the schema."
                         ),
                     },
                     {
                         "role": "user",
-                        "content": prompt,
+                        "content": build_repair_prompt(
+                            run=run,
+                            existing_issues=existing_issues,
+                            repair_targets=repair_targets,
+                        ),
                     },
                 ],
                 text={
@@ -772,16 +799,12 @@ class Command(BaseCommand):
         return True
 
     def print_result(self, *, run, issues, verified_issue_count, verbose):
-        ready_count = 0
-        incomplete_count = 0
-        incomplete_numbers = []
-
-        for issue in issues:
-            if candidate_has_required_fields(issue):
-                ready_count += 1
-            else:
-                incomplete_count += 1
-                incomplete_numbers.append(f"#{issue.get('issue_number') or '?'}")
+        ready_count = sum(1 for issue in issues if candidate_has_required_fields(issue))
+        incomplete_numbers = [
+            f"#{issue.get('issue_number') or '?'}"
+            for issue in issues
+            if not candidate_has_required_fields(issue)
+        ]
 
         self.stdout.write("")
 
@@ -790,7 +813,7 @@ class Command(BaseCommand):
 
         self.stdout.write(
             "Issue candidates after OpenAI search and repair: "
-            f"{len(issues)} ({ready_count} ready, {incomplete_count} incomplete)"
+            f"{len(issues)} ({ready_count} ready, {len(incomplete_numbers)} incomplete)"
         )
 
         if incomplete_numbers:
@@ -803,15 +826,12 @@ class Command(BaseCommand):
 
         for index, issue in enumerate(issues, start=1):
             issue_number = issue.get("issue_number") or "?"
-            title = issue.get("title") or "[blank]"
-            store_date = issue.get("store_date") or "unknown"
-            cover_date = issue.get("cover_date") or "unknown"
             missing_fields = get_missing_candidate_fields(issue)
 
             self.stdout.write(f"{index}. {run.title} #{issue_number}")
-            self.stdout.write(f"   Title: {title}")
-            self.stdout.write(f"   Store date: {store_date}")
-            self.stdout.write(f"   Cover date: {cover_date}")
+            self.stdout.write(f"   Title: {issue.get('title') or '[blank]'}")
+            self.stdout.write(f"   Store date: {issue.get('store_date') or 'unknown'}")
+            self.stdout.write(f"   Cover date: {issue.get('cover_date') or 'unknown'}")
 
             if missing_fields:
                 self.stdout.write("   Still missing: " + ", ".join(missing_fields))
@@ -875,6 +895,20 @@ class Command(BaseCommand):
 
         return created_count, updated_count, skipped_count
 
+    def print_summary(self, *, totals, dry_run):
+        self.stdout.write("")
+        self.stdout.write(self.style.SUCCESS("Issue fill/repair complete."))
+        self.stdout.write(f"OpenAI API calls made: {totals['api_calls']}")
+        self.stdout.write(f"Local Comic Vine issues created: {totals['local_created']}")
+        self.stdout.write(f"Local Comic Vine issues updated: {totals['local_updated']}")
+        self.stdout.write(f"Run issue-count corrections: {totals['issue_count_corrections']}")
+        self.stdout.write(f"AI-created issues: {totals['ai_created']}")
+        self.stdout.write(f"AI-updated issues: {totals['ai_updated']}")
+        self.stdout.write(f"Skipped AI candidates: {totals['ai_skipped']}")
+
+        if dry_run:
+            self.stdout.write("Dry run only. No catalog data was created or updated.")
+
 
 def get_existing_issues(run):
     return list(
@@ -911,8 +945,7 @@ def build_forced_target_issue_numbers(*, forced_issue_numbers, existing_issues):
     target_issue_numbers = []
 
     for issue_number in forced_issue_numbers:
-        normalized_issue_number = normalize_issue_number(issue_number)
-        existing_issue = existing_issue_map.get(normalized_issue_number)
+        existing_issue = existing_issue_map.get(normalize_issue_number(issue_number))
 
         if existing_issue is None or existing_issue_needs_repair(existing_issue):
             target_issue_numbers.append(issue_number)
@@ -927,21 +960,16 @@ def build_broad_prompt(*, run, target_issue_numbers):
     )
 
     return f"""
-Comic run:
-Publisher: {run.publisher.name}
-Title: {run.title}
-Start year: {run.start_year or "unknown"}
+Comic run: {run.publisher.name} — {run.title} ({run.start_year or "unknown"})
+Issue numbers: {target_text}
 
-Issue numbers:
-{target_text}
+Find each issue's individual title, on-sale date, and cover date.
 
-Find the individual issue title, on-sale date, and cover date for every listed issue number.
-
-Use information that clearly matches this publisher, run, year, and issue number.
-
-Return one issue object for every requested issue number.
-
-Use YYYY-MM-DD for dates. If a cover date only gives a month and year, use the first day of that month.
+Rules:
+- Match this publisher, run, year, and issue number.
+- Return one object per requested issue number.
+- Dates must use YYYY-MM-DD.
+- If cover date is only month/year, use that month's first day.
 """.strip()
 
 
@@ -951,54 +979,47 @@ def build_repair_prompt(*, run, existing_issues, repair_targets):
         for issue in existing_issues
     ) or "none"
 
-    target_lines = []
-
-    for target in repair_targets:
-        issue_number = canonical_issue_number(target["issue_number"])
-        missing_fields = ", ".join(target["missing_fields"])
-
-        target_lines.append(
-            f"{issue_number}: "
-            f"title={target.get('title') or 'null'}; "
-            f"store_date={target.get('store_date') or 'null'}; "
-            f"cover_date={target.get('cover_date') or 'null'}; "
-            f"find={missing_fields}"
-        )
-
-    target_text = "\n".join(target_lines)
+    target_text = "\n".join(
+        format_repair_target(target)
+        for target in repair_targets
+    )
 
     return f"""
 Current date: {date.today().isoformat()}
-
-Comic run:
-Publisher: {run.publisher.name}
-Title: {run.title}
-Start year: {run.start_year or "unknown"}
+Comic run: {run.publisher.name} — {run.title} ({run.start_year or "unknown"})
 Catalog issue_count: {run.issue_count}
 Existing catalog issue numbers: {existing_numbers}
 
 Incomplete issue candidates:
 {target_text}
 
-First verify the number of released or officially solicited numbered issues in this exact run.
+First verify the released or officially solicited numbered issue count for this exact run and return it as verified_issue_count.
 
-Return that number as verified_issue_count.
+Then return metadata only for listed candidates that actually exist within verified_issue_count.
 
-Then return metadata only for incomplete issue candidates that actually exist within the verified issue count.
-
-For each existing candidate, return its issue number, individual issue title, on-sale date, and cover date.
-
-Do not return candidates whose issue numbers are above verified_issue_count.
-
-Use information that clearly matches this publisher, run, year, and issue number.
-
-Use YYYY-MM-DD for dates. If a cover date only gives a month and year, use the first day of that month.
+Rules:
+- Keep known values unless a better confirmed value is found.
+- Do not return candidates above verified_issue_count.
+- Dates must use YYYY-MM-DD.
+- If cover date is only month/year, use that month's first day.
 """.strip()
+
+
+def format_repair_target(target):
+    issue_number = canonical_issue_number(target["issue_number"])
+    missing_fields = ",".join(target["missing_fields"])
+
+    return (
+        f"{issue_number}: "
+        f"title={target.get('title') or 'null'}; "
+        f"store_date={target.get('store_date') or 'null'}; "
+        f"cover_date={target.get('cover_date') or 'null'}; "
+        f"find={missing_fields}"
+    )
 
 
 def normalize_run_status_before_issue_fill(*, run, dry_run):
     today = date.today()
-
     upcoming_status = getattr(ComicRun, "STATUS_UPCOMING", "upcoming")
     ongoing_status = getattr(ComicRun, "STATUS_ONGOING", "ongoing")
     attached_issue_count = getattr(run, "attached_issue_count", None)
@@ -1020,10 +1041,7 @@ def normalize_run_status_before_issue_fill(*, run, dry_run):
         return True
 
     if run.status == upcoming_status:
-        if run.first_issue_date is None:
-            return True
-
-        if run.first_issue_date > today:
+        if run.first_issue_date is None or run.first_issue_date > today:
             return True
 
         run.status = ongoing_status
@@ -1093,298 +1111,6 @@ def filter_candidates_by_issue_count(*, candidates, verified_issue_count):
     return sort_candidates(filtered)
 
 
-def find_possible_comicvine_volume_matches(*, title, start_year, publisher_name, limit):
-    normalized_title = normalize_title(title)
-    cleaned_year = clean_text(start_year)
-
-    if not normalized_title:
-        return []
-
-    volumes = ComicVineVolume.objects.prefetch_related("issues").all()
-
-    if cleaned_year:
-        volumes = volumes.filter(start_year=cleaned_year)
-
-    if publisher_name:
-        publisher_filtered = volumes.filter(publisher__iexact=publisher_name)
-
-        if publisher_filtered.exists():
-            volumes = publisher_filtered
-
-    matches = []
-
-    for volume in volumes:
-        score = rough_title_score(title, volume.name)
-
-        if score < 0.34:
-            continue
-
-        source_issues = list(volume.issues.all())
-
-        complete_issue_count = sum(
-            1
-            for issue in source_issues
-            if not get_source_issue_validation_errors(issue)
-        )
-
-        matches.append(
-            {
-                "volume": volume,
-                "score": score,
-                "issue_count": len(source_issues),
-                "complete_issue_count": complete_issue_count,
-            }
-        )
-
-    matches.sort(
-        key=lambda item: (
-            item["score"],
-            item["complete_issue_count"],
-            item["issue_count"],
-        ),
-        reverse=True,
-    )
-
-    return matches[:limit]
-
-
-def rough_title_score(catalog_title, comicvine_title):
-    catalog_normalized = normalize_title(catalog_title)
-    comicvine_normalized = normalize_title(comicvine_title)
-
-    if not catalog_normalized or not comicvine_normalized:
-        return 0.0
-
-    if catalog_normalized == comicvine_normalized:
-        return 1.0
-
-    if catalog_normalized in comicvine_normalized or comicvine_normalized in catalog_normalized:
-        return 0.92
-
-    catalog_tokens = set(catalog_normalized.split())
-    comicvine_tokens = set(comicvine_normalized.split())
-
-    if not catalog_tokens or not comicvine_tokens:
-        return 0.0
-
-    overlap = len(catalog_tokens & comicvine_tokens)
-    token_score = overlap / max(len(catalog_tokens), len(comicvine_tokens))
-    sequence_score = SequenceMatcher(
-        None,
-        catalog_normalized,
-        comicvine_normalized,
-    ).ratio()
-
-    return max(token_score, sequence_score)
-
-
-def format_comicvine_match_line(*, index, match):
-    volume = match["volume"]
-
-    return (
-        f"{index}. {volume.name} "
-        f"({volume.start_year or 'unknown year'}) "
-        f"[comicvine_id={volume.comicvine_id}, local_id={volume.id}, "
-        f"issues={match['issue_count']}, complete={match['complete_issue_count']}, "
-        f"score={match['score']:.2f}]"
-    )
-
-
-def copy_complete_comicvine_issues_to_catalog_run(*, catalog_run, comicvine_volume, verbose):
-    source_issues = list(
-        ComicVineIssue.objects.filter(volume=comicvine_volume)
-        .order_by("store_date", "cover_date", "issue_number", "id")
-    )
-
-    existing_catalog_issues = {
-        normalize_issue_number(issue.issue_number): issue
-        for issue in catalog_run.issues.all()
-    }
-
-    created_count = 0
-    updated_count = 0
-    unchanged_count = 0
-    skipped_count = 0
-    skipped_reasons = Counter()
-    messages = []
-
-    old_issue_count = catalog_run.issue_count
-    highest_source_issue_number = highest_numeric_issue_number(source_issues)
-    issue_count_updated = False
-
-    with transaction.atomic():
-        for source_issue in source_issues:
-            validation_errors = get_source_issue_validation_errors(source_issue)
-
-            if validation_errors:
-                skipped_count += 1
-
-                for reason in validation_errors:
-                    skipped_reasons[reason] += 1
-
-                if verbose:
-                    messages.append(
-                        format_source_skip_line(
-                            source_issue=source_issue,
-                            reasons=validation_errors,
-                        )
-                    )
-
-                continue
-
-            issue_number = canonical_issue_number(source_issue.issue_number)
-            normalized_issue_number = normalize_issue_number(issue_number)
-            existing_issue = existing_catalog_issues.get(normalized_issue_number)
-
-            if existing_issue:
-                changed = update_existing_catalog_issue_from_source(
-                    catalog_issue=existing_issue,
-                    source_issue=source_issue,
-                )
-
-                if changed:
-                    existing_issue.save()
-                    updated_count += 1
-
-                    if verbose:
-                        messages.append(f"Updated catalog issue from Comic Vine: {existing_issue}")
-                else:
-                    unchanged_count += 1
-
-                    if verbose:
-                        messages.append(f"Already complete: {existing_issue}")
-
-                continue
-
-            catalog_issue = ComicIssue.objects.create(
-                run=catalog_run,
-                issue_number=issue_number,
-                title=clean_text(source_issue.issue_title),
-                store_date=source_issue.store_date,
-                cover_date=source_issue.cover_date,
-                is_released=is_released_from_store_date(source_issue.store_date),
-                description="",
-            )
-
-            existing_catalog_issues[normalized_issue_number] = catalog_issue
-            created_count += 1
-
-            if verbose:
-                messages.append(f"Created catalog issue from Comic Vine: {catalog_issue}")
-
-        if (
-            highest_source_issue_number is not None
-            and (
-                catalog_run.issue_count is None
-                or catalog_run.issue_count < highest_source_issue_number
-            )
-        ):
-            catalog_run.issue_count = highest_source_issue_number
-            catalog_run.save(update_fields=["issue_count", "updated_at"])
-            issue_count_updated = True
-
-    return {
-        "checked": len(source_issues),
-        "created": created_count,
-        "updated": updated_count,
-        "unchanged": unchanged_count,
-        "skipped": skipped_count,
-        "skipped_reasons": skipped_reasons,
-        "messages": messages,
-        "issue_count_updated": issue_count_updated,
-        "old_issue_count": old_issue_count,
-        "new_issue_count": catalog_run.issue_count,
-    }
-
-
-def highest_numeric_issue_number(source_issues):
-    highest = None
-
-    for issue in source_issues:
-        numeric_issue_number = pure_integer_issue_number(issue.issue_number)
-
-        if numeric_issue_number is None:
-            continue
-
-        if highest is None or numeric_issue_number > highest:
-            highest = numeric_issue_number
-
-    return highest
-
-
-def get_source_issue_validation_errors(source_issue):
-    errors = []
-
-    if not canonical_issue_number(source_issue.issue_number):
-        errors.append("missing issue_number")
-
-    if not clean_text(source_issue.issue_title):
-        errors.append("missing title")
-
-    if source_issue.store_date is None:
-        errors.append("missing store_date")
-
-    if source_issue.cover_date is None:
-        errors.append("missing cover_date")
-
-    return errors
-
-
-def update_existing_catalog_issue_from_source(*, catalog_issue, source_issue):
-    changed = False
-    source_issue_number = canonical_issue_number(source_issue.issue_number)
-
-    if source_issue_number and catalog_issue.issue_number != source_issue_number:
-        duplicate_exists = (
-            ComicIssue.objects.filter(
-                run=catalog_issue.run,
-                issue_number=source_issue_number,
-            )
-            .exclude(id=catalog_issue.id)
-            .exists()
-        )
-
-        if not duplicate_exists:
-            catalog_issue.issue_number = source_issue_number
-            changed = True
-
-    source_title = clean_text(source_issue.issue_title)
-
-    if title_needs_repair(catalog_issue.title) and source_title:
-        catalog_issue.title = source_title
-        changed = True
-
-    if catalog_issue.store_date is None and source_issue.store_date is not None:
-        catalog_issue.store_date = source_issue.store_date
-        changed = True
-
-    if catalog_issue.cover_date is None and source_issue.cover_date is not None:
-        catalog_issue.cover_date = source_issue.cover_date
-        changed = True
-
-    source_is_released = is_released_from_store_date(source_issue.store_date)
-
-    if catalog_issue.is_released != source_is_released:
-        catalog_issue.is_released = source_is_released
-        changed = True
-
-    return changed
-
-
-def format_source_skip_line(*, source_issue, reasons):
-    issue_number = clean_text(source_issue.issue_number) or "?"
-    title = clean_text(source_issue.issue_title) or "[blank]"
-    reason_text = ", ".join(reasons)
-
-    return (
-        f"Skipped Comic Vine issue #{issue_number}: "
-        f"title={title}; "
-        f"store_date={source_issue.store_date or 'missing'}; "
-        f"cover_date={source_issue.cover_date or 'missing'}; "
-        f"reason={reason_text}"
-    )
-
-
 def parse_response_json(output_text):
     try:
         return json.loads(output_text)
@@ -1445,26 +1171,22 @@ def merge_issue_candidates(*, base_candidates, repair_candidates):
         if not normalized_issue_number:
             continue
 
-        base = merged.get(normalized_issue_number, {})
-
-        merged[normalized_issue_number] = merge_candidate(base, repair)
+        merged[normalized_issue_number] = merge_candidate(
+            merged.get(normalized_issue_number, {}),
+            repair,
+        )
 
     return sort_candidates(merged.values())
 
 
 def merge_candidate(base, repair):
     merged = dict(base)
-
     repair_issue_number = canonical_issue_number(repair.get("issue_number"))
 
     if repair_issue_number:
         merged["issue_number"] = repair_issue_number
 
-    for field_name in [
-        "title",
-        "store_date",
-        "cover_date",
-    ]:
+    for field_name in ["title", "store_date", "cover_date"]:
         repair_value = clean_text(repair.get(field_name))
 
         if repair_value:
@@ -1533,15 +1255,6 @@ def existing_issue_needs_repair(issue):
     return False
 
 
-def title_needs_repair(title):
-    title = clean_text(title)
-
-    if not title:
-        return True
-
-    return title.casefold() == "untitled"
-
-
 def count_incomplete_existing_issues(issues):
     return sum(
         1
@@ -1596,31 +1309,9 @@ def update_existing_issue_from_candidate(*, issue, candidate):
 
 
 def calculate_is_released(candidate):
-    store_date = parse_date(candidate.get("store_date"))
-
-    if store_date is None:
-        return False
-
-    return store_date <= date.today()
-
-
-def is_released_from_store_date(store_date):
-    if store_date is None:
-        return False
-
-    return store_date <= date.today()
-
-
-def parse_date(value):
-    value = clean_text(value)
-
-    if not value:
-        return None
-
-    try:
-        return date.fromisoformat(value)
-    except ValueError:
-        return None
+    return is_released_from_store_date(
+        parse_date(candidate.get("store_date"))
+    )
 
 
 def parse_issue_numbers_argument(value):
@@ -1636,32 +1327,6 @@ def parse_issue_numbers_argument(value):
             issue_numbers.append(issue_number)
 
     return sort_issue_numbers(unique_issue_numbers(issue_numbers))
-
-
-def canonical_issue_number(value):
-    value = clean_text(value)
-    value = re.sub(r"^\s*issue\s*", "", value, flags=re.IGNORECASE)
-    value = re.sub(r"^\s*no\.?\s*", "", value, flags=re.IGNORECASE)
-
-    while value.startswith("#"):
-        value = value[1:].strip()
-
-    return value.strip()
-
-
-def normalize_issue_number(value):
-    value = canonical_issue_number(value).casefold()
-    value = re.sub(r"[^a-z0-9.]+", "", value)
-    return value
-
-
-def pure_integer_issue_number(value):
-    value = canonical_issue_number(value)
-
-    if not value.isdigit():
-        return None
-
-    return int(value)
 
 
 def unique_issue_numbers(numbers):
@@ -1699,38 +1364,4 @@ def issue_number_sort_key(value):
     if not match:
         return 999999, value
 
-    number = int(match.group(1))
-    suffix = match.group(2)
-
-    return number, suffix
-
-
-def normalize_title(value):
-    title = clean_text(value).casefold()
-    title = re.sub(r"^the\s+", "", title)
-    title = re.sub(r"[^a-z0-9]+", " ", title)
-    title = " ".join(title.split())
-
-    stop_words = {
-        "a",
-        "an",
-        "and",
-        "by",
-        "of",
-        "the",
-    }
-
-    tokens = [
-        token
-        for token in title.split()
-        if token not in stop_words
-    ]
-
-    return " ".join(tokens)
-
-
-def clean_text(value):
-    if value is None:
-        return ""
-
-    return str(value).strip()
+    return int(match.group(1)), match.group(2)

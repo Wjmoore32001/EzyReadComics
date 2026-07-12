@@ -1,17 +1,21 @@
 import json
 import os
-import re
-from collections import Counter
-from datetime import date
-from difflib import SequenceMatcher
 
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from django.utils.text import slugify
 from openai import OpenAI
 
-from catalog.models import ComicIssue, ComicPublisher, ComicRun
-from comicvine.models import ComicVineIssue, ComicVineVolume
+from catalog.models import ComicPublisher, ComicRun
+
+from ._local_comicvine_helpers import (
+    clean_text,
+    copy_complete_comicvine_issues_to_catalog_run,
+    find_possible_comicvine_volume_matches,
+    format_comicvine_match_line,
+    normalize_title,
+    parse_date,
+)
 
 
 DEFAULT_MODEL = "gpt-5.5"
@@ -52,6 +56,26 @@ RESULT_SCHEMA = {
 }
 
 
+REQUIRED_TEXT_FIELDS = [
+    "title",
+    "start_year",
+    "status",
+    "first_issue_date",
+    "last_issue_date",
+    "description",
+]
+
+DATE_FIELDS = [
+    "first_issue_date",
+    "last_issue_date",
+]
+
+VALID_STATUSES = {
+    "ongoing",
+    "upcoming",
+}
+
+
 class Command(BaseCommand):
     help = (
         "Find current or upcoming Marvel comic runs missing from catalog using OpenAI web search. "
@@ -63,7 +87,7 @@ class Command(BaseCommand):
             "--limit",
             type=int,
             default=1,
-            help="Maximum number of missing run candidates to ask AI for. Default: 1",
+            help="Maximum missing run candidates to request. Default: 1",
         )
         parser.add_argument(
             "--model",
@@ -90,7 +114,7 @@ class Command(BaseCommand):
             "--comicvine-match-limit",
             type=int,
             default=8,
-            help="Maximum local Comic Vine volume matches to show after creating a run. Default: 8",
+            help="Maximum local Comic Vine volume matches to show. Default: 8",
         )
         parser.add_argument(
             "--dry-run",
@@ -109,22 +133,21 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
+        limit = options["limit"]
+        comicvine_match_limit = options["comicvine_match_limit"]
+
+        if limit < 1:
+            raise CommandError("--limit must be at least 1.")
+
+        if comicvine_match_limit < 1:
+            raise CommandError("--comicvine-match-limit must be at least 1.")
+
         api_key = os.getenv("OPENAI_API_KEY")
 
         if not api_key:
             raise CommandError(
                 "OPENAI_API_KEY is not set. Add it to your .env file before running this command."
             )
-
-        limit = options["limit"]
-
-        if limit < 1:
-            raise CommandError("--limit must be at least 1.")
-
-        comicvine_match_limit = options["comicvine_match_limit"]
-
-        if comicvine_match_limit < 1:
-            raise CommandError("--comicvine-match-limit must be at least 1.")
 
         model = options["model"]
         publisher_name = clean_text(options["publisher"]) or DEFAULT_PUBLISHER_NAME
@@ -141,7 +164,7 @@ class Command(BaseCommand):
         }
 
         self.write_header(
-            mode="dry run" if dry_run else "apply",
+            dry_run=dry_run,
             model=model,
             publisher_name=publisher_name,
             search_context=search_context,
@@ -153,7 +176,7 @@ class Command(BaseCommand):
 
         client = OpenAI(api_key=api_key)
 
-        broad_data = self.call_run_search(
+        data = self.call_run_search(
             client=client,
             model=model,
             search_context=search_context,
@@ -167,10 +190,9 @@ class Command(BaseCommand):
         if print_raw:
             self.stdout.write("")
             self.stdout.write(self.style.WARNING("Raw run search JSON"))
-            self.stdout.write(json.dumps(broad_data, indent=2, ensure_ascii=False))
+            self.stdout.write(json.dumps(data, indent=2, ensure_ascii=False))
 
-        candidates = normalize_candidate_list(broad_data.get("candidates", []))
-
+        candidates = normalize_candidate_list(data.get("candidates", []))
         self.print_result(candidates=candidates, verbose=verbose)
 
         if dry_run:
@@ -203,7 +225,7 @@ class Command(BaseCommand):
     def write_header(
         self,
         *,
-        mode,
+        dry_run,
         model,
         publisher_name,
         search_context,
@@ -214,13 +236,16 @@ class Command(BaseCommand):
     ):
         self.stdout.write("")
         self.stdout.write(self.style.SUCCESS("Find missing Marvel runs with AI"))
-        self.stdout.write(f"Mode: {mode}")
+        self.stdout.write(f"Mode: {'dry run' if dry_run else 'apply'}")
         self.stdout.write("Source: OpenAI Responses API web search")
         self.stdout.write(
-            f"Catalog writes: {'none' if mode == 'dry run' else 'create missing ComicRun rows only'}"
+            f"Catalog writes: {'none' if dry_run else 'create missing ComicRun rows only'}"
         )
         self.stdout.write("Creates issues from OpenAI: no")
-        self.stdout.write("Local Comic Vine issue copy: " + ("off" if skip_comicvine_match else "prompt after run create"))
+        self.stdout.write(
+            "Local Comic Vine issue copy: "
+            + ("off" if skip_comicvine_match else "prompt after run create")
+        )
         self.stdout.write("Creates volumes: no")
         self.stdout.write("Creates credits/images: no")
         self.stdout.write(f"Model: {model}")
@@ -241,12 +266,6 @@ class Command(BaseCommand):
         existing_runs,
         limit,
     ):
-        prompt = build_broad_prompt(
-            publisher_name=publisher_name,
-            existing_runs=existing_runs,
-            limit=limit,
-        )
-
         try:
             response = client.responses.create(
                 model=model,
@@ -262,13 +281,17 @@ class Command(BaseCommand):
                     {
                         "role": "system",
                         "content": (
-                            "Find confirmed current or upcoming comic run catalog fields "
-                            "using web search and return JSON matching the schema."
+                            "Find confirmed current or upcoming comic run catalog fields. "
+                            "Return compact JSON matching the schema."
                         ),
                     },
                     {
                         "role": "user",
-                        "content": prompt,
+                        "content": build_broad_prompt(
+                            publisher_name=publisher_name,
+                            existing_runs=existing_runs,
+                            limit=limit,
+                        ),
                     },
                 ],
                 text={
@@ -286,21 +309,17 @@ class Command(BaseCommand):
         return parse_response_json(response.output_text)
 
     def print_result(self, *, candidates, verbose):
-        ready_count = 0
-        incomplete_count = 0
-        incomplete_titles = []
-
-        for candidate in candidates:
-            if candidate_has_required_fields(candidate):
-                ready_count += 1
-            else:
-                incomplete_count += 1
-                incomplete_titles.append(candidate.get("title") or "[blank title]")
+        ready_count = sum(1 for candidate in candidates if candidate_has_required_fields(candidate))
+        incomplete_titles = [
+            candidate.get("title") or "[blank title]"
+            for candidate in candidates
+            if not candidate_has_required_fields(candidate)
+        ]
 
         self.stdout.write("")
         self.stdout.write(
             f"Run candidates found: {len(candidates)} "
-            f"({ready_count} ready, {incomplete_count} incomplete)"
+            f"({ready_count} ready, {len(incomplete_titles)} incomplete)"
         )
 
         if incomplete_titles:
@@ -320,7 +339,7 @@ class Command(BaseCommand):
             )
             self.stdout.write(f"   Status: {candidate.get('status') or 'unknown'}")
             self.stdout.write(
-                f"   Issue count: "
+                "   Issue count: "
                 f"{candidate.get('issue_count') if candidate.get('issue_count') is not None else 'unknown'}"
             )
             self.stdout.write(f"   First issue date: {candidate.get('first_issue_date') or 'unknown'}")
@@ -366,21 +385,14 @@ class Command(BaseCommand):
             )
 
             self.stdout.write("")
-            self.stdout.write(
-                f"{candidate['title']} ({candidate['start_year']})"
-            )
+            self.stdout.write(f"{candidate['title']} ({candidate['start_year']})")
 
             if not matches:
                 self.stdout.write("  No likely local Comic Vine volume matches.")
                 continue
 
             for index, match in enumerate(matches, start=1):
-                self.stdout.write(
-                    format_comicvine_match_line(
-                        index=index,
-                        match=match,
-                    )
-                )
+                self.stdout.write(format_comicvine_match_line(index=index, match=match))
 
     def apply_candidates(
         self,
@@ -394,7 +406,6 @@ class Command(BaseCommand):
     ):
         created_count = 0
         skipped_count = 0
-
         publisher = get_or_create_publisher(publisher_name)
 
         for candidate in candidates:
@@ -402,11 +413,7 @@ class Command(BaseCommand):
             start_year = clean_text(candidate.get("start_year"))
             candidate_key = run_key(title, start_year)
 
-            if not candidate_has_required_fields(candidate):
-                skipped_count += 1
-                continue
-
-            if candidate_key in existing_run_keys:
+            if not candidate_has_required_fields(candidate) or candidate_key in existing_run_keys:
                 skipped_count += 1
                 continue
 
@@ -467,50 +474,60 @@ class Command(BaseCommand):
         if not matches:
             self.stdout.write(
                 self.style.WARNING(
-                    f"No likely local Comic Vine volume matches for {run.title} ({run.start_year or 'unknown year'})."
+                    f"No likely local Comic Vine volume matches for {run.title} "
+                    f"({run.start_year or 'unknown year'})."
                 )
             )
             return
 
         self.stdout.write(
             self.style.WARNING(
-                f"Possible local Comic Vine matches for {run.title} ({run.start_year or 'unknown year'}):"
+                f"Possible local Comic Vine matches for {run.title} "
+                f"({run.start_year or 'unknown year'}):"
             )
         )
 
         for index, match in enumerate(matches, start=1):
-            self.stdout.write(
-                format_comicvine_match_line(
-                    index=index,
-                    match=match,
-                )
-            )
+            self.stdout.write(format_comicvine_match_line(index=index, match=match))
 
-        self.stdout.write("0. Skip local Comic Vine issue copy")
-        choice = input("Select Comic Vine volume to copy issues from: ").strip()
+        selected_volume = self.get_selected_comicvine_volume(matches)
 
-        if choice in ["", "0"]:
+        if selected_volume is None:
             self.stdout.write("Skipped local Comic Vine issue copy.")
             return
-
-        try:
-            selected_index = int(choice)
-        except ValueError:
-            self.stdout.write(self.style.WARNING("Invalid selection. Skipped local Comic Vine issue copy."))
-            return
-
-        if selected_index < 1 or selected_index > len(matches):
-            self.stdout.write(self.style.WARNING("Invalid selection. Skipped local Comic Vine issue copy."))
-            return
-
-        selected_volume = matches[selected_index - 1]["volume"]
 
         result = copy_complete_comicvine_issues_to_catalog_run(
             catalog_run=run,
             comicvine_volume=selected_volume,
             verbose=verbose,
+            raise_issue_count=False,
         )
 
+        self.print_local_copy_result(
+            selected_volume=selected_volume,
+            result=result,
+        )
+
+    def get_selected_comicvine_volume(self, matches):
+        self.stdout.write("0. Skip local Comic Vine issue copy")
+        choice = input("Select Comic Vine volume to copy issues from: ").strip()
+
+        if choice in ["", "0"]:
+            return None
+
+        try:
+            selected_index = int(choice)
+        except ValueError:
+            self.stdout.write(self.style.WARNING("Invalid selection."))
+            return None
+
+        if selected_index < 1 or selected_index > len(matches):
+            self.stdout.write(self.style.WARNING("Invalid selection."))
+            return None
+
+        return matches[selected_index - 1]["volume"]
+
+    def print_local_copy_result(self, *, selected_volume, result):
         self.stdout.write("")
         self.stdout.write(
             self.style.SUCCESS(
@@ -531,54 +548,44 @@ class Command(BaseCommand):
             for reason, count in sorted(result["skipped_reasons"].items()):
                 self.stdout.write(f"- {reason}: {count}")
 
+        for message in result["messages"]:
+            self.stdout.write(message)
+
 
 def build_broad_prompt(*, publisher_name, existing_runs, limit):
-    existing_runs_text = build_existing_runs_text(existing_runs)
-    today = date.today().isoformat()
-
     return f"""
-Find up to {limit} current or upcoming {publisher_name} numbered comic runs that are not already in the catalog.
+Find up to {limit} current or upcoming {publisher_name} numbered comic runs not already in the catalog.
 
-Today:
-{today}
+Today: {__import__("datetime").date.today().isoformat()}
 
-Existing catalog runs to exclude:
-{existing_runs_text}
+Existing catalog runs:
+{build_existing_runs_text(existing_runs)}
 
-Required fields:
-- title
-- start_year
-- status
-- issue_count
-- first_issue_date
-- last_issue_date
-- description
+Return these fields: title, start_year, status, issue_count, first_issue_date, last_issue_date, description.
 
 Rules:
-- Search the open web broadly.
-- Only use results that clearly match the publisher, run title, and start year.
-- status must be upcoming if issue #1 has a future on-sale date.
-- status must be ongoing if issue #1 is already on sale and the run is not completed.
-- issue_count is the count of released plus officially solicited issues for the current run.
-- first_issue_date is the issue #1 on-sale date.
-- last_issue_date is the latest released or officially solicited issue on-sale date.
-- description must be a short plain catalog description under 180 characters.
-- Exclude collected editions, trades, omnibuses, hardcovers, facsimiles, reprints, variants, posters, art books, toys, prose books, one-shots, and completed older runs.
-- Exclude finite limited series unless a reliable source explicitly treats it as an ongoing run.
-- Use YYYY-MM-DD for dates.
-- Use null for fields still unknown.
+- status is upcoming if issue #1 has a future on-sale date.
+- status is ongoing if issue #1 is already on sale and the run is not completed.
+- issue_count is released plus officially solicited issues.
+- first_issue_date is issue #1 on-sale date.
+- last_issue_date is latest released or solicited issue on-sale date.
+- description is plain text under 180 characters.
+- Exclude collected editions, trades, omnibuses, hardcovers, facsimiles, reprints, variants, posters, art books, toys, prose books, one-shots, completed older runs, and finite limited series unless a reliable source explicitly treats it as ongoing.
+- Dates must use YYYY-MM-DD.
+- Use null for unknown fields.
 
 Return compact JSON only.
 """.strip()
 
 
 def build_existing_runs_text(existing_runs):
-    lines = []
+    if not existing_runs:
+        return "none"
 
-    for run in existing_runs:
-        lines.append(f"- {run.title} ({run.start_year or 'unknown year'})")
-
-    return "\n".join(lines) or "- No existing catalog runs."
+    return "; ".join(
+        f"{run.title} ({run.start_year or 'unknown'})"
+        for run in existing_runs
+    )
 
 
 def parse_response_json(output_text):
@@ -598,10 +605,7 @@ def normalize_candidate_list(candidates):
             normalized_candidate.get("start_year"),
         )
 
-        if not key:
-            key = f"unknown-{index}"
-
-        normalized[key] = normalized_candidate
+        normalized[key or f"unknown-{index}"] = normalized_candidate
 
     return list(normalized.values())
 
@@ -611,7 +615,7 @@ def normalize_candidate(candidate):
         "title": clean_text(candidate.get("title")),
         "start_year": clean_text(candidate.get("start_year")),
         "status": clean_text(candidate.get("status")),
-        "issue_count": candidate.get("issue_count"),
+        "issue_count": parse_positive_int(candidate.get("issue_count")),
         "first_issue_date": clean_text(candidate.get("first_issue_date")),
         "last_issue_date": clean_text(candidate.get("last_issue_date")),
         "description": clean_text(candidate.get("description")),
@@ -619,38 +623,25 @@ def normalize_candidate(candidate):
 
 
 def get_missing_candidate_fields(candidate):
-    missing_fields = []
+    missing_fields = [
+        field_name
+        for field_name in REQUIRED_TEXT_FIELDS
+        if not clean_text(candidate.get(field_name))
+    ]
 
-    for field_name in [
-        "title",
-        "start_year",
-        "status",
-        "first_issue_date",
-        "last_issue_date",
-        "description",
-    ]:
-        if not clean_text(candidate.get(field_name)):
+    issue_count = candidate.get("issue_count")
+
+    if issue_count is None or issue_count <= 0:
+        missing_fields.append("issue_count")
+
+    for field_name in DATE_FIELDS:
+        if parse_date(candidate.get(field_name)) is None and field_name not in missing_fields:
             missing_fields.append(field_name)
-
-    if candidate.get("issue_count") is None:
-        missing_fields.append("issue_count")
-
-    if candidate.get("issue_count") is not None and candidate.get("issue_count") <= 0:
-        missing_fields.append("issue_count")
-
-    if parse_date(candidate.get("first_issue_date")) is None:
-        if "first_issue_date" not in missing_fields:
-            missing_fields.append("first_issue_date")
-
-    if parse_date(candidate.get("last_issue_date")) is None:
-        if "last_issue_date" not in missing_fields:
-            missing_fields.append("last_issue_date")
 
     status = clean_text(candidate.get("status")).lower()
 
-    if status not in ["ongoing", "upcoming"]:
-        if "status" not in missing_fields:
-            missing_fields.append("status")
+    if status not in VALID_STATUSES and "status" not in missing_fields:
+        missing_fields.append("status")
 
     return missing_fields
 
@@ -686,308 +677,14 @@ def get_or_create_publisher(name):
 
 def map_catalog_status(value):
     status = clean_text(value).lower()
-    upcoming_status = getattr(ComicRun, "STATUS_UPCOMING", "upcoming")
-    ongoing_status = getattr(ComicRun, "STATUS_ONGOING", "ongoing")
 
     if status == "upcoming":
-        return upcoming_status
+        return getattr(ComicRun, "STATUS_UPCOMING", "upcoming")
 
     if status == "ongoing":
-        return ongoing_status
+        return getattr(ComicRun, "STATUS_ONGOING", "ongoing")
 
     return ComicRun.STATUS_UNKNOWN
-
-
-def find_possible_comicvine_volume_matches(*, title, start_year, publisher_name, limit):
-    normalized_title = normalize_title(title)
-    cleaned_year = clean_text(start_year)
-
-    if not normalized_title:
-        return []
-
-    volumes = ComicVineVolume.objects.prefetch_related("issues").all()
-
-    if cleaned_year:
-        volumes = volumes.filter(start_year=cleaned_year)
-
-    if publisher_name:
-        publisher_filtered = volumes.filter(publisher__iexact=publisher_name)
-
-        if publisher_filtered.exists():
-            volumes = publisher_filtered
-
-    matches = []
-
-    for volume in volumes:
-        score = rough_title_score(title, volume.name)
-
-        if score < 0.34:
-            continue
-
-        source_issues = list(volume.issues.all())
-        complete_issue_count = sum(
-            1
-            for issue in source_issues
-            if not get_source_issue_validation_errors(issue)
-        )
-
-        matches.append(
-            {
-                "volume": volume,
-                "score": score,
-                "issue_count": len(source_issues),
-                "complete_issue_count": complete_issue_count,
-            }
-        )
-
-    matches.sort(
-        key=lambda item: (
-            item["score"],
-            item["complete_issue_count"],
-            item["issue_count"],
-        ),
-        reverse=True,
-    )
-
-    return matches[:limit]
-
-
-def rough_title_score(catalog_title, comicvine_title):
-    catalog_normalized = normalize_title(catalog_title)
-    comicvine_normalized = normalize_title(comicvine_title)
-
-    if not catalog_normalized or not comicvine_normalized:
-        return 0.0
-
-    if catalog_normalized == comicvine_normalized:
-        return 1.0
-
-    if catalog_normalized in comicvine_normalized or comicvine_normalized in catalog_normalized:
-        return 0.92
-
-    catalog_tokens = set(catalog_normalized.split())
-    comicvine_tokens = set(comicvine_normalized.split())
-
-    if not catalog_tokens or not comicvine_tokens:
-        return 0.0
-
-    overlap = len(catalog_tokens & comicvine_tokens)
-    token_score = overlap / max(len(catalog_tokens), len(comicvine_tokens))
-    sequence_score = SequenceMatcher(None, catalog_normalized, comicvine_normalized).ratio()
-
-    return max(token_score, sequence_score)
-
-
-def format_comicvine_match_line(*, index, match):
-    volume = match["volume"]
-
-    return (
-        f"{index}. {volume.name} "
-        f"({volume.start_year or 'unknown year'}) "
-        f"[comicvine_id={volume.comicvine_id}, local_id={volume.id}, "
-        f"issues={match['issue_count']}, complete={match['complete_issue_count']}, "
-        f"score={match['score']:.2f}]"
-    )
-
-
-def copy_complete_comicvine_issues_to_catalog_run(*, catalog_run, comicvine_volume, verbose):
-    source_issues = list(
-        ComicVineIssue.objects.filter(volume=comicvine_volume)
-        .order_by("store_date", "cover_date", "issue_number", "id")
-    )
-
-    existing_catalog_issues = {
-        normalize_issue_number(issue.issue_number): issue
-        for issue in catalog_run.issues.all()
-    }
-
-    created_count = 0
-    updated_count = 0
-    unchanged_count = 0
-    skipped_count = 0
-    skipped_reasons = Counter()
-
-    with transaction.atomic():
-        for source_issue in source_issues:
-            validation_errors = get_source_issue_validation_errors(source_issue)
-
-            if validation_errors:
-                skipped_count += 1
-
-                for reason in validation_errors:
-                    skipped_reasons[reason] += 1
-
-                if verbose:
-                    print(format_source_skip_line(source_issue=source_issue, reasons=validation_errors))
-
-                continue
-
-            issue_number = canonical_issue_number(source_issue.issue_number)
-            normalized_issue_number = normalize_issue_number(issue_number)
-            existing_issue = existing_catalog_issues.get(normalized_issue_number)
-
-            if existing_issue:
-                changed = update_existing_catalog_issue_from_source(
-                    catalog_issue=existing_issue,
-                    source_issue=source_issue,
-                )
-
-                if changed:
-                    existing_issue.save()
-                    updated_count += 1
-
-                    if verbose:
-                        print(f"Updated catalog issue from Comic Vine: {existing_issue}")
-                else:
-                    unchanged_count += 1
-
-                    if verbose:
-                        print(f"Already complete: {existing_issue}")
-
-                continue
-
-            catalog_issue = ComicIssue.objects.create(
-                run=catalog_run,
-                issue_number=issue_number,
-                title=clean_text(source_issue.issue_title),
-                store_date=source_issue.store_date,
-                cover_date=source_issue.cover_date,
-                is_released=is_released_from_store_date(source_issue.store_date),
-                description="",
-            )
-
-            existing_catalog_issues[normalized_issue_number] = catalog_issue
-            created_count += 1
-
-            if verbose:
-                print(f"Created catalog issue from Comic Vine: {catalog_issue}")
-
-    return {
-        "checked": len(source_issues),
-        "created": created_count,
-        "updated": updated_count,
-        "unchanged": unchanged_count,
-        "skipped": skipped_count,
-        "skipped_reasons": skipped_reasons,
-    }
-
-
-def get_source_issue_validation_errors(source_issue):
-    errors = []
-
-    if not canonical_issue_number(source_issue.issue_number):
-        errors.append("missing issue_number")
-
-    if not clean_text(source_issue.issue_title):
-        errors.append("missing title")
-
-    if source_issue.store_date is None:
-        errors.append("missing store_date")
-
-    if source_issue.cover_date is None:
-        errors.append("missing cover_date")
-
-    return errors
-
-
-def update_existing_catalog_issue_from_source(*, catalog_issue, source_issue):
-    changed = False
-    source_issue_number = canonical_issue_number(source_issue.issue_number)
-
-    if source_issue_number and catalog_issue.issue_number != source_issue_number:
-        duplicate_exists = (
-            ComicIssue.objects.filter(
-                run=catalog_issue.run,
-                issue_number=source_issue_number,
-            )
-            .exclude(id=catalog_issue.id)
-            .exists()
-        )
-
-        if not duplicate_exists:
-            catalog_issue.issue_number = source_issue_number
-            changed = True
-
-    source_title = clean_text(source_issue.issue_title)
-
-    if title_needs_repair(catalog_issue.title) and source_title:
-        catalog_issue.title = source_title
-        changed = True
-
-    if catalog_issue.store_date is None and source_issue.store_date is not None:
-        catalog_issue.store_date = source_issue.store_date
-        changed = True
-
-    if catalog_issue.cover_date is None and source_issue.cover_date is not None:
-        catalog_issue.cover_date = source_issue.cover_date
-        changed = True
-
-    source_is_released = is_released_from_store_date(source_issue.store_date)
-
-    if catalog_issue.is_released != source_is_released:
-        catalog_issue.is_released = source_is_released
-        changed = True
-
-    return changed
-
-
-def format_source_skip_line(*, source_issue, reasons):
-    issue_number = clean_text(source_issue.issue_number) or "?"
-    title = clean_text(source_issue.issue_title) or "[blank]"
-    reason_text = ", ".join(reasons)
-
-    return (
-        f"Skipped Comic Vine issue #{issue_number}: "
-        f"title={title}; "
-        f"store_date={source_issue.store_date or 'missing'}; "
-        f"cover_date={source_issue.cover_date or 'missing'}; "
-        f"reason={reason_text}"
-    )
-
-
-def title_needs_repair(title):
-    title = clean_text(title)
-
-    if not title:
-        return True
-
-    return title.casefold() == "untitled"
-
-
-def is_released_from_store_date(store_date):
-    if store_date is None:
-        return False
-
-    return store_date <= date.today()
-
-
-def parse_date(value):
-    value = clean_text(value)
-
-    if not value:
-        return None
-
-    try:
-        return date.fromisoformat(value)
-    except ValueError:
-        return None
-
-
-def canonical_issue_number(value):
-    value = clean_text(value)
-    value = re.sub(r"^\s*issue\s*", "", value, flags=re.IGNORECASE)
-    value = re.sub(r"^\s*no\.?\s*", "", value, flags=re.IGNORECASE)
-
-    while value.startswith("#"):
-        value = value[1:].strip()
-
-    return value.strip()
-
-
-def normalize_issue_number(value):
-    value = canonical_issue_number(value).casefold()
-    value = re.sub(r"[^a-z0-9.]+", "", value)
-    return value
 
 
 def run_key(title, start_year):
@@ -1000,32 +697,16 @@ def run_key(title, start_year):
     return f"{normalized_title}::{normalized_year}"
 
 
-def normalize_title(value):
-    title = clean_text(value).casefold()
-    title = re.sub(r"^the\s+", "", title)
-    title = re.sub(r"[^a-z0-9]+", " ", title)
-    title = " ".join(title.split())
+def parse_positive_int(value):
+    if value is None or isinstance(value, bool):
+        return None
 
-    stop_words = {
-        "a",
-        "an",
-        "and",
-        "by",
-        "of",
-        "the",
-    }
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        return None
 
-    tokens = [
-        token
-        for token in title.split()
-        if token not in stop_words
-    ]
+    if number < 1:
+        return None
 
-    return " ".join(tokens)
-
-
-def clean_text(value):
-    if value is None:
-        return ""
-
-    return str(value).strip()
+    return number
