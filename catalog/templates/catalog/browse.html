@@ -4,60 +4,6 @@
 {% block title %}Browse - EzyReadComics{% endblock %}
 
 {% block content %}
-<style>
-    .erc-load-actions {
-        display: flex;
-        gap: 0.75rem;
-        justify-content: center;
-    }
-
-    @media (max-width: 575.98px) {
-        .erc-load-actions {
-            flex-direction: column;
-        }
-    }
-
-    .erc-load-button,
-    .erc-hide-button {
-        border-color: var(--erc-border);
-        color: #d7deeb;
-        background: rgba(255, 255, 255, 0.02);
-    }
-
-    .erc-load-button:hover,
-    .erc-load-button:focus,
-    .erc-hide-button:hover,
-    .erc-hide-button:focus {
-        border-color: var(--erc-accent);
-        color: #ffffff;
-        background: var(--erc-accent-soft);
-    }
-
-    .erc-hide-button {
-        border-color: rgba(156, 167, 186, 0.45);
-    }
-
-    .erc-track-cell {
-        min-width: 9.5rem;
-    }
-
-    .erc-track-form {
-        display: inline-flex;
-        justify-content: flex-end;
-        align-items: center;
-        gap: 0.4rem;
-        margin: 0;
-    }
-
-    .erc-track-form select {
-        width: auto;
-        min-width: 8.25rem;
-    }
-
-    .erc-track-button {
-        white-space: nowrap;
-    }
-</style>
 
 <div class="d-flex flex-column gap-4" data-csrf-token="{{ csrf_token }}">
     <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-end gap-3">
