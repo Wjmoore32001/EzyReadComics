@@ -35,6 +35,27 @@
     .erc-hide-button {
         border-color: rgba(156, 167, 186, 0.45);
     }
+
+    .erc-track-cell {
+        min-width: 9.5rem;
+    }
+
+    .erc-track-form {
+        display: inline-flex;
+        justify-content: flex-end;
+        align-items: center;
+        gap: 0.4rem;
+        margin: 0;
+    }
+
+    .erc-track-form select {
+        width: auto;
+        min-width: 8.25rem;
+    }
+
+    .erc-track-button {
+        white-space: nowrap;
+    }
 </style>
 
 <div class="d-flex flex-column gap-4">
@@ -393,6 +414,7 @@
                             <th scope="col">Issues</th>
                             <th scope="col">First issue date</th>
                             <th scope="col">Latest issue date</th>
+                            <th scope="col" class="text-end">My Comics</th>
                         </tr>
                         </thead>
 
@@ -435,10 +457,44 @@
                                         <span class="erc-muted">Unknown</span>
                                     {% endif %}
                                 </td>
+                                <td class="text-end erc-track-cell">
+                                    {% if run.user_tracking %}
+                                        <form
+                                            action="{% url 'reading:set_run_status' run.id %}"
+                                            method="post"
+                                            class="erc-track-form"
+                                            data-confirm-run-read-reset
+                                            data-current-status="{{ run.user_tracking.status }}"
+                                        >
+                                            {% csrf_token %}
+                                            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                            <input type="hidden" name="confirm_clear_issues" value="">
+                                            <select name="status" class="form-select form-select-sm" data-auto-submit>
+                                                {% for value, label in run_status_choices %}
+                                                    <option value="{{ value }}" {% if run.user_tracking.status == value %}selected{% endif %}>
+                                                        {{ label }}
+                                                    </option>
+                                                {% endfor %}
+                                            </select>
+                                        </form>
+                                    {% else %}
+                                        <form
+                                            action="{% url 'reading:set_run_status' run.id %}"
+                                            method="post"
+                                            class="erc-track-form"
+                                        >
+                                            {% csrf_token %}
+                                            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                            <button type="submit" class="btn btn-outline-light btn-sm erc-track-button">
+                                                Follow
+                                            </button>
+                                        </form>
+                                    {% endif %}
+                                </td>
                             </tr>
                         {% empty %}
                             <tr>
-                                <td colspan="7" class="text-center erc-muted py-4">
+                                <td colspan="8" class="text-center erc-muted py-4">
                                     No runs match this filter.
                                 </td>
                             </tr>
@@ -512,6 +568,7 @@
                             <th scope="col">Issue Range</th>
                             <th scope="col">Issue Count</th>
                             <th scope="col">Release Date</th>
+                            <th scope="col" class="text-end">My Comics</th>
                         </tr>
                         </thead>
 
@@ -547,10 +604,41 @@
                                         <span class="erc-muted">Unknown</span>
                                     {% endif %}
                                 </td>
+                                <td class="text-end erc-track-cell">
+                                    {% if volume.user_tracking %}
+                                        <form
+                                            action="{% url 'reading:set_volume_status' volume.id %}"
+                                            method="post"
+                                            class="erc-track-form"
+                                        >
+                                            {% csrf_token %}
+                                            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                            <select name="status" class="form-select form-select-sm" data-auto-submit>
+                                                {% for value, label in volume_status_choices %}
+                                                    <option value="{{ value }}" {% if volume.user_tracking.status == value %}selected{% endif %}>
+                                                        {{ label }}
+                                                    </option>
+                                                {% endfor %}
+                                            </select>
+                                        </form>
+                                    {% else %}
+                                        <form
+                                            action="{% url 'reading:set_volume_status' volume.id %}"
+                                            method="post"
+                                            class="erc-track-form"
+                                        >
+                                            {% csrf_token %}
+                                            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                            <button type="submit" class="btn btn-outline-light btn-sm erc-track-button">
+                                                Follow
+                                            </button>
+                                        </form>
+                                    {% endif %}
+                                </td>
                             </tr>
                         {% empty %}
                             <tr>
-                                <td colspan="6" class="text-center erc-muted py-4">
+                                <td colspan="7" class="text-center erc-muted py-4">
                                     No collected volumes match this filter.
                                 </td>
                             </tr>
@@ -611,6 +699,7 @@
                             <th scope="col">Issue</th>
                             <th scope="col">Published Date</th>
                             <th scope="col">Writer</th>
+                            <th scope="col" class="text-end">My Comics</th>
                         </tr>
                         </thead>
                         <tbody data-load-target>
@@ -644,10 +733,41 @@
                                         <span class="erc-muted">Unknown</span>
                                     {% endif %}
                                 </td>
+                                <td class="text-end erc-track-cell">
+                                    {% if issue.user_tracking %}
+                                        <form
+                                            action="{% url 'reading:set_issue_status' issue.id %}"
+                                            method="post"
+                                            class="erc-track-form"
+                                        >
+                                            {% csrf_token %}
+                                            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                            <select name="status" class="form-select form-select-sm" data-auto-submit>
+                                                {% for value, label in issue_status_choices %}
+                                                    <option value="{{ value }}" {% if issue.user_tracking.status == value %}selected{% endif %}>
+                                                        {{ label }}
+                                                    </option>
+                                                {% endfor %}
+                                            </select>
+                                        </form>
+                                    {% else %}
+                                        <form
+                                            action="{% url 'reading:set_issue_status' issue.id %}"
+                                            method="post"
+                                            class="erc-track-form"
+                                        >
+                                            {% csrf_token %}
+                                            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                            <button type="submit" class="btn btn-outline-light btn-sm erc-track-button">
+                                                Follow
+                                            </button>
+                                        </form>
+                                    {% endif %}
+                                </td>
                             </tr>
                         {% empty %}
                             <tr>
-                                <td colspan="5" class="text-center erc-muted py-4">
+                                <td colspan="6" class="text-center erc-muted py-4">
                                     No issues match this filter.
                                 </td>
                             </tr>
@@ -688,6 +808,7 @@
 
 <script>
 document.addEventListener("DOMContentLoaded", function () {
+    const csrfToken = "{{ csrf_token }}";
     const dropdowns = Array.from(document.querySelectorAll(".searchable-dropdown"));
 
     function clearElement(element) {
@@ -873,6 +994,104 @@ document.addEventListener("DOMContentLoaded", function () {
         });
     }
 
+    function currentNextValue() {
+        return window.location.pathname + window.location.search;
+    }
+
+    function bindTrackingForm(form) {
+        form.addEventListener("submit", function (event) {
+            const select = form.querySelector("select[name='status']");
+            const confirmInput = form.querySelector("input[name='confirm_clear_issues']");
+            const currentStatus = form.dataset.currentStatus;
+
+            if (!select || !confirmInput) {
+                return;
+            }
+
+            if (currentStatus === "read" && select.value !== "read" && confirmInput.value !== "1") {
+                const confirmed = window.confirm(
+                    "This run is marked read, so all issues in this run were marked read. Changing this status will remove those saved issue statuses. Continue?"
+                );
+
+                if (!confirmed) {
+                    event.preventDefault();
+                    select.value = currentStatus;
+                    return;
+                }
+
+                confirmInput.value = "1";
+            }
+        });
+    }
+
+    function createHiddenInput(name, value) {
+        const input = document.createElement("input");
+
+        input.type = "hidden";
+        input.name = name;
+        input.value = value;
+
+        return input;
+    }
+
+    function createTrackingCell(tracking) {
+        const cell = document.createElement("td");
+        const form = document.createElement("form");
+
+        cell.className = "text-end erc-track-cell";
+        form.method = "post";
+        form.action = tracking.action_url;
+        form.className = "erc-track-form";
+
+        form.appendChild(createHiddenInput("csrfmiddlewaretoken", csrfToken));
+        form.appendChild(createHiddenInput("next", currentNextValue()));
+
+        if (tracking.item_type === "run" && tracking.tracked) {
+            form.dataset.confirmRunReadReset = "";
+            form.dataset.currentStatus = tracking.status || "";
+            form.appendChild(createHiddenInput("confirm_clear_issues", ""));
+        }
+
+        if (tracking.tracked) {
+            const select = document.createElement("select");
+
+            select.name = "status";
+            select.className = "form-select form-select-sm";
+
+            (tracking.status_choices || []).forEach(function (choice) {
+                const option = document.createElement("option");
+
+                option.value = choice.value;
+                option.textContent = choice.label;
+
+                if (choice.value === tracking.status) {
+                    option.selected = true;
+                }
+
+                select.appendChild(option);
+            });
+
+            select.addEventListener("change", function () {
+                form.requestSubmit();
+            });
+
+            form.appendChild(select);
+        } else {
+            const button = document.createElement("button");
+
+            button.type = "submit";
+            button.className = "btn btn-outline-light btn-sm erc-track-button";
+            button.textContent = "Follow";
+
+            form.appendChild(button);
+        }
+
+        bindTrackingForm(form);
+        cell.appendChild(form);
+
+        return cell;
+    }
+
     function createRunRow(item) {
         const row = createClickableRow(item);
 
@@ -883,6 +1102,7 @@ document.addEventListener("DOMContentLoaded", function () {
         addCell(row, item.issue_count, { muted: item.issue_count_muted });
         addCell(row, item.first_issue_date, { muted: item.first_issue_date_muted });
         addCell(row, item.last_issue_date, { muted: item.last_issue_date_muted });
+        row.appendChild(createTrackingCell(item.tracking));
 
         return row;
     }
@@ -896,6 +1116,7 @@ document.addEventListener("DOMContentLoaded", function () {
         addCell(row, item.issue_range, { muted: item.issue_range_muted });
         addCell(row, item.issue_count, { muted: item.issue_count_muted });
         addCell(row, item.release_date, { muted: item.release_date_muted });
+        row.appendChild(createTrackingCell(item.tracking));
 
         return row;
     }
@@ -908,6 +1129,7 @@ document.addEventListener("DOMContentLoaded", function () {
         addCell(row, item.issue);
         addCell(row, item.published_date, { muted: item.published_date_muted });
         addCell(row, item.writer, { muted: item.writer_muted });
+        row.appendChild(createTrackingCell(item.tracking));
 
         return row;
     }
@@ -970,6 +1192,14 @@ document.addEventListener("DOMContentLoaded", function () {
 
         return url;
     }
+
+    document.querySelectorAll("[data-auto-submit]").forEach(function (select) {
+        select.addEventListener("change", function () {
+            select.form.requestSubmit();
+        });
+    });
+
+    document.querySelectorAll("[data-confirm-run-read-reset]").forEach(bindTrackingForm);
 
     document.querySelectorAll("[data-load-more]").forEach(function (button) {
         button.addEventListener("click", function () {

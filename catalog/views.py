@@ -94,7 +94,11 @@ def browse(request):
         issues_queryset,
         limit=BROWSE_INITIAL_RESULT_LIMIT,
     )
+
     attach_issue_credit_display(issue_list)
+    attach_run_tracking(request, runs)
+    attach_volume_tracking(request, volumes)
+    attach_issue_tracking(request, issue_list)
 
     selected_items = build_selected_items(
         selected_publisher=selected_publisher,
@@ -122,6 +126,9 @@ def browse(request):
         "browse_initial_limit": BROWSE_INITIAL_RESULT_LIMIT,
         "browse_load_more_limit": BROWSE_LOAD_MORE_LIMIT,
         "browse_option_limit": BROWSE_OPTION_LIMIT,
+        "run_status_choices": FollowedRun.STATUS_CHOICES,
+        "issue_status_choices": IssueProgress.STATUS_CHOICES,
+        "volume_status_choices": VolumeProgress.STATUS_CHOICES,
     }
 
     return render(request, "catalog/browse.html", context)
@@ -184,6 +191,7 @@ def browse_items(request):
             limit=BROWSE_LOAD_MORE_LIMIT,
             offset=offset,
         )
+        attach_run_tracking(request, rows)
         items = [build_run_row_item(run) for run in rows]
     elif item_kind == "volumes":
         rows, has_more = slice_with_has_more(
@@ -191,6 +199,7 @@ def browse_items(request):
             limit=BROWSE_LOAD_MORE_LIMIT,
             offset=offset,
         )
+        attach_volume_tracking(request, rows)
         items = [build_volume_row_item(volume) for volume in rows]
     elif item_kind == "issues":
         rows, has_more = slice_with_has_more(
@@ -199,6 +208,7 @@ def browse_items(request):
             offset=offset,
         )
         attach_issue_credit_display(rows)
+        attach_issue_tracking(request, rows)
         items = [build_issue_row_item(issue) for issue in rows]
     else:
         return JsonResponse({"items": [], "has_more": False}, status=400)
@@ -234,23 +244,19 @@ def run_details(request, pk):
     )
     attach_issue_credit_display(issues)
 
-    volumes = run.volumes.select_related("publisher", "run").order_by(
-        "volume_number",
-        "release_date",
-        "title",
+    volumes = list(
+        run.volumes.select_related("publisher", "run").order_by(
+            "volume_number",
+            "release_date",
+            "title",
+        )
     )
     default_credits = run.credits.select_related("person", "role").filter(
         role__show_by_default=True,
     )
     all_credits = run.credits.select_related("person", "role")
 
-    is_following_run = False
-
-    if request.user.is_authenticated:
-        is_following_run = FollowedRun.objects.filter(
-            user=request.user,
-            run=run,
-        ).exists()
+    attach_run_tracking(request, [run])
 
     context = {
         "run": run,
@@ -258,7 +264,8 @@ def run_details(request, pk):
         "volumes": volumes,
         "default_credits": default_credits,
         "all_credits": all_credits,
-        "is_following_run": is_following_run,
+        "current_run_progress": run.user_tracking,
+        "run_status_choices": FollowedRun.STATUS_CHOICES,
     }
 
     return render(request, "catalog/run_details.html", context)
@@ -291,27 +298,17 @@ def issue_details(request, pk):
     )
     all_credits = issue.credits.select_related("person", "role")
 
-    current_issue_progress = None
-    is_following_run = False
-
-    if request.user.is_authenticated:
-        current_issue_progress = IssueProgress.objects.filter(
-            user=request.user,
-            issue=issue,
-        ).first()
-        is_following_run = FollowedRun.objects.filter(
-            user=request.user,
-            run=issue.run,
-        ).exists()
+    attach_issue_tracking(request, [issue])
+    attach_run_tracking(request, [issue.run])
 
     context = {
         "issue": issue,
         "collected_in": collected_in,
         "default_credits": default_credits,
         "all_credits": all_credits,
-        "current_issue_progress": current_issue_progress,
+        "current_issue_progress": issue.user_tracking,
         "issue_status_choices": IssueProgress.STATUS_CHOICES,
-        "is_following_run": is_following_run,
+        "is_following_run": bool(issue.run.user_tracking),
     }
 
     return render(request, "catalog/issue_details.html", context)
@@ -353,13 +350,7 @@ def volume_details(request, pk):
     )
     all_credits = volume.credits.select_related("person", "role")
 
-    current_volume_progress = None
-
-    if request.user.is_authenticated:
-        current_volume_progress = VolumeProgress.objects.filter(
-            user=request.user,
-            volume=volume,
-        ).first()
+    attach_volume_tracking(request, [volume])
 
     context = {
         "volume": volume,
@@ -367,7 +358,7 @@ def volume_details(request, pk):
         "issues": issues,
         "default_credits": default_credits,
         "all_credits": all_credits,
-        "current_volume_progress": current_volume_progress,
+        "current_volume_progress": volume.user_tracking,
         "volume_status_choices": VolumeProgress.STATUS_CHOICES,
     }
 
@@ -628,6 +619,12 @@ def build_run_row_item(run):
         "first_issue_date_muted": not bool(run.first_issue_date),
         "last_issue_date": format_date_or_unknown(run.last_issue_date),
         "last_issue_date_muted": not bool(run.last_issue_date),
+        "tracking": build_tracking_data(
+            item_type="run",
+            action_url=reverse("reading:set_run_status", args=[run.id]),
+            progress=run.user_tracking,
+            status_choices=FollowedRun.STATUS_CHOICES,
+        ),
     }
 
 
@@ -650,6 +647,12 @@ def build_volume_row_item(volume):
         "issue_count_muted": not bool(volume.issue_count),
         "release_date": format_date_or_unknown(volume.release_date),
         "release_date_muted": not bool(volume.release_date),
+        "tracking": build_tracking_data(
+            item_type="volume",
+            action_url=reverse("reading:set_volume_status", args=[volume.id]),
+            progress=volume.user_tracking,
+            status_choices=VolumeProgress.STATUS_CHOICES,
+        ),
     }
 
 
@@ -665,7 +668,93 @@ def build_issue_row_item(issue):
         "published_date_muted": not bool(issue.published_date),
         "writer": issue.display_writers or "Unknown",
         "writer_muted": not bool(issue.display_writers),
+        "tracking": build_tracking_data(
+            item_type="issue",
+            action_url=reverse("reading:set_issue_status", args=[issue.id]),
+            progress=issue.user_tracking,
+            status_choices=IssueProgress.STATUS_CHOICES,
+        ),
     }
+
+
+def build_tracking_data(*, item_type, action_url, progress, status_choices):
+    return {
+        "item_type": item_type,
+        "action_url": action_url,
+        "tracked": bool(progress),
+        "status": progress.status if progress else "",
+        "status_choices": build_status_choices(status_choices),
+    }
+
+
+def build_status_choices(status_choices):
+    return [
+        {
+            "value": value,
+            "label": label,
+        }
+        for value, label in status_choices
+    ]
+
+
+def attach_run_tracking(request, runs):
+    run_ids = [run.id for run in runs]
+
+    if not request.user.is_authenticated or not run_ids:
+        for run in runs:
+            run.user_tracking = None
+        return
+
+    progress_by_run_id = {
+        progress.run_id: progress
+        for progress in FollowedRun.objects.filter(
+            user=request.user,
+            run_id__in=run_ids,
+        )
+    }
+
+    for run in runs:
+        run.user_tracking = progress_by_run_id.get(run.id)
+
+
+def attach_issue_tracking(request, issues):
+    issue_ids = [issue.id for issue in issues]
+
+    if not request.user.is_authenticated or not issue_ids:
+        for issue in issues:
+            issue.user_tracking = None
+        return
+
+    progress_by_issue_id = {
+        progress.issue_id: progress
+        for progress in IssueProgress.objects.filter(
+            user=request.user,
+            issue_id__in=issue_ids,
+        )
+    }
+
+    for issue in issues:
+        issue.user_tracking = progress_by_issue_id.get(issue.id)
+
+
+def attach_volume_tracking(request, volumes):
+    volume_ids = [volume.id for volume in volumes]
+
+    if not request.user.is_authenticated or not volume_ids:
+        for volume in volumes:
+            volume.user_tracking = None
+        return
+
+    progress_by_volume_id = {
+        progress.volume_id: progress
+        for progress in VolumeProgress.objects.filter(
+            user=request.user,
+            volume_id__in=volume_ids,
+        )
+    }
+
+    for volume in volumes:
+        volume.user_tracking = progress_by_volume_id.get(volume.id)
 
 
 def format_date_or_unknown(value):
