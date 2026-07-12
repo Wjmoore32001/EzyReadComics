@@ -1,5 +1,6 @@
 import json
 import os
+from datetime import date
 
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
@@ -20,6 +21,8 @@ from ._local_comicvine_helpers import (
 
 DEFAULT_MODEL = "gpt-5.5"
 DEFAULT_PUBLISHER_NAME = "Marvel"
+DEFAULT_BATCH_SIZE = 5
+DEFAULT_MAX_BATCHES = 3
 
 
 RESULT_SCHEMA = {
@@ -86,8 +89,20 @@ class Command(BaseCommand):
         parser.add_argument(
             "--limit",
             type=int,
-            default=1,
-            help="Maximum missing run candidates to request. Default: 1",
+            default=DEFAULT_BATCH_SIZE,
+            help="Maximum new runs to create from one successful batch. Default: 5",
+        )
+        parser.add_argument(
+            "--batch-size",
+            type=int,
+            default=DEFAULT_BATCH_SIZE,
+            help="Number of run candidates to ask AI for per batch. Default: 5",
+        )
+        parser.add_argument(
+            "--max-batches",
+            type=int,
+            default=DEFAULT_MAX_BATCHES,
+            help="Maximum AI batches to try when returned candidates already exist. Default: 3",
         )
         parser.add_argument(
             "--model",
@@ -134,10 +149,18 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         limit = options["limit"]
+        batch_size = options["batch_size"]
+        max_batches = options["max_batches"]
         comicvine_match_limit = options["comicvine_match_limit"]
 
         if limit < 1:
             raise CommandError("--limit must be at least 1.")
+
+        if batch_size < 1:
+            raise CommandError("--batch-size must be at least 1.")
+
+        if max_batches < 1:
+            raise CommandError("--max-batches must be at least 1.")
 
         if comicvine_match_limit < 1:
             raise CommandError("--comicvine-match-limit must be at least 1.")
@@ -169,6 +192,8 @@ class Command(BaseCommand):
             publisher_name=publisher_name,
             search_context=search_context,
             limit=limit,
+            batch_size=batch_size,
+            max_batches=max_batches,
             existing_runs=existing_runs,
             skip_comicvine_match=skip_comicvine_match,
             comicvine_match_limit=comicvine_match_limit,
@@ -176,51 +201,101 @@ class Command(BaseCommand):
 
         client = OpenAI(api_key=api_key)
 
-        data = self.call_run_search(
-            client=client,
-            model=model,
-            search_context=search_context,
-            publisher_name=publisher_name,
-            existing_runs=existing_runs,
-            limit=limit,
-        )
+        rejected_candidates = []
+        seen_candidate_keys = set()
+        api_calls = 0
+        created_count = 0
+        skipped_count = 0
 
-        api_calls = 1
-
-        if print_raw:
+        for batch_number in range(1, max_batches + 1):
             self.stdout.write("")
-            self.stdout.write(self.style.WARNING("Raw run search JSON"))
-            self.stdout.write(json.dumps(data, indent=2, ensure_ascii=False))
+            self.stdout.write(
+                self.style.WARNING(
+                    f"AI candidate batch {batch_number}/{max_batches}"
+                )
+            )
 
-        candidates = normalize_candidate_list(data.get("candidates", []))
-        self.print_result(candidates=candidates, verbose=verbose)
-
-        if dry_run:
-            self.print_dry_run_comicvine_matches(
-                candidates=candidates,
+            data = self.call_run_search(
+                client=client,
+                model=model,
+                search_context=search_context,
                 publisher_name=publisher_name,
+                batch_size=batch_size,
+                rejected_candidates=rejected_candidates,
+            )
+            api_calls += 1
+
+            if print_raw:
+                self.stdout.write("")
+                self.stdout.write(self.style.WARNING("Raw run search JSON"))
+                self.stdout.write(json.dumps(data, indent=2, ensure_ascii=False))
+
+            candidates = normalize_candidate_list(data.get("candidates", []))
+            self.print_result(candidates=candidates, verbose=verbose)
+
+            batch_create_candidates, batch_rejections = classify_candidates(
+                candidates=candidates,
+                existing_runs=existing_runs,
+                seen_candidate_keys=seen_candidate_keys,
+            )
+
+            rejected_candidates.extend(batch_rejections)
+            skipped_count += len(batch_rejections)
+
+            if not batch_create_candidates:
+                if not candidates:
+                    self.stdout.write("No candidates returned. Stopping.")
+                    break
+
+                self.stdout.write(
+                    "No new complete runs in this batch. "
+                    "Rejected candidates will be excluded from the next batch."
+                )
+                continue
+
+            remaining_create_slots = limit - created_count
+            create_candidates = batch_create_candidates[:remaining_create_slots]
+
+            if dry_run:
+                self.print_dry_run_create_preview(
+                    candidates=create_candidates,
+                    publisher_name=publisher_name,
+                    skip_comicvine_match=skip_comicvine_match,
+                    comicvine_match_limit=comicvine_match_limit,
+                )
+
+                created_count += len(create_candidates)
+                break
+
+            batch_created_count = self.apply_candidates(
+                candidates=create_candidates,
+                publisher_name=publisher_name,
+                existing_runs=existing_runs,
+                existing_run_keys=existing_run_keys,
+                verbose=verbose,
                 skip_comicvine_match=skip_comicvine_match,
                 comicvine_match_limit=comicvine_match_limit,
             )
-            self.stdout.write("")
-            self.stdout.write("Dry run only. No catalog rows were created.")
-            self.stdout.write(f"OpenAI API calls made: {api_calls}")
-            return
 
-        created_count, skipped_count = self.apply_candidates(
-            candidates=candidates,
-            publisher_name=publisher_name,
-            existing_run_keys=existing_run_keys,
-            verbose=verbose,
-            skip_comicvine_match=skip_comicvine_match,
-            comicvine_match_limit=comicvine_match_limit,
-        )
+            created_count += batch_created_count
+
+            self.stdout.write(
+                self.style.SUCCESS(
+                    f"Created {batch_created_count} new run(s) from this batch."
+                )
+            )
+
+            break
 
         self.stdout.write("")
-        self.stdout.write(self.style.SUCCESS("Apply complete."))
+        self.stdout.write(self.style.SUCCESS("Apply complete." if not dry_run else "Dry run complete."))
         self.stdout.write(f"OpenAI API calls made: {api_calls}")
-        self.stdout.write(f"Created runs: {created_count}")
-        self.stdout.write(f"Skipped candidates: {skipped_count}")
+        self.stdout.write(f"Created runs: {0 if dry_run else created_count}")
+        self.stdout.write(f"Would create runs: {created_count if dry_run else 0}")
+        self.stdout.write(f"Rejected/skipped candidates: {skipped_count}")
+
+        if dry_run:
+            self.stdout.write("Dry run only. No catalog rows were created.")
 
     def write_header(
         self,
@@ -230,6 +305,8 @@ class Command(BaseCommand):
         publisher_name,
         search_context,
         limit,
+        batch_size,
+        max_batches,
         existing_runs,
         skip_comicvine_match,
         comicvine_match_limit,
@@ -251,8 +328,11 @@ class Command(BaseCommand):
         self.stdout.write(f"Model: {model}")
         self.stdout.write(f"Publisher: {publisher_name}")
         self.stdout.write(f"Search context: {search_context}")
-        self.stdout.write(f"Candidate limit: {limit}")
-        self.stdout.write(f"Existing catalog runs excluded: {len(existing_runs)}")
+        self.stdout.write(f"Batch size: {batch_size}")
+        self.stdout.write(f"Max batches: {max_batches}")
+        self.stdout.write(f"New run create limit: {limit}")
+        self.stdout.write(f"Existing catalog runs checked locally: {len(existing_runs)}")
+        self.stdout.write("Existing catalog runs sent to AI: no")
         self.stdout.write(f"Local Comic Vine match display limit: {comicvine_match_limit}")
         self.stdout.write("")
 
@@ -263,8 +343,8 @@ class Command(BaseCommand):
         model,
         search_context,
         publisher_name,
-        existing_runs,
-        limit,
+        batch_size,
+        rejected_candidates,
     ):
         try:
             response = client.responses.create(
@@ -289,8 +369,8 @@ class Command(BaseCommand):
                         "role": "user",
                         "content": build_broad_prompt(
                             publisher_name=publisher_name,
-                            existing_runs=existing_runs,
-                            limit=limit,
+                            batch_size=batch_size,
+                            rejected_candidates=rejected_candidates,
                         ),
                     },
                 ],
@@ -309,7 +389,11 @@ class Command(BaseCommand):
         return parse_response_json(response.output_text)
 
     def print_result(self, *, candidates, verbose):
-        ready_count = sum(1 for candidate in candidates if candidate_has_required_fields(candidate))
+        ready_count = sum(
+            1
+            for candidate in candidates
+            if candidate_has_required_fields(candidate)
+        )
         incomplete_titles = [
             candidate.get("title") or "[blank title]"
             for candidate in candidates
@@ -353,7 +437,7 @@ class Command(BaseCommand):
 
             self.stdout.write("")
 
-    def print_dry_run_comicvine_matches(
+    def print_dry_run_create_preview(
         self,
         *,
         candidates,
@@ -361,22 +445,21 @@ class Command(BaseCommand):
         skip_comicvine_match,
         comicvine_match_limit,
     ):
+        self.stdout.write("")
+        self.stdout.write(self.style.WARNING("Dry-run new runs that would be created"))
+
+        for candidate in candidates:
+            self.stdout.write(
+                f"- {candidate['title']} ({candidate['start_year']})"
+            )
+
         if skip_comicvine_match:
-            return
-
-        ready_candidates = [
-            candidate
-            for candidate in candidates
-            if candidate_has_required_fields(candidate)
-        ]
-
-        if not ready_candidates:
             return
 
         self.stdout.write("")
         self.stdout.write(self.style.WARNING("Local Comic Vine match preview"))
 
-        for candidate in ready_candidates:
+        for candidate in candidates:
             matches = find_possible_comicvine_volume_matches(
                 title=candidate["title"],
                 start_year=candidate["start_year"],
@@ -399,13 +482,13 @@ class Command(BaseCommand):
         *,
         candidates,
         publisher_name,
+        existing_runs,
         existing_run_keys,
         verbose,
         skip_comicvine_match,
         comicvine_match_limit,
     ):
         created_count = 0
-        skipped_count = 0
         publisher = get_or_create_publisher(publisher_name)
 
         for candidate in candidates:
@@ -413,8 +496,13 @@ class Command(BaseCommand):
             start_year = clean_text(candidate.get("start_year"))
             candidate_key = run_key(title, start_year)
 
-            if not candidate_has_required_fields(candidate) or candidate_key in existing_run_keys:
-                skipped_count += 1
+            if not candidate_has_required_fields(candidate):
+                continue
+
+            if candidate_key in existing_run_keys:
+                continue
+
+            if find_existing_catalog_run_match(candidate=candidate, existing_runs=existing_runs):
                 continue
 
             with transaction.atomic():
@@ -429,6 +517,7 @@ class Command(BaseCommand):
                     description=clean_text(candidate.get("description")),
                 )
 
+            existing_runs.append(run)
             existing_run_keys.add(candidate_key)
             created_count += 1
 
@@ -452,7 +541,7 @@ class Command(BaseCommand):
                     verbose=verbose,
                 )
 
-        return created_count, skipped_count
+        return created_count
 
     def prompt_for_comicvine_issue_copy(
         self,
@@ -552,16 +641,18 @@ class Command(BaseCommand):
             self.stdout.write(message)
 
 
-def build_broad_prompt(*, publisher_name, existing_runs, limit):
+def build_broad_prompt(*, publisher_name, batch_size, rejected_candidates):
+    rejected_text = build_rejected_candidates_text(rejected_candidates)
+
     return f"""
-Find up to {limit} current or upcoming {publisher_name} numbered comic runs not already in the catalog.
+Find up to {batch_size} current or upcoming {publisher_name} numbered comic runs.
 
-Today: {__import__("datetime").date.today().isoformat()}
+Today: {date.today().isoformat()}
 
-Existing catalog runs:
-{build_existing_runs_text(existing_runs)}
+Do not return these candidates again:
+{rejected_text}
 
-Return these fields: title, start_year, status, issue_count, first_issue_date, last_issue_date, description.
+Return fields: title, start_year, status, issue_count, first_issue_date, last_issue_date, description.
 
 Rules:
 - status is upcoming if issue #1 has a future on-sale date.
@@ -578,14 +669,113 @@ Return compact JSON only.
 """.strip()
 
 
-def build_existing_runs_text(existing_runs):
-    if not existing_runs:
+def build_rejected_candidates_text(rejected_candidates):
+    if not rejected_candidates:
         return "none"
 
     return "; ".join(
-        f"{run.title} ({run.start_year or 'unknown'})"
-        for run in existing_runs
-    )
+        f"{item['title']} ({item.get('start_year') or 'unknown'})"
+        for item in rejected_candidates[-30:]
+        if item.get("title")
+    ) or "none"
+
+
+def classify_candidates(*, candidates, existing_runs, seen_candidate_keys):
+    create_candidates = []
+    rejected_candidates = []
+
+    for candidate in candidates:
+        title = clean_text(candidate.get("title"))
+        start_year = clean_text(candidate.get("start_year"))
+        key = run_key(title, start_year)
+
+        if not candidate_has_required_fields(candidate):
+            rejected_candidates.append(
+                build_rejection(candidate=candidate, reason="incomplete")
+            )
+            continue
+
+        if key and key in seen_candidate_keys:
+            rejected_candidates.append(
+                build_rejection(candidate=candidate, reason="repeated")
+            )
+            continue
+
+        existing_match = find_existing_catalog_run_match(
+            candidate=candidate,
+            existing_runs=existing_runs,
+        )
+
+        if existing_match:
+            rejected_candidates.append(
+                build_rejection(
+                    candidate=candidate,
+                    reason=f"exists as {existing_match.title} ({existing_match.start_year or 'unknown'})",
+                )
+            )
+            continue
+
+        create_candidates.append(candidate)
+
+        if key:
+            seen_candidate_keys.add(key)
+
+    for rejection in rejected_candidates:
+        key = run_key(rejection.get("title"), rejection.get("start_year"))
+
+        if key:
+            seen_candidate_keys.add(key)
+
+    return create_candidates, rejected_candidates
+
+
+def build_rejection(*, candidate, reason):
+    return {
+        "title": clean_text(candidate.get("title")) or "[blank title]",
+        "start_year": clean_text(candidate.get("start_year")),
+        "reason": reason,
+    }
+
+
+def find_existing_catalog_run_match(*, candidate, existing_runs):
+    candidate_title = clean_text(candidate.get("title"))
+    candidate_year = clean_text(candidate.get("start_year"))
+    candidate_key = run_key(candidate_title, candidate_year)
+
+    for run in existing_runs:
+        if run_key(run.title, run.start_year) == candidate_key:
+            return run
+
+    candidate_normalized_title = normalize_title(candidate_title)
+
+    if not candidate_normalized_title:
+        return None
+
+    for run in existing_runs:
+        run_year = clean_text(run.start_year)
+
+        if candidate_year and run_year and candidate_year != run_year:
+            continue
+
+        run_normalized_title = normalize_title(run.title)
+
+        if not run_normalized_title:
+            continue
+
+        if candidate_normalized_title == run_normalized_title:
+            return run
+
+        if (
+            candidate_year
+            and run_year
+            and (
+                candidate_normalized_title in run_normalized_title
+                or run_normalized_title in candidate_normalized_title
+            )
+        ):
+            return run
+
+    return None
 
 
 def parse_response_json(output_text):
