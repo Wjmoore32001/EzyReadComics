@@ -17,17 +17,48 @@ Current project areas:
 - `reading` stores user-specific comic tracking data.
 - The site currently has catalog home, browse, run details, issue details, collected-volume details, and My Comics pages.
 - Browse is being kept mobile-friendly by limiting initial catalog rows and loading more rows only when requested.
+- Browse supports inline logged-in tracking actions for runs, volumes, and issues.
+- My Comics supports filtering followed items by publisher, run, and status.
 - Comic Vine backfill/import work is ongoing.
 - Comic Vine run and issue ingestion supports confirmed source-to-catalog promotion.
 - AI-assisted Marvel catalog commands now support missing run discovery and official Marvel.com issue metadata filling.
 - Issue display has shifted away from issue titles and cover dates.
 - Published date is now the main issue date used by the catalog UI.
+- Page JavaScript is being kept in static JS files instead of large inline template scripts.
 - Recommendation logic, reading-order algorithms, character features, creator features, event features, and story-arc features are not built yet.
 
 ## Timeline
 
 ### 2026-07-12
 
+- Expanded logged-in tracking behavior across Browse, Run Details, and My Comics:
+  - Browse follow actions now open a status picker instead of silently defaulting to Planned.
+  - Browse tracking actions update the displayed row without a full page refresh.
+  - Browse status dropdowns include unfollow/remove options.
+  - Browse prompts before unfollowing runs, volumes, or issues.
+  - Run status changes can optionally apply the selected status to the run's issues.
+  - Run Read-to-Reading or Read-to-Planned changes can optionally update issue statuses.
+  - Unfollowing a run can optionally remove saved issue statuses for that run.
+  - When all issues in a followed run are marked Read, the app can prompt the user to mark the run Read too.
+- Added issue tracking controls to run detail pages.
+- Updated follow behavior so run and issue follow buttons ask which status to save.
+- Updated My Comics:
+  - Added filters for publisher, run, and status.
+  - Renamed the progress sections toward followed runs, followed volumes, and followed issues.
+  - Removed followed/updated date columns from the current tracking tables.
+  - Updated empty states to use consistent "not following" language.
+  - Fixed issue unfollow cancellation so Cancel does not submit the unfollow.
+- Reorganized page JavaScript:
+  - Added `static/js/base.js`.
+  - Added `static/js/catalog/browse.js`.
+  - Added `static/js/catalog/run-details.js`.
+  - Added `static/js/reading/my-comics.js`.
+  - Moved the global clickable-row script out of `templates/base.html`.
+  - Moved Browse page behavior out of `catalog/templates/catalog/browse.html`.
+  - Moved Run Detail page behavior out of `catalog/templates/catalog/run_details.html`.
+  - Moved My Comics behavior out of `reading/templates/reading/my_comics.html`.
+  - Added template script blocks so page-specific JS can be loaded only where needed.
+  - Added static-file settings for the root `static/` directory.
 - Updated Browse for large catalog performance and mobile use:
   - Initial browse page load shows a small capped set of runs, collected volumes, and issues.
   - Filter dropdown searches return a limited set of matching options.
@@ -148,7 +179,7 @@ Current project areas:
 - Saving a volume status now follows the volume's parent run.
 - Marking a volume as read now marks the linked issues inside that volume as read for the same user.
 - Kept deletion behavior conservative:
-  - Unfollowing a run does not delete issue or volume progress.
+  - Unfollowing a run does not automatically delete issue or volume progress.
   - Removing a volume status does not delete issue progress.
 - Added admin support for reading-tracking models.
 
@@ -246,4 +277,4 @@ Current project areas:
 - Keep collected-volume catalog work separate from the current run-ingestion path.
 - Continue manually testing confirmed catalog data.
 - Refine catalog models based on real manual entries.
-- Improve My Comics filtering once there is enough tracked user data to justify it.
+- Continue polishing My Comics and tracking behavior as real tracked data grows.
