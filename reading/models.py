@@ -5,6 +5,16 @@ from catalog.models import ComicIssue, ComicRun, ComicVolume
 
 
 class FollowedRun(models.Model):
+    STATUS_PLANNED = "planned"
+    STATUS_READING = "reading"
+    STATUS_READ = "read"
+
+    STATUS_CHOICES = [
+        (STATUS_PLANNED, "Planned to read"),
+        (STATUS_READING, "Reading"),
+        (STATUS_READ, "Read"),
+    ]
+
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -16,7 +26,14 @@ class FollowedRun(models.Model):
         related_name="user_followers",
     )
 
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=STATUS_PLANNED,
+    )
+
     followed_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ["-followed_at"]
@@ -32,13 +49,17 @@ class FollowedRun(models.Model):
                 name="reading_fr_user_followed_idx",
             ),
             models.Index(
+                fields=["user", "status"],
+                name="reading_fr_user_status_idx",
+            ),
+            models.Index(
                 fields=["run"],
                 name="reading_fr_run_idx",
             ),
         ]
 
     def __str__(self):
-        return f"{self.user} follows {self.run}"
+        return f"{self.user} follows {self.run} - {self.get_status_display()}"
 
 
 class IssueProgress(models.Model):

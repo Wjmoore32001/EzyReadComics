@@ -9,11 +9,15 @@ class FollowedRunAdmin(admin.ModelAdmin):
         "user",
         "run",
         "publisher",
+        "status",
         "followed_at",
+        "updated_at",
     ]
     list_filter = [
+        "status",
         "run__publisher",
         "followed_at",
+        "updated_at",
     ]
     search_fields = [
         "user__username",
