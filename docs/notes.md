@@ -1,7 +1,0 @@
-# Tracking
-
-    - On the browse page, hitting follow shouldnt refresh the whole page, that makes it a pain if you wanna follow multiple things you already found, cause it. Although it keeps filter if you loaded more runs and was looking down it reset whats loading and you scrolling, so it should only update that displayed row that you hit follow on, if thats even possible of course.
-    - The drop down menus, for example on browse should include an unfollow option, if I am on browse and I see a run i am following I can just unfollow from there. And when unfollow is selecting from the drop down menu itll ask if youre sure and then also do the normal pop ups that happen else where.
-    - Changing a run to the reading status should ask if the user would like to follow of the issues for that run. And if they already are following some if theyd like to add the rest of them.
-    - It should also detect when a followed run whos issues are all followed, when all the issues status become read if the run status isnt read itll prompt the user if they want to mark the run as read. That way if you only really update the status of individual issues itll handle it for you if you want.
-    - Currently the My comics page sayd both Followed runs and then right below it says Runs to follow, which is redundant.
