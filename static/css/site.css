@@ -193,6 +193,10 @@ a {
     margin-bottom: 1rem;
 }
 
+.erc-section-title {
+    color: var(--erc-accent);
+}
+
 @media (min-width: 768px) {
     .erc-section-header {
         flex-direction: row;
@@ -343,6 +347,15 @@ a {
 
 .clickable-row {
     cursor: pointer;
+}
+
+.erc-data-link {
+    color: var(--erc-accent-strong);
+}
+
+.erc-data-link:hover,
+.erc-data-link:focus {
+    color: #ffffff;
 }
 
 .erc-data-card .card-body {

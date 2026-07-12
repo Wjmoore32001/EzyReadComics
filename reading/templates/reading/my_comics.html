@@ -9,7 +9,7 @@
         <div class="erc-hero-content">
             <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-end gap-4">
                 <div>
-                    <p class="erc-page-kicker mb-3">Reading Tracking</p>
+                    <p class="erc-page-kicker mb-3">Reading</p>
                     <h1 class="erc-hero-title display-4 fw-bold mb-3">
                         My Comics
                     </h1>
@@ -58,10 +58,7 @@
     <section class="card erc-panel">
         <div class="card-body p-4">
             <div class="erc-section-header">
-                <div>
-                    <p class="erc-page-kicker mb-2">Filters</p>
-                    <h2 class="h3 fw-bold mb-0">Library view</h2>
-                </div>
+                <h2 class="h3 fw-bold mb-0 erc-section-title">Filters</h2>
 
                 {% if filters_active %}
                     <a href="{% url 'reading:my_comics' %}" class="btn btn-outline-secondary">
@@ -341,10 +338,7 @@
     <section class="card erc-panel erc-data-card">
         <div class="card-body">
             <div class="erc-section-header">
-                <div>
-                    <p class="erc-page-kicker mb-2">Followed runs</p>
-                    <h2 class="h3 fw-bold mb-0">Runs</h2>
-                </div>
+                <h2 class="h3 fw-bold mb-0 erc-section-title">Runs</h2>
 
                 <p class="erc-muted mb-0">
                     {{ followed_runs|length }} result{% if followed_runs|length != 1 %}s{% endif %}
@@ -365,7 +359,7 @@
                     {% for followed_run in followed_runs %}
                         <tr>
                             <td class="fw-semibold">
-                                <a href="{% url 'catalog:run_details' followed_run.run.id %}">
+                                <a href="{% url 'catalog:run_details' followed_run.run.id %}" class="erc-data-link">
                                     {{ followed_run.run }}
                                 </a>
                             </td>
@@ -422,10 +416,7 @@
     <section class="card erc-panel erc-data-card">
         <div class="card-body">
             <div class="erc-section-header">
-                <div>
-                    <p class="erc-page-kicker mb-2">Followed volumes</p>
-                    <h2 class="h3 fw-bold mb-0">Volumes</h2>
-                </div>
+                <h2 class="h3 fw-bold mb-0 erc-section-title">Volumes</h2>
 
                 <p class="erc-muted mb-0">
                     {{ volume_progress|length }} result{% if volume_progress|length != 1 %}s{% endif %}
@@ -446,12 +437,12 @@
                     {% for progress in volume_progress %}
                         <tr>
                             <td class="fw-semibold">
-                                <a href="{% url 'catalog:volume_details' progress.volume.id %}">
+                                <a href="{% url 'catalog:volume_details' progress.volume.id %}" class="erc-data-link">
                                     {{ progress.volume }}
                                 </a>
                             </td>
                             <td>
-                                <a href="{% url 'catalog:run_details' progress.volume.run.id %}">
+                                <a href="{% url 'catalog:run_details' progress.volume.run.id %}" class="erc-data-link">
                                     {{ progress.volume.run }}
                                 </a>
                             </td>
@@ -502,10 +493,7 @@
     <section class="card erc-panel erc-data-card">
         <div class="card-body">
             <div class="erc-section-header">
-                <div>
-                    <p class="erc-page-kicker mb-2">Followed issues</p>
-                    <h2 class="h3 fw-bold mb-0">Issues</h2>
-                </div>
+                <h2 class="h3 fw-bold mb-0 erc-section-title">Issues</h2>
 
                 <p class="erc-muted mb-0">
                     {{ issue_progress|length }} result{% if issue_progress|length != 1 %}s{% endif %}
@@ -526,12 +514,12 @@
                     {% for progress in issue_progress %}
                         <tr>
                             <td class="fw-semibold">
-                                <a href="{% url 'catalog:issue_details' progress.issue.id %}">
+                                <a href="{% url 'catalog:issue_details' progress.issue.id %}" class="erc-data-link">
                                     #{{ progress.issue.issue_number }}
                                 </a>
                             </td>
                             <td>
-                                <a href="{% url 'catalog:run_details' progress.issue.run.id %}">
+                                <a href="{% url 'catalog:run_details' progress.issue.run.id %}" class="erc-data-link">
                                     {{ progress.issue.run }}
                                 </a>
                             </td>

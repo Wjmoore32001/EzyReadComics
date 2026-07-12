@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% load static %}
 
-{% block title %}Browse - EzyReadComics{% endblock %}
+{% block title %}Browse Comics - EzyReadComics{% endblock %}
 
 {% block content %}
 <div class="erc-page-shell" data-csrf-token="{{ csrf_token }}">
@@ -9,12 +9,12 @@
         <div class="erc-hero-content">
             <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-end gap-4">
                 <div>
-                    <p class="erc-page-kicker mb-3">Comic Library</p>
+                    <p class="erc-page-kicker mb-3">Comics</p>
                     <h1 class="erc-hero-title display-4 fw-bold mb-3">
-                        Browse Comics.
+                        Browse Comics
                     </h1>
                     <p class="erc-hero-subtitle lead mb-0">
-                        Filter confirmed runs, collected volumes, and issues.
+                        Find runs, collected volumes, and issues.
                     </p>
                 </div>
 
@@ -52,10 +52,7 @@
     <section class="card erc-panel">
         <div class="card-body p-4">
             <div class="erc-section-header">
-                <div>
-                    <p class="erc-page-kicker mb-2">Filters</p>
-                    <h2 class="h3 fw-bold mb-0">Find comics</h2>
-                </div>
+                <h2 class="h3 fw-bold mb-0 erc-section-title">Filters</h2>
 
                 {% if selected_publisher or selected_run or selected_volume %}
                     <a href="{% url 'catalog:browse' %}" class="btn btn-outline-secondary">
@@ -360,22 +357,7 @@
     <section class="card erc-panel erc-data-card" data-load-section="runs">
         <div class="card-body">
             <div class="erc-section-header">
-                <div>
-                    <p class="erc-page-kicker mb-2">
-                        {% if selected_run %}
-                            Selected run
-                        {% else %}
-                            Runs
-                        {% endif %}
-                    </p>
-                    <h2 class="h3 fw-bold mb-0">
-                        {% if selected_run %}
-                            {{ selected_run }}
-                        {% else %}
-                            Comic runs
-                        {% endif %}
-                    </h2>
-                </div>
+                <h2 class="h3 fw-bold mb-0 erc-section-title">Runs</h2>
 
                 <p class="erc-muted mb-0" data-loaded-count>
                     Showing {{ runs|length }} loaded
@@ -386,13 +368,9 @@
                 <table class="table table-dark table-hover align-middle mb-0 erc-data-table">
                     <thead>
                     <tr>
-                        <th scope="col">Year</th>
                         <th scope="col">Run</th>
                         <th scope="col">Publisher</th>
-                        <th scope="col">Status</th>
                         <th scope="col">Issues</th>
-                        <th scope="col">First issue date</th>
-                        <th scope="col">Latest issue date</th>
                         <th scope="col" class="text-end">My Comics</th>
                     </tr>
                     </thead>
@@ -405,33 +383,18 @@
                             tabindex="0"
                             aria-label="Open run details for {{ run }}"
                         >
-                            <td>
-                                {% if run.start_year %}
-                                    {{ run.start_year }}
-                                {% else %}
-                                    <span class="erc-muted">Unknown</span>
-                                {% endif %}
+                            <td class="fw-semibold">
+                                <a href="{% url 'catalog:run_details' run.id %}" class="erc-data-link">
+                                    {{ run.title }}
+                                </a>
                             </td>
-                            <td class="fw-semibold">{{ run.title }}</td>
-                            <td>{{ run.publisher.name }}</td>
-                            <td>{{ run.get_status_display }}</td>
+                            <td>
+                                {{ run.publisher.name }}
+                                <span class="erc-muted">· {{ run.get_status_display }}</span>
+                            </td>
                             <td>
                                 {% if run.issue_count %}
                                     {{ run.issue_count }}
-                                {% else %}
-                                    <span class="erc-muted">Unknown</span>
-                                {% endif %}
-                            </td>
-                            <td>
-                                {% if run.first_issue_date %}
-                                    {{ run.first_issue_date|date:"Y-m-d" }}
-                                {% else %}
-                                    <span class="erc-muted">Unknown</span>
-                                {% endif %}
-                            </td>
-                            <td>
-                                {% if run.last_issue_date %}
-                                    {{ run.last_issue_date|date:"Y-m-d" }}
                                 {% else %}
                                     <span class="erc-muted">Unknown</span>
                                 {% endif %}
@@ -484,7 +447,7 @@
                         </tr>
                     {% empty %}
                         <tr>
-                            <td colspan="8" class="text-center erc-muted py-4">
+                            <td colspan="4" class="text-center erc-muted py-4">
                                 No runs match this filter.
                             </td>
                         </tr>
@@ -524,22 +487,7 @@
     <section class="card erc-panel erc-data-card" data-load-section="volumes">
         <div class="card-body">
             <div class="erc-section-header">
-                <div>
-                    <p class="erc-page-kicker mb-2">
-                        {% if selected_volume %}
-                            Selected volume
-                        {% else %}
-                            Collected editions
-                        {% endif %}
-                    </p>
-                    <h2 class="h3 fw-bold mb-0">
-                        {% if selected_volume %}
-                            {{ selected_volume }}
-                        {% else %}
-                            Volumes
-                        {% endif %}
-                    </h2>
-                </div>
+                <h2 class="h3 fw-bold mb-0 erc-section-title">Volumes</h2>
 
                 <p class="erc-muted mb-0" data-loaded-count>
                     Showing {{ volumes|length }} loaded
@@ -552,9 +500,6 @@
                     <tr>
                         <th scope="col">Volume</th>
                         <th scope="col">Run</th>
-                        <th scope="col">Publisher</th>
-                        <th scope="col">Issue Range</th>
-                        <th scope="col">Issue Count</th>
                         <th scope="col">Release Date</th>
                         <th scope="col" class="text-end">My Comics</th>
                     </tr>
@@ -568,22 +513,15 @@
                             tabindex="0"
                             aria-label="Open volume details for {{ volume }}"
                         >
-                            <td class="fw-semibold">{{ volume }}</td>
-                            <td>{{ volume.run }}</td>
-                            <td>{{ volume.publisher.name }}</td>
-                            <td>
-                                {% if volume.first_issue_number or volume.last_issue_number %}
-                                    #{{ volume.first_issue_number|default:"?" }}–{{ volume.last_issue_number|default:"?" }}
-                                {% else %}
-                                    <span class="erc-muted">Unknown</span>
-                                {% endif %}
+                            <td class="fw-semibold">
+                                <a href="{% url 'catalog:volume_details' volume.id %}" class="erc-data-link">
+                                    {{ volume }}
+                                </a>
                             </td>
                             <td>
-                                {% if volume.issue_count %}
-                                    {{ volume.issue_count }}
-                                {% else %}
-                                    <span class="erc-muted">Unknown</span>
-                                {% endif %}
+                                <a href="{% url 'catalog:run_details' volume.run.id %}" class="erc-data-link">
+                                    {{ volume.run }}
+                                </a>
                             </td>
                             <td>
                                 {% if volume.release_date %}
@@ -633,7 +571,7 @@
                         </tr>
                     {% empty %}
                         <tr>
-                            <td colspan="7" class="text-center erc-muted py-4">
+                            <td colspan="4" class="text-center erc-muted py-4">
                                 No collected volumes match this filter.
                             </td>
                         </tr>
@@ -673,10 +611,7 @@
     <section class="card erc-panel erc-data-card" data-load-section="issues">
         <div class="card-body">
             <div class="erc-section-header">
-                <div>
-                    <p class="erc-page-kicker mb-2">Single issues</p>
-                    <h2 class="h3 fw-bold mb-0">Issues</h2>
-                </div>
+                <h2 class="h3 fw-bold mb-0 erc-section-title">Issues</h2>
 
                 <p class="erc-muted mb-0" data-loaded-count>
                     Showing {{ issues|length }} loaded
@@ -687,11 +622,9 @@
                 <table class="table table-dark table-hover align-middle mb-0 erc-data-table">
                     <thead>
                     <tr>
-                        <th scope="col">Year</th>
-                        <th scope="col">Run</th>
                         <th scope="col">Issue</th>
+                        <th scope="col">Run</th>
                         <th scope="col">Published Date</th>
-                        <th scope="col">Writer</th>
                         <th scope="col" class="text-end">My Comics</th>
                     </tr>
                     </thead>
@@ -703,25 +636,19 @@
                             tabindex="0"
                             aria-label="Open issue details for issue {{ issue.issue_number }}"
                         >
-                            <td>
-                                {% if issue.run.start_year %}
-                                    {{ issue.run.start_year }}
-                                {% else %}
-                                    <span class="erc-muted">Unknown</span>
-                                {% endif %}
+                            <td class="fw-semibold">
+                                <a href="{% url 'catalog:issue_details' issue.id %}" class="erc-data-link">
+                                    #{{ issue.issue_number }}
+                                </a>
                             </td>
-                            <td class="fw-semibold">{{ issue.run.title }}</td>
-                            <td>#{{ issue.issue_number }}</td>
+                            <td>
+                                <a href="{% url 'catalog:run_details' issue.run.id %}" class="erc-data-link">
+                                    {{ issue.run }}
+                                </a>
+                            </td>
                             <td>
                                 {% if issue.published_date %}
                                     {{ issue.published_date|date:"Y-m-d" }}
-                                {% else %}
-                                    <span class="erc-muted">Unknown</span>
-                                {% endif %}
-                            </td>
-                            <td>
-                                {% if issue.display_writers %}
-                                    {{ issue.display_writers }}
                                 {% else %}
                                     <span class="erc-muted">Unknown</span>
                                 {% endif %}
@@ -767,7 +694,7 @@
                         </tr>
                     {% empty %}
                         <tr>
-                            <td colspan="6" class="text-center erc-muted py-4">
+                            <td colspan="4" class="text-center erc-muted py-4">
                                 No issues match this filter.
                             </td>
                         </tr>

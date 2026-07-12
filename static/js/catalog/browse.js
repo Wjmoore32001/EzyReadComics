@@ -288,18 +288,41 @@ document.addEventListener("DOMContentLoaded", function () {
     function addCell(row, text, options) {
         const cell = document.createElement("td");
         const cellOptions = options || {};
+        const safeText = text || "";
+
+        if (cellOptions.alignEnd) {
+            cell.classList.add("text-end");
+        }
 
         if (cellOptions.bold) {
             cell.classList.add("fw-semibold");
         }
 
-        if (cellOptions.muted) {
+        if (cellOptions.linkLike) {
+            const content = cellOptions.href ? document.createElement("a") : document.createElement("span");
+
+            if (cellOptions.href) {
+                content.href = cellOptions.href;
+            }
+
+            content.className = "erc-data-link";
+            content.textContent = safeText;
+            cell.appendChild(content);
+        } else if (cellOptions.muted) {
             const mutedText = document.createElement("span");
             mutedText.className = "erc-muted";
-            mutedText.textContent = text;
+            mutedText.textContent = safeText;
             cell.appendChild(mutedText);
         } else {
-            cell.textContent = text;
+            cell.textContent = safeText;
+        }
+
+        if (cellOptions.meta) {
+            const meta = document.createElement("span");
+
+            meta.className = "erc-muted";
+            meta.textContent = " · " + cellOptions.meta;
+            cell.appendChild(meta);
         }
 
         row.appendChild(cell);
@@ -441,13 +464,17 @@ document.addEventListener("DOMContentLoaded", function () {
     function createRunRow(item) {
         const row = createClickableRow(item);
 
-        addCell(row, item.year, { muted: item.year_muted });
-        addCell(row, item.title, { bold: true });
-        addCell(row, item.publisher);
-        addCell(row, item.status);
-        addCell(row, item.issue_count, { muted: item.issue_count_muted });
-        addCell(row, item.first_issue_date, { muted: item.first_issue_date_muted });
-        addCell(row, item.last_issue_date, { muted: item.last_issue_date_muted });
+        addCell(row, item.title, {
+            bold: true,
+            linkLike: true,
+            href: item.row_url,
+        });
+        addCell(row, item.publisher, {
+            meta: item.status,
+        });
+        addCell(row, item.issue_count, {
+            muted: item.issue_count_muted,
+        });
         row.appendChild(createTrackingCell(item.tracking));
 
         return row;
@@ -456,12 +483,17 @@ document.addEventListener("DOMContentLoaded", function () {
     function createVolumeRow(item) {
         const row = createClickableRow(item);
 
-        addCell(row, item.volume, { bold: true });
-        addCell(row, item.run);
-        addCell(row, item.publisher);
-        addCell(row, item.issue_range, { muted: item.issue_range_muted });
-        addCell(row, item.issue_count, { muted: item.issue_count_muted });
-        addCell(row, item.release_date, { muted: item.release_date_muted });
+        addCell(row, item.volume, {
+            bold: true,
+            linkLike: true,
+            href: item.row_url,
+        });
+        addCell(row, item.run, {
+            linkLike: true,
+        });
+        addCell(row, item.release_date, {
+            muted: item.release_date_muted,
+        });
         row.appendChild(createTrackingCell(item.tracking));
 
         return row;
@@ -470,11 +502,17 @@ document.addEventListener("DOMContentLoaded", function () {
     function createIssueRow(item) {
         const row = createClickableRow(item);
 
-        addCell(row, item.year, { muted: item.year_muted });
-        addCell(row, item.run, { bold: true });
-        addCell(row, item.issue);
-        addCell(row, item.published_date, { muted: item.published_date_muted });
-        addCell(row, item.writer, { muted: item.writer_muted });
+        addCell(row, item.issue, {
+            bold: true,
+            linkLike: true,
+            href: item.row_url,
+        });
+        addCell(row, item.run, {
+            linkLike: true,
+        });
+        addCell(row, item.published_date, {
+            muted: item.published_date_muted,
+        });
         row.appendChild(createTrackingCell(item.tracking));
 
         return row;
