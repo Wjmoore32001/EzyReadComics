@@ -516,10 +516,8 @@
                             <th scope="col">Issue</th>
                             <th scope="col">Published Date</th>
                             <th scope="col">Writer</th>
-                            <th scope="col">Penciller</th>
                         </tr>
                         </thead>
-
                         <tbody>
                         {% for issue in issues %}
                             <tr
@@ -547,13 +545,6 @@
                                 <td>
                                     {% if issue.display_writers %}
                                         {{ issue.display_writers }}
-                                    {% else %}
-                                        <span class="erc-muted">Unknown</span>
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    {% if issue.display_pencillers %}
-                                        {{ issue.display_pencillers }}
                                     {% else %}
                                         <span class="erc-muted">Unknown</span>
                                     {% endif %}

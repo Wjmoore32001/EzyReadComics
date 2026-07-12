@@ -19,7 +19,7 @@ from ._local_comicvine_helpers import (
 )
 
 
-DEFAULT_MODEL = "gpt-5.5"
+DEFAULT_MODEL = "gpt-5.6-luna"
 DEFAULT_PUBLISHER_NAME = "Marvel"
 DEFAULT_BATCH_SIZE = 5
 DEFAULT_MAX_BATCHES = 3
@@ -41,7 +41,6 @@ RESULT_SCHEMA = {
                     "issue_count": {"type": ["integer", "null"]},
                     "first_issue_date": {"type": ["string", "null"]},
                     "last_issue_date": {"type": ["string", "null"]},
-                    "description": {"type": ["string", "null"]},
                 },
                 "required": [
                     "title",
@@ -50,7 +49,6 @@ RESULT_SCHEMA = {
                     "issue_count",
                     "first_issue_date",
                     "last_issue_date",
-                    "description",
                 ],
             },
         },
@@ -65,7 +63,6 @@ REQUIRED_TEXT_FIELDS = [
     "status",
     "first_issue_date",
     "last_issue_date",
-    "description",
 ]
 
 DATE_FIELDS = [
@@ -318,6 +315,7 @@ class Command(BaseCommand):
         self.stdout.write(
             f"Catalog writes: {'none' if dry_run else 'create missing ComicRun rows only'}"
         )
+        self.stdout.write("Run description: blank until catalog issue #1 has a description")
         self.stdout.write("Creates issues from OpenAI: no")
         self.stdout.write(
             "Local Comic Vine issue copy: "
@@ -428,7 +426,6 @@ class Command(BaseCommand):
             )
             self.stdout.write(f"   First issue date: {candidate.get('first_issue_date') or 'unknown'}")
             self.stdout.write(f"   Last issue date: {candidate.get('last_issue_date') or 'unknown'}")
-            self.stdout.write(f"   Description: {candidate.get('description') or '[blank]'}")
 
             if missing_fields:
                 self.stdout.write("   Still missing: " + ", ".join(missing_fields))
@@ -514,7 +511,7 @@ class Command(BaseCommand):
                     last_issue_date=parse_date(candidate.get("last_issue_date")),
                     status=map_catalog_status(candidate.get("status")),
                     issue_count=candidate.get("issue_count"),
-                    description=clean_text(candidate.get("description")),
+                    description="",
                 )
 
             existing_runs.append(run)
@@ -652,18 +649,38 @@ Today: {date.today().isoformat()}
 Do not return these candidates again:
 {rejected_text}
 
-Return fields: title, start_year, status, issue_count, first_issue_date, last_issue_date, description.
+Return fields:
+- title
+- start_year
+- status
+- issue_count
+- first_issue_date
+- last_issue_date
 
-Rules:
+Field rules:
 - status is upcoming if issue #1 has a future on-sale date.
 - status is ongoing if issue #1 is already on sale and the run is not completed.
-- issue_count is released plus officially solicited issues.
+- issue_count is released plus officially solicited numbered single issues.
 - first_issue_date is issue #1 on-sale date.
-- last_issue_date is latest released or solicited issue on-sale date.
-- description is plain text under 180 characters.
-- Exclude collected editions, trades, omnibuses, hardcovers, facsimiles, reprints, variants, posters, art books, toys, prose books, one-shots, completed older runs, and finite limited series unless a reliable source explicitly treats it as ongoing.
+- last_issue_date is latest released or officially solicited numbered single issue on-sale date.
 - Dates must use YYYY-MM-DD.
 - Use null for unknown fields.
+
+Exclusions:
+- collected editions
+- trades
+- omnibuses
+- hardcovers
+- facsimiles
+- reprints
+- variants
+- posters
+- art books
+- toys
+- prose books
+- one-shots
+- completed older runs
+- finite limited series unless a reliable source explicitly treats it as ongoing
 
 Return compact JSON only.
 """.strip()
@@ -808,7 +825,6 @@ def normalize_candidate(candidate):
         "issue_count": parse_positive_int(candidate.get("issue_count")),
         "first_issue_date": clean_text(candidate.get("first_issue_date")),
         "last_issue_date": clean_text(candidate.get("last_issue_date")),
-        "description": clean_text(candidate.get("description")),
     }
 
 

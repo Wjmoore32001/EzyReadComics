@@ -1,4 +1,7 @@
+import re
+
 from django.db import models
+from django.utils import timezone
 
 
 class ImageUrlFields(models.Model):
@@ -144,6 +147,27 @@ class ComicIssue(ImageUrlFields):
     def store_date(self, value):
         self.published_date = value
 
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        self.sync_run_description_from_first_issue()
+
+    def sync_run_description_from_first_issue(self):
+        description = self.description.strip()
+
+        if not self.run_id or not description:
+            return
+
+        if not is_first_issue_number(self.issue_number):
+            return
+
+        ComicRun.objects.filter(
+            id=self.run_id,
+            description="",
+        ).update(
+            description=description,
+            updated_at=timezone.now(),
+        )
+
     def __str__(self):
         return f"{self.run} #{self.issue_number}"
 
@@ -234,3 +258,14 @@ class ComicVolumeIssue(models.Model):
 
     def __str__(self):
         return f"{self.volume} contains {self.issue}"
+
+
+def is_first_issue_number(value):
+    value = str(value or "").strip()
+    value = re.sub(r"^\s*issue\s*", "", value, flags=re.IGNORECASE)
+    value = re.sub(r"^\s*no\.?\s*", "", value, flags=re.IGNORECASE)
+
+    while value.startswith("#"):
+        value = value[1:].strip()
+
+    return value == "1"

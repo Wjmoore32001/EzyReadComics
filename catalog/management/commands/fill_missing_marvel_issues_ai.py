@@ -24,6 +24,31 @@ DEFAULT_MODEL = os.getenv(
 DEFAULT_PUBLISHER_NAME = "Marvel"
 MARVEL_DOMAIN = "marvel.com"
 
+ROLE_DISPLAY_ORDER = {
+    "Writer": 10,
+    "Artist": 20,
+    "Penciller": 30,
+    "Inker": 40,
+    "Colorist": 50,
+    "Letterer": 60,
+    "Cover Artist": 70,
+    "Editor": 80,
+}
+
+
+CREDIT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "role": {"type": "string"},
+        "name": {"type": "string"},
+    },
+    "required": [
+        "role",
+        "name",
+    ],
+}
+
 
 ISSUE_SCHEMA = {
     "type": "object",
@@ -32,21 +57,16 @@ ISSUE_SCHEMA = {
         "issue_number": {"type": "string"},
         "published_date": {"type": ["string", "null"]},
         "description": {"type": ["string", "null"]},
-        "writers": {
+        "credits": {
             "type": "array",
-            "items": {"type": "string"},
-        },
-        "pencillers": {
-            "type": "array",
-            "items": {"type": "string"},
+            "items": CREDIT_SCHEMA,
         },
     },
     "required": [
         "issue_number",
         "published_date",
         "description",
-        "writers",
-        "pencillers",
+        "credits",
     ],
 }
 
@@ -112,8 +132,8 @@ class Command(BaseCommand):
             "--require-official-fields",
             action="store_true",
             help=(
-                "Require issue number, published date, description, at least one Writer, "
-                "and at least one Penciller before creating/updating an issue."
+                "Require issue number, published date, description, and at least one Writer "
+                "before creating/updating an issue."
             ),
         )
         parser.add_argument(
@@ -351,8 +371,9 @@ class Command(BaseCommand):
             if should_skip_upcoming and not include_upcoming:
                 continue
 
+            existing_issues = get_existing_issues(run)
+
             if forced_issue_numbers:
-                existing_issues = get_existing_issues(run)
                 target_issue_numbers = build_forced_target_issue_numbers(
                     forced_issue_numbers=forced_issue_numbers,
                     existing_issues=existing_issues,
@@ -364,7 +385,6 @@ class Command(BaseCommand):
 
                 break
 
-            existing_issues = get_existing_issues(run)
             has_missing_issues = (
                 run.issue_count is not None
                 and run.attached_issue_count < run.issue_count
@@ -422,7 +442,7 @@ class Command(BaseCommand):
         self.stdout.write(
             "Required fields: "
             + (
-                "issue number, published date, description, Writer, Penciller"
+                "issue number, published date, description, Writer"
                 if require_official_fields
                 else "issue number, published date"
             )
@@ -551,8 +571,7 @@ class Command(BaseCommand):
         self.stdout.write("")
 
         for index, candidate in enumerate(candidates, start=1):
-            writers = ", ".join(candidate["writers"]) or "none"
-            pencillers = ", ".join(candidate["pencillers"]) or "none"
+            credits = format_credits(candidate["credits"]) or "none"
             description = candidate.get("description") or "[blank]"
             missing_fields = get_missing_candidate_fields(
                 candidate,
@@ -563,8 +582,7 @@ class Command(BaseCommand):
             self.stdout.write(f"{index}. {run.title} #{candidate['issue_number']}")
             self.stdout.write(f"   Published date: {candidate.get('published_date') or 'unknown'}")
             self.stdout.write(f"   Description: {description}")
-            self.stdout.write(f"   Writer: {writers}")
-            self.stdout.write(f"   Penciller: {pencillers}")
+            self.stdout.write(f"   Credits: {credits}")
 
             if is_future:
                 self.stdout.write("   Skipped: future published date")
@@ -615,15 +633,6 @@ class Command(BaseCommand):
         credits_added_count = 0
 
         with transaction.atomic():
-            writer_role = get_or_create_credit_role(
-                name="Writer",
-                display_order=10,
-            )
-            penciller_role = get_or_create_credit_role(
-                name="Penciller",
-                display_order=20,
-            )
-
             for candidate in ready_candidates:
                 issue_number = canonical_issue_number(candidate.get("issue_number"))
                 normalized_issue_number = normalize_issue_number(issue_number)
@@ -667,13 +676,7 @@ class Command(BaseCommand):
 
                 credits_added_count += add_issue_credits(
                     issue=issue,
-                    role=writer_role,
-                    names=candidate["writers"],
-                )
-                credits_added_count += add_issue_credits(
-                    issue=issue,
-                    role=penciller_role,
-                    names=candidate["pencillers"],
+                    credits=candidate["credits"],
                 )
 
         return (
@@ -793,7 +796,7 @@ def build_marvel_prompt(*, run, target_issue_numbers, require_official_fields):
         for issue_number in target_issue_numbers
     )
     required_fields = (
-        "issue_number, published_date, description, writers, pencillers"
+        "issue_number, published_date, description, at least one Writer credit"
         if require_official_fields
         else "issue_number, published_date"
     )
@@ -815,8 +818,13 @@ For each issue:
 - issue_number: requested issue number
 - published_date: Marvel "Published" date in YYYY-MM-DD format
 - description: official Marvel issue description
-- writers: names credited as Writer
-- pencillers: names credited as Penciller
+- credits: every credited person listed on the Marvel issue page
+
+Credit rules:
+- Include Writer credits.
+- Include other listed credits such as Artist, Penciller, Inker, Colorist, Letterer, Cover Artist, and Editor.
+- Use the role label shown by Marvel, normalized to singular title case.
+- Use one credit object per person-role pair.
 
 Rules:
 - Use only official Marvel.com issue pages.
@@ -826,7 +834,7 @@ Rules:
 - For future published dates, return the published_date and only return description/credits if clearly listed.
 - Use null for unknown published_date.
 - Use an empty string for unknown description.
-- Use empty arrays for unknown writers or pencillers.
+- Use an empty array for unknown credits.
 """.strip()
 
 
@@ -976,9 +984,6 @@ def issue_needs_official_update(issue, *, require_official_fields):
     if not issue_has_role(issue, "Writer"):
         return True
 
-    if not issue_has_role(issue, "Penciller"):
-        return True
-
     return False
 
 
@@ -1018,8 +1023,7 @@ def ensure_candidates_for_targets(*, candidates, target_issue_numbers):
                 "issue_number": canonical_number,
                 "published_date": None,
                 "description": "",
-                "writers": [],
-                "pencillers": [],
+                "credits": [],
             }
 
     return sort_candidates(candidate_map.values())
@@ -1047,32 +1051,78 @@ def normalize_candidate(candidate):
         "issue_number": canonical_issue_number(candidate.get("issue_number")),
         "published_date": clean_text(candidate.get("published_date")) or None,
         "description": clean_text(candidate.get("description")),
-        "writers": normalize_name_list(candidate.get("writers")),
-        "pencillers": normalize_name_list(candidate.get("pencillers")),
+        "credits": normalize_credit_list(candidate.get("credits")),
     }
 
 
-def normalize_name_list(value):
+def normalize_credit_list(value):
     if not value:
         return []
 
-    if isinstance(value, str):
-        value = [value]
-
-    names = []
+    credits = []
     seen = set()
 
     for item in value:
-        name = clean_credit_name(item)
-        key = name.casefold()
+        if not isinstance(item, dict):
+            continue
 
-        if not name or key in seen:
+        role = normalize_credit_role(item.get("role"))
+        name = clean_credit_name(item.get("name"))
+
+        if not role or not name:
+            continue
+
+        key = (role.casefold(), name.casefold())
+
+        if key in seen:
             continue
 
         seen.add(key)
-        names.append(name)
+        credits.append(
+            {
+                "role": role,
+                "name": name,
+            }
+        )
 
-    return names
+    return credits
+
+
+def normalize_credit_role(value):
+    value = clean_text(value)
+    value = value.replace("_", " ")
+    value = value.replace("-", " ")
+    value = re.sub(r"\s+", " ", value).strip(" :;,.")
+    key = value.casefold()
+
+    role_aliases = {
+        "writer": "Writer",
+        "writers": "Writer",
+        "artist": "Artist",
+        "artists": "Artist",
+        "penciler": "Penciller",
+        "pencilers": "Penciller",
+        "penciller": "Penciller",
+        "pencillers": "Penciller",
+        "inker": "Inker",
+        "inkers": "Inker",
+        "colorist": "Colorist",
+        "colorists": "Colorist",
+        "colourist": "Colorist",
+        "colourists": "Colorist",
+        "letterer": "Letterer",
+        "letterers": "Letterer",
+        "cover": "Cover Artist",
+        "cover artist": "Cover Artist",
+        "cover artists": "Cover Artist",
+        "editor": "Editor",
+        "editors": "Editor",
+    }
+
+    if key in role_aliases:
+        return role_aliases[key]
+
+    return value.title()
 
 
 def clean_credit_name(value):
@@ -1101,13 +1151,18 @@ def get_missing_candidate_fields(candidate, *, require_official_fields):
         if not clean_text(candidate.get("description")):
             missing_fields.append("description")
 
-        if not candidate.get("writers"):
+        if not candidate_has_writer(candidate):
             missing_fields.append("writer")
 
-        if not candidate.get("pencillers"):
-            missing_fields.append("penciller")
-
     return missing_fields
+
+
+def candidate_has_writer(candidate):
+    for credit in candidate.get("credits") or []:
+        if normalize_credit_role(credit.get("role")) == "Writer":
+            return True
+
+    return False
 
 
 def candidate_has_future_published_date(candidate):
@@ -1214,7 +1269,9 @@ def pure_integer_issue_number(value):
     return int(value)
 
 
-def get_or_create_credit_role(*, name, display_order):
+def get_or_create_credit_role(*, name):
+    display_order = ROLE_DISPLAY_ORDER.get(name, 100)
+
     role = CreditRole.objects.filter(name__iexact=name).first()
 
     if role is None:
@@ -1240,11 +1297,18 @@ def get_or_create_credit_role(*, name, display_order):
     return role
 
 
-def add_issue_credits(*, issue, role, names):
+def add_issue_credits(*, issue, credits):
     created_count = 0
 
-    for index, name in enumerate(names, start=1):
-        person = get_or_create_credit_person(name)
+    for index, credit in enumerate(credits, start=1):
+        role_name = normalize_credit_role(credit.get("role"))
+        person_name = clean_credit_name(credit.get("name"))
+
+        if not role_name or not person_name:
+            continue
+
+        role = get_or_create_credit_role(name=role_name)
+        person = get_or_create_credit_person(person_name)
 
         _, created = ComicIssueCredit.objects.get_or_create(
             issue=issue,
@@ -1268,6 +1332,16 @@ def get_or_create_credit_person(name):
         return existing
 
     return CreditPerson.objects.create(name=name)
+
+
+def format_credits(credits):
+    if not credits:
+        return ""
+
+    return "; ".join(
+        f"{credit['role']}: {credit['name']}"
+        for credit in credits
+    )
 
 
 def parse_response_json(output_text):
