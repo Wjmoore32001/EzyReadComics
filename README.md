@@ -69,12 +69,16 @@ Current browse behavior:
 - Run, volume, and issue sections can load more rows or hide rows without a full page reload.
 - Logged-in users can follow, update, or unfollow runs, volumes, and issues from Browse without reloading the whole page.
 - Follow actions ask which status to save instead of silently defaulting to Planned.
+- Run follow uses a modal flow instead of browser OK/Cancel popups.
+- When following a run, users can optionally follow all issues in that run too.
+- Run follow can apply one issue status to all issues or set individual issue statuses per issue.
+- Canceling the run follow modal does not save the run or issue statuses.
 - Run status changes can optionally apply the selected status to the run's issues.
 - When all issues in a followed run are marked Read, the app can prompt the user to mark the run Read too.
 - Runs, volumes, and issues are ordered newest-first by run start year where applicable.
 - Rows are clickable and open the matching detail page.
 - Filters can be cleared individually or all at once.
-- Issue tables show issue number, published date, and Writer when available.
+- Issue tables show issue number and published date.
 - Issue titles are not shown in browse.
 - Cover dates are not shown in browse.
 - Penciller is collected as a credit when available, but it is not shown as a dedicated browse column.
@@ -107,6 +111,10 @@ Logged-in users can:
 
 - Follow or unfollow the run.
 - Choose a run tracking status when following the run.
+- Optionally follow every issue in the run while following the run.
+- Set one issue status for every issue in the run.
+- Set individual issue statuses for each issue in the run.
+- Cancel the run follow modal without saving anything.
 - Update the run tracking status.
 - Optionally apply run status changes to the run's issues.
 - Follow, update, or unfollow individual issues listed on the run page.
@@ -214,8 +222,8 @@ The account system currently supports:
 - Logout
 - Optional email during signup
 - Account page
-- Username changes
-- Password changes
+- Collapsed username-change form
+- Collapsed password-change form
 - Basic signup bot protection
 - Signup rate limiting
 
@@ -225,6 +233,29 @@ Account routes:
     /accounts/login/
     /accounts/logout/
     /accounts/
+
+## UI Direction
+
+The current user-facing site uses a shared dark comic-library style across:
+
+- Home
+- Browse
+- My Comics
+- Run details
+- Issue details
+- Collected-volume details
+- Account
+- Login
+- Signup
+
+Current UI behavior:
+
+- Main pages use a shared dark shell, hero area, rounded cards, and consistent table styling.
+- Section headings use the shared blue accent style.
+- Browse and My Comics use mobile-friendlier table columns.
+- Browse rows use consistent linked blue text for runs, volumes, and issues.
+- Account username and password forms stay collapsed until the user opens them.
+- Page-specific JavaScript is loaded from static files instead of being embedded directly in large template scripts.
 
 ## Data Model
 
@@ -256,7 +287,7 @@ Current catalog issue behavior:
 - `ComicIssue.cover_date` is retained for possible future/debug use but is not currently user-facing.
 - `ComicIssue.description` stores official issue description text when available.
 - `ComicIssueCredit` stores issue credits such as Writer, Artist, Penciller, Inker, Colorist, Letterer, Cover Artist, and Editor when available.
-- The current browse UI shows Writer but does not show a dedicated Penciller column.
+- The current browse UI does not show a dedicated Penciller column.
 - Saving issue #1 with a description automatically fills the parent run description if the run description is blank.
 
 Current catalog run behavior:
@@ -285,6 +316,9 @@ Current reading behavior:
   - Reading
   - Read
 - Follow actions ask which status to save.
+- Run follow uses a modal flow for run status and optional issue statuses.
+- Following a run can also follow all issues in the run.
+- Followed issues can receive one shared status or individual statuses per issue during run follow.
 - Saving issue or volume progress automatically follows the parent run.
 - Marking a volume as read also marks the linked issues inside that volume as read.
 - Run status changes can optionally update the user's issue statuses for that run.
@@ -506,7 +540,7 @@ Credit behavior:
 
 - Writer is the only required credit in strict mode.
 - Other listed credits are collected when Marvel provides them, including Artist, Penciller, Inker, Colorist, Letterer, Cover Artist, and Editor.
-- Browse focuses on Writer only.
+- Browse focuses on issue number and published date for the current compact mobile layout.
 - Issue detail pages can still show full issue credits.
 
 ## Tech Stack
@@ -563,6 +597,7 @@ Credit behavior:
             templates/reading/
 
         static/
+            css/
             js/
 
         templates/
@@ -751,5 +786,5 @@ The current app direction is intentionally simple:
 - Use published date as the main issue date.
 - Let issue #1 populate the parent run description when possible.
 - Keep reading tracking user-specific.
-- Keep tracking actions user-confirmed when they can affect multiple saved statuses.
+- Keep run follow actions user-confirmed in the modal when they can affect multiple issue statuses.
 - Avoid recommendation logic, reading-order algorithms, events, characters, creators, and story-arc features until the core catalog and tracking experience is stable.

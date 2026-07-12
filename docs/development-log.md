@@ -15,10 +15,13 @@ Current project areas:
 - `catalog` stores confirmed app-facing comic data.
 - `ingestion` stores source-to-catalog staging records and confirmed run candidates.
 - `reading` stores user-specific comic tracking data.
-- The site currently has catalog home, browse, run details, issue details, collected-volume details, and My Comics pages.
+- The site currently has catalog home, browse, run details, issue details, collected-volume details, My Comics, account, login, and signup pages.
+- The main user-facing pages now share the same dark comic-library UI direction.
 - Browse is being kept mobile-friendly by limiting initial catalog rows and loading more rows only when requested.
 - Browse supports inline logged-in tracking actions for runs, volumes, and issues.
+- Run follow now uses a modal flow for run status, optional issue following, and optional per-issue status selection.
 - My Comics supports filtering followed items by publisher, run, and status.
+- Account username and password forms are hidden behind expand buttons by default.
 - Comic Vine backfill/import work is ongoing.
 - Comic Vine run and issue ingestion supports confirmed source-to-catalog promotion.
 - AI-assisted Marvel catalog commands now support missing run discovery and official Marvel.com issue metadata filling.
@@ -31,6 +34,47 @@ Current project areas:
 
 ### 2026-07-12
 
+- Completed the current dark UI revamp across the main user-facing pages:
+  - Home
+  - Browse
+  - My Comics
+  - Run details
+  - Issue details
+  - Collected-volume details
+  - Account
+  - Login
+  - Signup
+- Updated the shared page style around:
+  - Dark page shell
+  - Hero sections
+  - Blue section headings
+  - Rounded panels
+  - Dark data tables
+  - Consistent clickable row/link treatment
+  - Mobile-friendlier table columns
+- Updated Browse display:
+  - Runs now display as `Title (Year)` instead of using a separate year column.
+  - Browse columns were reduced for a cleaner mobile layout.
+  - Browse run rows show status beside publisher.
+  - Browse section headers use the shared blue heading style.
+  - Browse issue and run link colors now match My Comics.
+- Updated account pages:
+  - Login and signup now use the shared dark page shell and panel style.
+  - Account now uses the shared dark page shell and account summary cards.
+  - Change username and change password forms are collapsed by default.
+  - Username and password forms reopen automatically when that form has validation errors.
+- Revamped the run follow popup system:
+  - Run follow now happens through the existing modal instead of browser OK/Cancel prompts.
+  - The modal lets the user choose the run status.
+  - The modal can optionally follow all issues in the run.
+  - If following all issues, the modal can apply one issue status to every issue.
+  - If individual issue status mode is enabled, the modal shows one status selector per issue in the run.
+  - Canceling the modal saves nothing.
+  - Saving the modal adds the run and selected issue statuses to My Comics together.
+- Added run-follow option loading:
+  - Added a run follow options endpoint for loading the run's issues into the modal.
+  - Added backend handling for single shared issue status during run follow.
+  - Added backend handling for individual per-issue statuses during run follow.
 - Expanded logged-in tracking behavior across Browse, Run Details, and My Comics:
   - Browse follow actions now open a status picker instead of silently defaulting to Planned.
   - Browse tracking actions update the displayed row without a full page refresh.
@@ -85,7 +129,7 @@ Current project areas:
 - Kept `ComicIssue.title` as a legacy/manual field, but removed issue title from the current user-facing issue workflow.
 - Kept `ComicIssue.cover_date` for possible future/debug use, but removed cover date from current user-facing issue display.
 - Updated issue display direction:
-  - Browse issue rows show issue number, published date, and Writer.
+  - Browse issue rows show issue number and published date.
   - Issue detail pages focus on issue number, published date, description, and credits.
   - Penciller is no longer a dedicated browse column.
 - Added official Marvel.com issue metadata filling through `fill_missing_marvel_issues_ai`.
@@ -103,13 +147,8 @@ Current project areas:
   - Skips future-dated issues because upcoming Marvel pages may be incomplete.
   - Can reduce a run's issue count to the currently released count when future-dated issues are found during normal filling, avoiding repeated checks for intentionally skipped upcoming issues.
 - Updated issue credit direction:
-  - Writer is prioritized for browse and strict validation.
+  - Writer is prioritized for strict validation.
   - Other listed credits such as Artist, Penciller, Inker, Colorist, Letterer, Cover Artist, and Editor are still collected when Marvel provides them.
-- Updated browse and detail-page direction to match the new issue model:
-  - Title is not part of normal issue display.
-  - Published date replaces store date.
-  - Cover date is not shown as a normal user-facing field.
-  - Writer is the only dedicated issue credit column in browse-style issue tables.
 
 ### 2026-07-11
 
@@ -268,10 +307,8 @@ Current project areas:
 
 ## Next Major Goals
 
-- Run and verify the AI-assisted missing Marvel run finder on a small batch.
-- Run and verify the official Marvel.com issue metadata fill command on a small number of runs.
-- Confirm that issue #1 descriptions correctly populate blank parent run descriptions.
-- Check the resulting catalog rows in Browse and detail pages.
+- Keep testing the run follow modal with real runs that have different issue counts.
+- Continue verifying issue status behavior from Browse, Run Details, Issue Details, Volume Details, and My Comics.
 - Continue verifying confirmed run candidates for obvious source mistakes.
 - Keep Comic Vine source-data backfills running.
 - Keep collected-volume catalog work separate from the current run-ingestion path.
