@@ -66,8 +66,8 @@ RESULT_SCHEMA = {
 
 class Command(BaseCommand):
     help = (
-        "Test official Marvel-only issue filling. Uses only marvel.com, ignores issue titles, "
-        "stores Published date, description, Writer credits, and Penciller credits."
+        "Fill catalog issues from official Marvel.com issue pages only. "
+        "Ignores issue titles and cover dates."
     )
 
     def add_arguments(self, parser):
@@ -119,7 +119,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "--include-upcoming",
             action="store_true",
-            help="Allow searches for future upcoming runs.",
+            help="Allow searches for future upcoming runs. Future-dated issues are still skipped.",
         )
         parser.add_argument(
             "--clear-existing-titles",
@@ -143,11 +143,6 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        api_key = os.getenv("OPENAI_API_KEY")
-
-        if not api_key:
-            raise CommandError("OPENAI_API_KEY is not set.")
-
         publisher_name = clean_text(options["publisher"]) or DEFAULT_PUBLISHER_NAME
         run_id = options.get("run_id")
         forced_issue_numbers = parse_issue_numbers_argument(options.get("issue_numbers"))
@@ -171,6 +166,7 @@ class Command(BaseCommand):
             forced_issue_numbers=forced_issue_numbers,
             include_upcoming=options["include_upcoming"],
             dry_run=options["dry_run"],
+            require_official_fields=require_official_fields,
         )
 
         self.write_header(
@@ -196,6 +192,11 @@ class Command(BaseCommand):
             )
             return
 
+        api_key = os.getenv("OPENAI_API_KEY")
+
+        if not api_key:
+            raise CommandError("OPENAI_API_KEY is not set.")
+
         client = OpenAI(api_key=api_key)
 
         totals = {
@@ -203,7 +204,9 @@ class Command(BaseCommand):
             "created": 0,
             "updated": 0,
             "skipped": 0,
+            "future_skipped": 0,
             "credits_added": 0,
+            "run_issue_count_updates": 0,
         }
 
         for run in runs:
@@ -212,6 +215,7 @@ class Command(BaseCommand):
                 run=run,
                 existing_issues=existing_issues,
                 forced_issue_numbers=forced_issue_numbers,
+                require_official_fields=require_official_fields,
             )[:limit_issues]
 
             if not target_issue_numbers:
@@ -221,6 +225,7 @@ class Command(BaseCommand):
                 run=run,
                 existing_issues=existing_issues,
                 target_issue_numbers=target_issue_numbers,
+                require_official_fields=require_official_fields,
             )
 
             data = self.call_marvel_issue_search(
@@ -251,9 +256,18 @@ class Command(BaseCommand):
             )
 
             if options["dry_run"]:
+                did_preview_run_update = self.preview_run_issue_count_reconciliation(
+                    run=run,
+                    candidates=candidates,
+                    forced_issue_numbers=forced_issue_numbers,
+                )
+
+                if did_preview_run_update:
+                    totals["run_issue_count_updates"] += 1
+
                 continue
 
-            created, updated, skipped, credits_added = self.apply_candidates(
+            created, updated, skipped, future_skipped, credits_added = self.apply_candidates(
                 run=run,
                 candidates=candidates,
                 clear_existing_titles=options["clear_existing_titles"],
@@ -264,7 +278,18 @@ class Command(BaseCommand):
             totals["created"] += created
             totals["updated"] += updated
             totals["skipped"] += skipped
+            totals["future_skipped"] += future_skipped
             totals["credits_added"] += credits_added
+
+            did_update_run = self.reconcile_run_issue_count_after_future_scan(
+                run=run,
+                candidates=candidates,
+                forced_issue_numbers=forced_issue_numbers,
+                verbose=options["verbose"],
+            )
+
+            if did_update_run:
+                totals["run_issue_count_updates"] += 1
 
         self.print_summary(
             totals=totals,
@@ -280,6 +305,7 @@ class Command(BaseCommand):
         forced_issue_numbers,
         include_upcoming,
         dry_run,
+        require_official_fields,
     ):
         issue_queryset = (
             ComicIssue.objects
@@ -293,6 +319,7 @@ class Command(BaseCommand):
                 "description",
                 "is_released",
             )
+            .order_by("published_date", "issue_number", "id")
         )
 
         runs = (
@@ -301,6 +328,7 @@ class Command(BaseCommand):
                 Prefetch(
                     "issues",
                     queryset=issue_queryset,
+                    to_attr="prefetched_official_issues",
                 )
             )
             .annotate(attached_issue_count=Count("issues", distinct=True))
@@ -324,16 +352,28 @@ class Command(BaseCommand):
                 continue
 
             if forced_issue_numbers:
-                runs_to_check.append(run)
+                existing_issues = get_existing_issues(run)
+                target_issue_numbers = build_forced_target_issue_numbers(
+                    forced_issue_numbers=forced_issue_numbers,
+                    existing_issues=existing_issues,
+                    require_official_fields=require_official_fields,
+                )
+
+                if target_issue_numbers:
+                    runs_to_check.append(run)
+
                 break
 
-            existing_issues = list(run.issues.all())
+            existing_issues = get_existing_issues(run)
             has_missing_issues = (
                 run.issue_count is not None
                 and run.attached_issue_count < run.issue_count
             )
             has_incomplete_official_data = any(
-                issue_needs_official_update(issue)
+                issue_needs_official_update(
+                    issue,
+                    require_official_fields=require_official_fields,
+                )
                 for issue in existing_issues
             )
 
@@ -364,21 +404,10 @@ class Command(BaseCommand):
         require_official_fields,
     ):
         self.stdout.write("")
-        self.stdout.write(self.style.SUCCESS("Official Marvel issue fill test"))
+        self.stdout.write(self.style.SUCCESS("Official Marvel issue fill"))
         self.stdout.write(f"Mode: {'dry run' if dry_run else 'apply'}")
-        self.stdout.write(f"Source: OpenAI Responses API web search, restricted to {MARVEL_DOMAIN}")
-        self.stdout.write("Uses issue titles: no")
-        self.stdout.write("Uses cover dates: no")
-
-        if require_official_fields:
-            self.stdout.write(
-                "Required fields for issue row: issue_number, published_date, "
-                "description, Writer, Penciller"
-            )
-        else:
-            self.stdout.write("Required fields for issue row: issue_number, published_date")
-            self.stdout.write("Optional official fields: description, Writer, Penciller")
-
+        self.stdout.write(f"Source: {MARVEL_DOMAIN} only")
+        self.stdout.write(f"Current date: {date.today().isoformat()}")
         self.stdout.write(f"Model: {model}")
         self.stdout.write(f"Publisher: {publisher_name}")
         self.stdout.write(f"Search context: {search_context}")
@@ -391,28 +420,41 @@ class Command(BaseCommand):
         self.stdout.write(f"Issue limit per run: {limit_issues}")
         self.stdout.write(f"Runs needing official fill: {len(runs)}")
         self.stdout.write(
-            "Include future upcoming runs: "
+            "Required fields: "
+            + (
+                "issue number, published date, description, Writer, Penciller"
+                if require_official_fields
+                else "issue number, published date"
+            )
+        )
+        self.stdout.write(
+            "Include upcoming runs: "
             f"{'yes' if include_upcoming else 'no'}"
         )
         self.stdout.write(
-            "Require all official fields: "
-            f"{'yes' if require_official_fields else 'no'}"
-        )
-        self.stdout.write(
-            "Clear existing issue titles touched by command: "
+            "Clear existing issue titles: "
             f"{'yes' if clear_existing_titles else 'no'}"
         )
         self.stdout.write("")
 
-    def print_run_check(self, *, run, existing_issues, target_issue_numbers):
+    def print_run_check(
+        self,
+        *,
+        run,
+        existing_issues,
+        target_issue_numbers,
+        require_official_fields,
+    ):
+        incomplete_count = count_issues_needing_official_update(
+            existing_issues,
+            require_official_fields=require_official_fields,
+        )
+
         self.stdout.write("")
         self.stdout.write(self.style.WARNING(f"Checking run: {run}"))
         self.stdout.write(f"Catalog issue_count: {run.issue_count}")
         self.stdout.write(f"Existing attached issues: {len(existing_issues)}")
-        self.stdout.write(
-            "Existing issues missing official data: "
-            f"{count_issues_needing_official_update(existing_issues)}"
-        )
+        self.stdout.write(f"Existing issues needing official update: {incomplete_count}")
         self.stdout.write("Target issues: " + ", ".join(target_issue_numbers))
         self.stdout.write("")
 
@@ -444,8 +486,7 @@ class Command(BaseCommand):
                     {
                         "role": "system",
                         "content": (
-                            "Find official Marvel.com comic issue metadata. "
-                            "Return compact JSON matching the schema."
+                            "Return official Marvel.com comic issue metadata as compact JSON."
                         ),
                     },
                     {
@@ -472,27 +513,33 @@ class Command(BaseCommand):
         return parse_response_json(response.output_text)
 
     def print_result(self, *, run, candidates, require_official_fields, verbose):
-        ready_count = sum(
-            1
-            for candidate in candidates
-            if candidate_has_required_fields(
+        ready_count = 0
+        future_count = 0
+        incomplete_items = []
+
+        for candidate in candidates:
+            missing_fields = get_missing_candidate_fields(
                 candidate,
                 require_official_fields=require_official_fields,
             )
-        )
-        incomplete_items = [
-            f"#{candidate.get('issue_number') or '?'} ({', '.join(get_missing_candidate_fields(candidate, require_official_fields=require_official_fields))})"
-            for candidate in candidates
-            if not candidate_has_required_fields(
-                candidate,
-                require_official_fields=require_official_fields,
-            )
-        ]
+
+            if candidate_has_future_published_date(candidate):
+                future_count += 1
+                continue
+
+            if missing_fields:
+                incomplete_items.append(
+                    f"#{candidate.get('issue_number') or '?'} ({', '.join(missing_fields)})"
+                )
+                continue
+
+            ready_count += 1
 
         self.stdout.write("")
         self.stdout.write(
             "Official Marvel issue candidates: "
-            f"{len(candidates)} ({ready_count} ready, {len(incomplete_items)} incomplete)"
+            f"{len(candidates)} ({ready_count} ready, "
+            f"{future_count} future-dated, {len(incomplete_items)} incomplete)"
         )
 
         if incomplete_items:
@@ -511,6 +558,7 @@ class Command(BaseCommand):
                 candidate,
                 require_official_fields=require_official_fields,
             )
+            is_future = candidate_has_future_published_date(candidate)
 
             self.stdout.write(f"{index}. {run.title} #{candidate['issue_number']}")
             self.stdout.write(f"   Published date: {candidate.get('published_date') or 'unknown'}")
@@ -518,7 +566,9 @@ class Command(BaseCommand):
             self.stdout.write(f"   Writer: {writers}")
             self.stdout.write(f"   Penciller: {pencillers}")
 
-            if missing_fields:
+            if is_future:
+                self.stdout.write("   Skipped: future published date")
+            elif missing_fields:
                 self.stdout.write("   Missing: " + ", ".join(missing_fields))
             else:
                 self.stdout.write("   Ready to write: yes")
@@ -534,6 +584,27 @@ class Command(BaseCommand):
         require_official_fields,
         verbose,
     ):
+        ready_candidates = []
+        skipped_count = 0
+        future_skipped_count = 0
+
+        for candidate in candidates:
+            if candidate_has_future_published_date(candidate):
+                future_skipped_count += 1
+                continue
+
+            if not candidate_has_required_fields(
+                candidate,
+                require_official_fields=require_official_fields,
+            ):
+                skipped_count += 1
+                continue
+
+            ready_candidates.append(candidate)
+
+        if not ready_candidates:
+            return 0, 0, skipped_count, future_skipped_count, 0
+
         existing_issue_map = {
             normalize_issue_number(issue.issue_number): issue
             for issue in get_existing_issues(run)
@@ -541,7 +612,6 @@ class Command(BaseCommand):
 
         created_count = 0
         updated_count = 0
-        skipped_count = 0
         credits_added_count = 0
 
         with transaction.atomic():
@@ -554,17 +624,9 @@ class Command(BaseCommand):
                 display_order=20,
             )
 
-            for candidate in candidates:
+            for candidate in ready_candidates:
                 issue_number = canonical_issue_number(candidate.get("issue_number"))
                 normalized_issue_number = normalize_issue_number(issue_number)
-
-                if not candidate_has_required_fields(
-                    candidate,
-                    require_official_fields=require_official_fields,
-                ):
-                    skipped_count += 1
-                    continue
-
                 published_date = parse_date(candidate.get("published_date"))
                 existing_issue = existing_issue_map.get(normalized_issue_number)
 
@@ -592,7 +654,7 @@ class Command(BaseCommand):
                         title="",
                         published_date=published_date,
                         cover_date=None,
-                        is_released=published_date <= date.today(),
+                        is_released=True,
                         description=clean_text(candidate.get("description")),
                     )
                     existing_issue_map[normalized_issue_number] = issue
@@ -614,7 +676,101 @@ class Command(BaseCommand):
                     names=candidate["pencillers"],
                 )
 
-        return created_count, updated_count, skipped_count, credits_added_count
+        return (
+            created_count,
+            updated_count,
+            skipped_count,
+            future_skipped_count,
+            credits_added_count,
+        )
+
+    def preview_run_issue_count_reconciliation(
+        self,
+        *,
+        run,
+        candidates,
+        forced_issue_numbers,
+    ):
+        if forced_issue_numbers:
+            return False
+
+        summary = calculate_released_run_summary(
+            run=run,
+            candidates=candidates,
+        )
+
+        if not summary["has_future_candidate"]:
+            return False
+
+        released_issue_count = summary["released_issue_count"] or 0
+        current_issue_count = run.issue_count
+
+        if current_issue_count is None or released_issue_count >= current_issue_count:
+            return False
+
+        self.stdout.write("")
+        self.stdout.write(
+            self.style.WARNING(
+                f"Dry-run run update: {run} issue_count "
+                f"{current_issue_count} -> {released_issue_count}"
+            )
+        )
+
+        if summary["latest_released_date"]:
+            self.stdout.write(
+                self.style.WARNING(
+                    f"Dry-run run update: {run} last_issue_date -> "
+                    f"{summary['latest_released_date'].isoformat()}"
+                )
+            )
+
+        return True
+
+    def reconcile_run_issue_count_after_future_scan(
+        self,
+        *,
+        run,
+        candidates,
+        forced_issue_numbers,
+        verbose,
+    ):
+        if forced_issue_numbers:
+            return False
+
+        summary = calculate_released_run_summary(
+            run=run,
+            candidates=candidates,
+        )
+
+        if not summary["has_future_candidate"]:
+            return False
+
+        released_issue_count = summary["released_issue_count"] or 0
+        current_issue_count = run.issue_count
+
+        if current_issue_count is None or released_issue_count >= current_issue_count:
+            return False
+
+        update_fields = ["issue_count", "updated_at"]
+        run.issue_count = released_issue_count
+
+        latest_released_date = summary["latest_released_date"]
+
+        if latest_released_date and run.last_issue_date != latest_released_date:
+            run.last_issue_date = latest_released_date
+            update_fields.append("last_issue_date")
+
+        run.save(update_fields=update_fields)
+
+        if verbose:
+            self.stdout.write(
+                self.style.WARNING(
+                    f"Updated run: {run} issue_count "
+                    f"{current_issue_count} -> {released_issue_count}"
+                )
+            )
+
+        return True
 
     def print_summary(self, *, totals, dry_run):
         self.stdout.write("")
@@ -622,8 +778,10 @@ class Command(BaseCommand):
         self.stdout.write(f"OpenAI API calls made: {totals['api_calls']}")
         self.stdout.write(f"Created issues: {totals['created']}")
         self.stdout.write(f"Updated issues: {totals['updated']}")
-        self.stdout.write(f"Skipped candidates: {totals['skipped']}")
+        self.stdout.write(f"Skipped incomplete candidates: {totals['skipped']}")
+        self.stdout.write(f"Skipped future-dated candidates: {totals['future_skipped']}")
         self.stdout.write(f"Issue credits added: {totals['credits_added']}")
+        self.stdout.write(f"Run issue_count updates: {totals['run_issue_count_updates']}")
 
         if dry_run:
             self.stdout.write("Dry run only. No catalog data was created or updated.")
@@ -634,52 +792,50 @@ def build_marvel_prompt(*, run, target_issue_numbers, require_official_fields):
         canonical_issue_number(issue_number)
         for issue_number in target_issue_numbers
     )
-
-    required_text = (
-        "Every returned issue should have issue_number, published_date, description, at least one Writer, and at least one Penciller. "
-        "If any of those fields cannot be found on Marvel.com, return null/empty values so the local command can reject that issue."
+    required_fields = (
+        "issue_number, published_date, description, writers, pencillers"
         if require_official_fields
-        else "published_date is required when available. description, writers, and pencillers should still be filled from Marvel.com when shown."
+        else "issue_number, published_date"
     )
 
     return f"""
 Find official Marvel.com issue metadata.
 
-Comic run:
+Current date: {date.today().isoformat()}
+Run: {run.title}
 Publisher: {run.publisher.name}
-Run title: {run.title}
 Start year: {run.start_year or "unknown"}
+Issue numbers: {issue_text}
 
-Issue numbers:
-{issue_text}
+Return one JSON object per requested issue.
 
-Only use official Marvel.com issue pages.
+Required usable fields: {required_fields}
 
 For each issue:
-- issue_number: the requested issue number
-- published_date: the date shown by Marvel as "Published"
-- description: the official issue description/synopsis text on the Marvel page
-- writers: names listed by Marvel with the Writer credit
-- pencillers: names listed by Marvel with the Penciller credit
-
-Strictness:
-{required_text}
+- issue_number: requested issue number
+- published_date: Marvel "Published" date in YYYY-MM-DD format
+- description: official Marvel issue description
+- writers: names credited as Writer
+- pencillers: names credited as Penciller
 
 Rules:
+- Use only official Marvel.com issue pages.
+- Match the exact run, start year, and issue number.
 - Do not return issue titles.
 - Do not return cover dates.
-- Do not use community sites, wikis, shops, League of Comic Geeks, Comic Vine, or previews from non-Marvel sites.
-- Match this exact run, start year, and issue number.
-- Use YYYY-MM-DD for published_date.
-- If the Marvel page exists but description is blank or unavailable, use an empty string.
-- If Writer or Penciller is not listed, use an empty array.
-- If no official Marvel page can be found for an issue, return that issue with published_date null.
-
-Return one object for every requested issue number.
+- For future published dates, return the published_date and only return description/credits if clearly listed.
+- Use null for unknown published_date.
+- Use an empty string for unknown description.
+- Use empty arrays for unknown writers or pencillers.
 """.strip()
 
 
 def get_existing_issues(run):
+    prefetched_issues = getattr(run, "prefetched_official_issues", None)
+
+    if prefetched_issues is not None:
+        return list(prefetched_issues)
+
     return list(
         run.issues.prefetch_related(
             "credits__person",
@@ -692,20 +848,33 @@ def get_existing_issues(run):
     )
 
 
-def build_effective_target_issue_numbers(*, run, existing_issues, forced_issue_numbers):
+def build_effective_target_issue_numbers(
+    *,
+    run,
+    existing_issues,
+    forced_issue_numbers,
+    require_official_fields,
+):
     if forced_issue_numbers:
         return build_forced_target_issue_numbers(
             forced_issue_numbers=forced_issue_numbers,
             existing_issues=existing_issues,
+            require_official_fields=require_official_fields,
         )
 
     return build_target_issue_numbers(
         run=run,
         existing_issues=existing_issues,
+        require_official_fields=require_official_fields,
     )
 
 
-def build_forced_target_issue_numbers(*, forced_issue_numbers, existing_issues):
+def build_forced_target_issue_numbers(
+    *,
+    forced_issue_numbers,
+    existing_issues,
+    require_official_fields,
+):
     existing_issue_map = {
         normalize_issue_number(issue.issue_number): issue
         for issue in existing_issues
@@ -715,13 +884,20 @@ def build_forced_target_issue_numbers(*, forced_issue_numbers, existing_issues):
     for issue_number in forced_issue_numbers:
         existing_issue = existing_issue_map.get(normalize_issue_number(issue_number))
 
-        if existing_issue is None or issue_needs_official_update(existing_issue):
+        if existing_issue is None:
+            target_issue_numbers.append(issue_number)
+            continue
+
+        if issue_needs_official_update(
+            existing_issue,
+            require_official_fields=require_official_fields,
+        ):
             target_issue_numbers.append(issue_number)
 
     return sort_issue_numbers(unique_issue_numbers(target_issue_numbers))
 
 
-def build_target_issue_numbers(*, run, existing_issues):
+def build_target_issue_numbers(*, run, existing_issues, require_official_fields):
     existing_issue_numbers = {
         normalize_issue_number(issue.issue_number)
         for issue in existing_issues
@@ -738,7 +914,10 @@ def build_target_issue_numbers(*, run, existing_issues):
     for issue in existing_issues:
         issue_number = canonical_issue_number(issue.issue_number)
 
-        if issue_number and issue_needs_official_update(issue):
+        if issue_number and issue_needs_official_update(
+            issue,
+            require_official_fields=require_official_fields,
+        ):
             issue_numbers.append(issue_number)
 
     return sort_issue_numbers(unique_issue_numbers(issue_numbers))
@@ -778,12 +957,18 @@ def normalize_run_status_before_issue_fill(*, run, dry_run):
     return False
 
 
-def issue_needs_official_update(issue):
+def issue_needs_official_update(issue, *, require_official_fields):
     if issue.issue_number != canonical_issue_number(issue.issue_number):
         return True
 
     if issue.published_date is None:
         return True
+
+    if issue.published_date > date.today():
+        return False
+
+    if not require_official_fields:
+        return False
 
     if not clean_text(issue.description):
         return True
@@ -797,11 +982,14 @@ def issue_needs_official_update(issue):
     return False
 
 
-def count_issues_needing_official_update(issues):
+def count_issues_needing_official_update(issues, *, require_official_fields):
     return sum(
         1
         for issue in issues
-        if issue_needs_official_update(issue)
+        if issue_needs_official_update(
+            issue,
+            require_official_fields=require_official_fields,
+        )
     )
 
 
@@ -922,6 +1110,15 @@ def get_missing_candidate_fields(candidate, *, require_official_fields):
     return missing_fields
 
 
+def candidate_has_future_published_date(candidate):
+    published_date = parse_date(candidate.get("published_date"))
+
+    if published_date is None:
+        return False
+
+    return published_date > date.today()
+
+
 def update_existing_issue_from_candidate(*, issue, candidate, clear_existing_title):
     changed = False
     candidate_issue_number = canonical_issue_number(candidate.get("issue_number"))
@@ -964,6 +1161,57 @@ def update_existing_issue_from_candidate(*, issue, candidate, clear_existing_tit
         changed = True
 
     return changed
+
+
+def calculate_released_run_summary(*, run, candidates):
+    released_issue_numbers = []
+    released_dates = []
+    has_future_candidate = False
+
+    for issue in get_existing_issues(run):
+        published_date = issue.published_date
+
+        if published_date is None or published_date > date.today():
+            continue
+
+        pure_number = pure_integer_issue_number(issue.issue_number)
+
+        if pure_number is not None:
+            released_issue_numbers.append(pure_number)
+
+        released_dates.append(published_date)
+
+    for candidate in candidates:
+        published_date = parse_date(candidate.get("published_date"))
+
+        if published_date is None:
+            continue
+
+        if published_date > date.today():
+            has_future_candidate = True
+            continue
+
+        pure_number = pure_integer_issue_number(candidate.get("issue_number"))
+
+        if pure_number is not None:
+            released_issue_numbers.append(pure_number)
+
+        released_dates.append(published_date)
+
+    return {
+        "released_issue_count": max(released_issue_numbers) if released_issue_numbers else None,
+        "latest_released_date": max(released_dates) if released_dates else None,
+        "has_future_candidate": has_future_candidate,
+    }
+
+
+def pure_integer_issue_number(value):
+    value = canonical_issue_number(value)
+
+    if not re.fullmatch(r"\d+", value):
+        return None
+
+    return int(value)
 
 
 def get_or_create_credit_role(*, name, display_order):
