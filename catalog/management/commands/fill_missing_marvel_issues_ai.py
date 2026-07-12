@@ -15,7 +15,7 @@ DEFAULT_MODEL = "gpt-5.5"
 DEFAULT_PUBLISHER_NAME = "Marvel"
 
 
-BROAD_RESULT_SCHEMA = {
+RESULT_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
     "properties": {
@@ -25,12 +25,10 @@ BROAD_RESULT_SCHEMA = {
                 "type": "object",
                 "additionalProperties": False,
                 "properties": {
-                    "issue_number": {
-                        "type": "string",
-                    },
+                    "issue_number": {"type": "string"},
                     "title": {
                         "type": ["string", "null"],
-                        "description": "The confirmed issue title. Use null if not found in the broad pass.",
+                        "description": "Confirmed issue title, or null if not found.",
                     },
                     "store_date": {
                         "type": ["string", "null"],
@@ -38,19 +36,7 @@ BROAD_RESULT_SCHEMA = {
                     },
                     "cover_date": {
                         "type": ["string", "null"],
-                        "description": "Cover date in YYYY-MM-DD, or null if unknown. If only month/year is available, use the first day of that cover month.",
-                    },
-                    "is_released": {
-                        "type": ["boolean", "null"],
-                    },
-                    "primary_source_url": {
-                        "type": ["string", "null"],
-                    },
-                    "supporting_source_urls": {
-                        "type": "array",
-                        "items": {
-                            "type": "string",
-                        },
+                        "description": "Cover date in YYYY-MM-DD, or null if unknown. If only month/year is available, use YYYY-MM-01.",
                     },
                 },
                 "required": [
@@ -58,20 +44,12 @@ BROAD_RESULT_SCHEMA = {
                     "title",
                     "store_date",
                     "cover_date",
-                    "is_released",
-                    "primary_source_url",
-                    "supporting_source_urls",
                 ],
             },
         },
     },
-    "required": [
-        "issues",
-    ],
+    "required": ["issues"],
 }
-
-
-REPAIR_RESULT_SCHEMA = BROAD_RESULT_SCHEMA
 
 
 class Command(BaseCommand):
@@ -100,7 +78,7 @@ class Command(BaseCommand):
             "--limit-runs",
             type=int,
             default=1,
-            help="Maximum number of runs to make broad OpenAI calls for. Default: 1",
+            help="Maximum number of runs to process. Default: 1",
         )
         parser.add_argument(
             "--search-context",
@@ -129,6 +107,11 @@ class Command(BaseCommand):
             action="store_true",
             help="Print raw JSON for each OpenAI result. Does not make another API call.",
         )
+        parser.add_argument(
+            "--verbose",
+            action="store_true",
+            help="Print every issue candidate and row-level write. Default output is compact.",
+        )
 
     def handle(self, *args, **options):
         api_key = os.getenv("OPENAI_API_KEY")
@@ -147,6 +130,7 @@ class Command(BaseCommand):
         skip_repair_pass = options["skip_repair_pass"]
         dry_run = options["dry_run"]
         print_raw = options["raw"]
+        verbose = options["verbose"]
 
         if limit_runs < 1:
             raise CommandError("--limit-runs must be at least 1.")
@@ -191,6 +175,14 @@ class Command(BaseCommand):
                 for issue in existing_issues
             }
 
+            target_issue_numbers = build_target_issue_numbers(
+                run=run,
+                existing_issues=existing_issues,
+            )
+
+            if not target_issue_numbers:
+                continue
+
             self.stdout.write("")
             self.stdout.write(self.style.WARNING(f"Checking run: {run}"))
             self.stdout.write(f"Run issue_count: {run.issue_count}")
@@ -198,14 +190,16 @@ class Command(BaseCommand):
             self.stdout.write(
                 f"Existing incomplete issues: {count_incomplete_existing_issues(existing_issues)}"
             )
+            self.stdout.write(f"Target issues: {', '.join(target_issue_numbers)}")
             self.stdout.write("")
 
-            broad_data = self.call_broad_issue_search(
+            broad_data = self.call_issue_search(
                 client=client,
                 model=model,
                 search_context=search_context,
                 run=run,
-                existing_issues=existing_issues,
+                target_issue_numbers=target_issue_numbers,
+                repair_targets=None,
             )
             total_api_calls += 1
 
@@ -215,21 +209,26 @@ class Command(BaseCommand):
                 self.stdout.write(json.dumps(broad_data, indent=2, ensure_ascii=False))
 
             issue_candidates = normalize_candidate_list(broad_data.get("issues", []))
+            issue_candidates = ensure_candidates_for_targets(
+                candidates=issue_candidates,
+                target_issue_numbers=target_issue_numbers,
+            )
+
             repair_targets = find_repair_targets(issue_candidates)
 
             if repair_targets and not skip_repair_pass:
-                self.stdout.write("")
                 self.stdout.write(
                     self.style.WARNING(
                         f"Targeted repair pass needed for {len(repair_targets)} issue(s)."
                     )
                 )
 
-                repair_data = self.call_targeted_repair_search(
+                repair_data = self.call_issue_search(
                     client=client,
                     model=model,
-                    repair_search_context=repair_search_context,
+                    search_context=repair_search_context,
                     run=run,
+                    target_issue_numbers=target_issue_numbers,
                     repair_targets=repair_targets,
                 )
                 total_api_calls += 1
@@ -246,14 +245,13 @@ class Command(BaseCommand):
                     ),
                 )
             elif repair_targets and skip_repair_pass:
-                self.stdout.write("")
                 self.stdout.write(
                     self.style.WARNING(
                         f"Skipped targeted repair pass for {len(repair_targets)} issue(s)."
                     )
                 )
 
-            self.print_result(run=run, issues=issue_candidates)
+            self.print_result(run=run, issues=issue_candidates, verbose=verbose)
 
             if dry_run:
                 continue
@@ -262,6 +260,7 @@ class Command(BaseCommand):
                 run=run,
                 candidates=issue_candidates,
                 existing_issue_map=existing_issue_map,
+                verbose=verbose,
             )
             total_created += created_count
             total_updated += updated_count
@@ -330,7 +329,6 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS("Fill/repair missing Marvel issues with AI"))
         self.stdout.write(f"Mode: {mode}")
         self.stdout.write("Source: OpenAI Responses API web search")
-        self.stdout.write("Comic Vine API calls: none")
         self.stdout.write(
             f"Catalog writes: {'none' if mode == 'dry run' else 'create/update ComicIssue rows only'}"
         )
@@ -343,11 +341,43 @@ class Command(BaseCommand):
         self.stdout.write(f"Repair search context: {repair_search_context}")
         self.stdout.write(f"Targeted repair pass: {'off' if skip_repair_pass else 'on'}")
         self.stdout.write(f"Run ID filter: {run_id or 'none'}")
-        self.stdout.write(f"Run API-call limit: {limit_runs}")
+        self.stdout.write(f"Run limit: {limit_runs}")
         self.stdout.write(f"Runs needing fill/repair: {len(runs)}")
         self.stdout.write("")
 
-    def call_broad_issue_search(self, *, client, model, search_context, run, existing_issues):
+    def call_issue_search(
+        self,
+        *,
+        client,
+        model,
+        search_context,
+        run,
+        target_issue_numbers,
+        repair_targets,
+    ):
+        if repair_targets:
+            prompt = build_repair_prompt(
+                run=run,
+                repair_targets=repair_targets,
+            )
+            prompt_name = "targeted_missing_marvel_issue_repairs"
+            system_task = (
+                "Find missing comic issue catalog fields from web search. "
+                "Return JSON matching the schema. "
+                "Use confirmed public information only."
+            )
+        else:
+            prompt = build_broad_prompt(
+                run=run,
+                target_issue_numbers=target_issue_numbers,
+            )
+            prompt_name = "broad_missing_marvel_issues"
+            system_task = (
+                "Find comic issue catalog fields from web search. "
+                "Return JSON matching the schema. "
+                "Use confirmed public information only."
+            )
+
         try:
             response = client.responses.create(
                 model=model,
@@ -368,140 +398,73 @@ class Command(BaseCommand):
                 input=[
                     {
                         "role": "system",
-                        "content": (
-                            "You are helping populate a comic catalog. "
-                            "Return compact source-grounded JSON only. "
-                            "Do not write explanations. "
-                            "Do not invent issue titles, dates, issue numbers, cover dates, or release dates. "
-                            "Find broad issue data first. "
-                            "Prefer Marvel.com, GCD/comics.org, League of Comic Geeks, PRH, ComicReleases, and reliable comics release/checklist sources."
-                        ),
+                        "content": system_task,
                     },
                     {
                         "role": "user",
-                        "content": build_broad_prompt(
-                            run=run,
-                            existing_issues=existing_issues,
-                        ),
+                        "content": prompt,
                     },
                 ],
                 text={
                     "format": {
                         "type": "json_schema",
-                        "name": "broad_missing_marvel_issues",
+                        "name": prompt_name,
                         "strict": True,
-                        "schema": BROAD_RESULT_SCHEMA,
+                        "schema": RESULT_SCHEMA,
                     }
                 },
             )
         except Exception as exc:
-            raise CommandError(f"OpenAI broad issue search failed for {run}: {exc}") from exc
+            raise CommandError(f"OpenAI issue search failed for {run}: {exc}") from exc
 
         return parse_response_json(response.output_text)
 
-    def call_targeted_repair_search(
-        self,
-        *,
-        client,
-        model,
-        repair_search_context,
-        run,
-        repair_targets,
-    ):
-        try:
-            response = client.responses.create(
-                model=model,
-                reasoning={"effort": "low"},
-                tools=[
-                    {
-                        "type": "web_search",
-                        "search_context_size": repair_search_context,
-                        "filters": {
-                            "blocked_domains": [
-                                "reddit.com",
-                                "quora.com",
-                            ],
-                        },
-                    }
-                ],
-                tool_choice="required",
-                input=[
-                    {
-                        "role": "system",
-                        "content": (
-                            "You are repairing missing displayed comic issue metadata. "
-                            "Return compact source-grounded JSON only. "
-                            "Do not write explanations. "
-                            "Use exact issue-number searches. "
-                            "Do not invent titles, dates, issue numbers, cover dates, or release dates. "
-                            "Search specifically for the requested missing displayed fields. "
-                            "Prefer Marvel.com, GCD/comics.org, League of Comic Geeks, PRH, ComicReleases, and reliable issue-detail pages."
-                        ),
-                    },
-                    {
-                        "role": "user",
-                        "content": build_repair_prompt(
-                            run=run,
-                            repair_targets=repair_targets,
-                        ),
-                    },
-                ],
-                text={
-                    "format": {
-                        "type": "json_schema",
-                        "name": "targeted_missing_marvel_issue_repairs",
-                        "strict": True,
-                        "schema": REPAIR_RESULT_SCHEMA,
-                    }
-                },
-            )
-        except Exception as exc:
-            raise CommandError(f"OpenAI targeted repair search failed for {run}: {exc}") from exc
+    def print_result(self, *, run, issues, verbose):
+        ready_count = 0
+        incomplete_count = 0
+        incomplete_numbers = []
 
-        return parse_response_json(response.output_text)
+        for issue in issues:
+            if candidate_has_required_fields(issue):
+                ready_count += 1
+            else:
+                incomplete_count += 1
+                incomplete_numbers.append(f"#{issue.get('issue_number') or '?'}")
 
-    def print_result(self, *, run, issues):
         self.stdout.write("")
-        self.stdout.write(f"Issue candidates after broad + repair passes: {len(issues)}")
-        self.stdout.write("")
+        self.stdout.write(
+            f"Issue candidates after broad + repair passes: {len(issues)} "
+            f"({ready_count} ready, {incomplete_count} incomplete)"
+        )
 
-        if not issues:
-            self.stdout.write(self.style.WARNING("No issue candidates returned."))
+        if incomplete_numbers:
+            self.stdout.write("Incomplete: " + ", ".join(incomplete_numbers))
+
+        if not verbose:
             return
+
+        self.stdout.write("")
 
         for index, issue in enumerate(issues, start=1):
             issue_number = issue.get("issue_number") or "?"
             title = issue.get("title") or ""
             store_date = issue.get("store_date") or "unknown"
             cover_date = issue.get("cover_date") or "unknown"
-            is_released = issue.get("is_released")
-
             missing_fields = get_missing_candidate_fields(issue)
 
             self.stdout.write(f"{index}. {run.title} #{issue_number}")
             self.stdout.write(f"   Title: {title or '[blank]'}")
             self.stdout.write(f"   Store date: {store_date}")
             self.stdout.write(f"   Cover date: {cover_date}")
-            self.stdout.write(
-                f"   Released: {'unknown' if is_released is None else ('yes' if is_released else 'no')}"
-            )
 
             if missing_fields:
                 self.stdout.write("   Still missing: " + ", ".join(missing_fields))
             else:
                 self.stdout.write("   Ready to write: yes")
 
-            primary_source_url = issue.get("primary_source_url")
-
-            if primary_source_url:
-                self.stdout.write(f"   Primary source: {primary_source_url}")
-
-            for source_url in (issue.get("supporting_source_urls") or [])[:2]:
-                self.stdout.write(f"   Supporting source: {source_url}")
-
             self.stdout.write("")
 
-    def apply_issues(self, *, run, candidates, existing_issue_map):
+    def apply_issues(self, *, run, candidates, existing_issue_map, verbose):
         created_count = 0
         updated_count = 0
         skipped_count = 0
@@ -513,11 +476,6 @@ class Command(BaseCommand):
 
                 if not candidate_has_required_fields(candidate):
                     skipped_count += 1
-                    self.stdout.write(
-                        self.style.WARNING(
-                            f"Skipped incomplete issue candidate: {run} #{issue_number or '[blank]'}"
-                        )
-                    )
                     continue
 
                 existing_issue = existing_issue_map.get(normalized_issue_number)
@@ -528,18 +486,15 @@ class Command(BaseCommand):
                     if changed:
                         existing_issue.save()
                         updated_count += 1
-                        self.stdout.write(
-                            self.style.SUCCESS(
-                                f"Updated ComicIssue: {existing_issue}"
+
+                        if verbose:
+                            self.stdout.write(
+                                self.style.SUCCESS(
+                                    f"Updated ComicIssue: {existing_issue}"
+                                )
                             )
-                        )
                     else:
                         skipped_count += 1
-                        self.stdout.write(
-                            self.style.WARNING(
-                                f"Skipped existing complete issue: {existing_issue}"
-                            )
-                        )
 
                     continue
 
@@ -556,62 +511,46 @@ class Command(BaseCommand):
                 existing_issue_map[normalized_issue_number] = issue
                 created_count += 1
 
-                self.stdout.write(self.style.SUCCESS(f"Created ComicIssue: {issue}"))
+                if verbose:
+                    self.stdout.write(self.style.SUCCESS(f"Created ComicIssue: {issue}"))
 
         return created_count, updated_count, skipped_count
 
 
-def build_broad_prompt(*, run, existing_issues):
-    existing_issue_lines = []
-
-    for issue in existing_issues:
-        existing_issue_lines.append(
-            f"- #{issue.issue_number}"
-            f"{f' — title {issue.title}' if issue.title else ' — title missing'}"
-            f"{f' — store {issue.store_date.isoformat()}' if issue.store_date else ' — store date missing'}"
-            f"{f' — cover {issue.cover_date.isoformat()}' if issue.cover_date else ' — cover date missing'}"
-        )
-
-    existing_issues_text = "\n".join(existing_issue_lines) or "- No existing issues."
-
-    today = date.today().isoformat()
+def build_broad_prompt(*, run, target_issue_numbers):
+    target_text = ", ".join(f"#{number}" for number in target_issue_numbers)
 
     return f"""
-Find displayed issue metadata for this exact Marvel catalog run.
+Find displayed issue metadata for this exact comic run.
 
-Today is {today}.
-
-Catalog run:
+Run:
+- Publisher: {run.publisher.name}
 - Title: {run.title}
 - Start year: {run.start_year or 'unknown'}
-- Publisher: {run.publisher.name}
-- Catalog issue_count: {run.issue_count}
-- Catalog first_issue_date: {run.first_issue_date.isoformat() if run.first_issue_date else 'unknown'}
-- Catalog last_issue_date: {run.last_issue_date.isoformat() if run.last_issue_date else 'unknown'}
 
-Existing catalog issues:
-{existing_issues_text}
+Target issue numbers:
+{target_text}
 
-Broad pass task:
-- Return missing issues that are not in the existing issue list.
-- Also return existing issues if any displayed field is missing or weak.
-- Displayed issue fields are issue title, store date, and cover date.
-- Search broadly across Marvel.com, GCD/comics.org, League of Comic Geeks, PRH, ComicReleases, and reliable release/checklist pages.
-- Do not stop at the first source if title is blank.
-- Use on-sale/release date as store_date.
-- If cover date is shown only as month/year, convert it to YYYY-MM-01.
-- Include released issues and officially announced future issues.
-- If future announced but not released yet, set is_released false.
-- If already on sale/released as of today, set is_released true.
-- Do not return collected editions, trades, omnibuses, facsimiles, reprints, variants, posters, art books, toys, or prose books.
-- Do not return issues from another run with the same character/title but a different start year.
-- Do not guess.
+Required fields:
+- issue_number
+- title
+- store_date
+- cover_date
 
-Return compact structured data only.
-Keep supporting_source_urls to 2 or fewer URLs.
-Use YYYY-MM-DD for dates.
-Use null for unknown dates or unknown release status.
-Use null for title if not found in the broad pass.
+Rules:
+- Search the open web broadly.
+- Do not restrict the search to specific websites.
+- Return exactly one object for each target issue number.
+- Only use results that clearly match the publisher, run title, start year, and issue number.
+- title is the individual issue title.
+- store_date is the on-sale or release date.
+- cover_date is the cover date.
+- If cover_date is only shown as month and year, convert it to YYYY-MM-01.
+- Exclude collected editions, trades, omnibuses, facsimiles, reprints, variants, posters, art books, toys, and prose books.
+- Use YYYY-MM-DD for dates.
+- Use null for fields still unknown.
+
+Return compact JSON only.
 """.strip()
 
 
@@ -620,52 +559,94 @@ def build_repair_prompt(*, run, repair_targets):
 
     for target in repair_targets:
         missing_fields = ", ".join(target["missing_fields"])
+        title = target.get("title") or "null"
+        store_date = target.get("store_date") or "null"
+        cover_date = target.get("cover_date") or "null"
+
         target_lines.append(
-            f"- {run.title} ({run.start_year or 'unknown'}) #{target['issue_number']}: missing {missing_fields}"
+            f"- #{target['issue_number']}: "
+            f"title={title}; store_date={store_date}; cover_date={cover_date}; missing={missing_fields}"
         )
 
     target_text = "\n".join(target_lines)
 
-    today = date.today().isoformat()
-
     return f"""
-Search specifically for missing displayed fields on these exact Marvel comic issues.
-
-Today is {today}.
+Find missing displayed issue fields for this exact comic run.
 
 Run:
+- Publisher: {run.publisher.name}
 - Title: {run.title}
 - Start year: {run.start_year or 'unknown'}
-- Publisher: {run.publisher.name}
 
 Targets:
 {target_text}
 
-Targeted repair rules:
-- Search each issue individually by exact issue number.
-- Displayed issue fields are issue title, store date, and cover date.
-- For a missing title, search exact issue title sources before returning null.
-- Use queries like:
-  - "{run.title} #<issue_number> title"
-  - "{run.title} #<issue_number> cover date"
-  - "{run.title} #<issue_number> League of Comic Geeks"
-  - "{run.title} #<issue_number> GCD"
-  - "{run.title} #<issue_number> Marvel.com"
-- For a missing cover date, search issue-detail/database pages, not only release checklists.
-- Good cover-date sources include GCD/comics.org, League of Comic Geeks, Marvel issue pages when available, and other issue-detail database pages.
-- Checklist/solicitation pages may confirm store_date, but they are not enough by themselves if cover_date is missing.
-- If cover date is shown only as month/year, convert it to YYYY-MM-01.
-- Use on-sale/release date as store_date.
-- If already on sale/released as of today, set is_released true.
-- If future announced but not released yet, set is_released false.
-- Do not guess.
-- Do not return issues from another run.
+Required fields:
+- issue_number
+- title
+- store_date
+- cover_date
 
-Return compact structured data only.
-Keep supporting_source_urls to 2 or fewer URLs.
-Use YYYY-MM-DD for dates.
-Use null for fields that are still unknown after searching.
+Rules:
+- Search the open web broadly.
+- Do not restrict the search to specific websites.
+- Return exactly one object for each target issue number.
+- Only use results that clearly match the publisher, run title, start year, and issue number.
+- Preserve known values unless a better confirmed value is found.
+- title is the individual issue title.
+- store_date is the on-sale or release date.
+- cover_date is the cover date.
+- If cover_date is only shown as month and year, convert it to YYYY-MM-01.
+- Exclude collected editions, trades, omnibuses, facsimiles, reprints, variants, posters, art books, toys, and prose books.
+- Use YYYY-MM-DD for dates.
+- Use null for fields still unknown.
+
+Return compact JSON only.
 """.strip()
+
+
+def build_target_issue_numbers(*, run, existing_issues):
+    existing_issue_numbers = {
+        normalize_issue_number(issue.issue_number)
+        for issue in existing_issues
+    }
+
+    numbers = []
+
+    if run.issue_count:
+        for number in range(1, run.issue_count + 1):
+            issue_number = str(number)
+
+            if normalize_issue_number(issue_number) not in existing_issue_numbers:
+                numbers.append(issue_number)
+
+    for issue in existing_issues:
+        issue_number = clean_text(issue.issue_number)
+
+        if issue_number and existing_issue_needs_repair(issue):
+            numbers.append(issue_number)
+
+    return sort_issue_numbers(unique_issue_numbers(numbers))
+
+
+def ensure_candidates_for_targets(*, candidates, target_issue_numbers):
+    candidate_map = {
+        normalize_issue_number(candidate["issue_number"]): dict(candidate)
+        for candidate in candidates
+    }
+
+    for issue_number in target_issue_numbers:
+        normalized_issue_number = normalize_issue_number(issue_number)
+
+        if normalized_issue_number not in candidate_map:
+            candidate_map[normalized_issue_number] = {
+                "issue_number": issue_number,
+                "title": "",
+                "store_date": "",
+                "cover_date": "",
+            }
+
+    return sort_candidates(candidate_map.values())
 
 
 def parse_response_json(output_text):
@@ -687,7 +668,7 @@ def normalize_candidate_list(candidates):
 
         normalized[normalized_issue_number] = normalize_candidate(candidate)
 
-    return list(normalized.values())
+    return sort_candidates(normalized.values())
 
 
 def normalize_candidate(candidate):
@@ -696,13 +677,6 @@ def normalize_candidate(candidate):
         "title": clean_text(candidate.get("title")),
         "store_date": clean_text(candidate.get("store_date")),
         "cover_date": clean_text(candidate.get("cover_date")),
-        "is_released": candidate.get("is_released"),
-        "primary_source_url": clean_text(candidate.get("primary_source_url")),
-        "supporting_source_urls": [
-            clean_text(url)
-            for url in candidate.get("supporting_source_urls", [])
-            if clean_text(url)
-        ][:2],
     }
 
 
@@ -721,7 +695,7 @@ def merge_issue_candidates(*, base_candidates, repair_candidates):
         base = merged.get(normalized_issue_number, {})
         merged[normalized_issue_number] = merge_candidate(base, repair)
 
-    return list(merged.values())
+    return sort_candidates(merged.values())
 
 
 def merge_candidate(base, repair):
@@ -732,27 +706,11 @@ def merge_candidate(base, repair):
         "title",
         "store_date",
         "cover_date",
-        "primary_source_url",
     ]:
         repair_value = repair.get(field_name)
 
         if clean_text(repair_value):
             merged[field_name] = clean_text(repair_value)
-
-    if repair.get("is_released") is not None:
-        merged["is_released"] = repair.get("is_released")
-
-    supporting_urls = []
-
-    for source_url in merged.get("supporting_source_urls", []):
-        if source_url and source_url not in supporting_urls:
-            supporting_urls.append(source_url)
-
-    for source_url in repair.get("supporting_source_urls", []):
-        if source_url and source_url not in supporting_urls:
-            supporting_urls.append(source_url)
-
-    merged["supporting_source_urls"] = supporting_urls[:2]
 
     return normalize_candidate(merged)
 
@@ -767,6 +725,9 @@ def find_repair_targets(issue_candidates):
             targets.append(
                 {
                     "issue_number": candidate["issue_number"],
+                    "title": candidate.get("title"),
+                    "store_date": candidate.get("store_date"),
+                    "cover_date": candidate.get("cover_date"),
                     "missing_fields": missing_fields,
                 }
             )
@@ -843,24 +804,16 @@ def update_existing_issue_from_candidate(issue, candidate):
         issue.cover_date = candidate_cover_date
         changed = True
 
-    candidate_is_released = candidate.get("is_released")
+    calculated_is_released = calculate_is_released(candidate)
 
-    if candidate_is_released is None:
-        candidate_is_released = calculate_is_released(candidate)
-
-    if candidate_is_released is not None and issue.is_released != bool(candidate_is_released):
-        issue.is_released = bool(candidate_is_released)
+    if issue.is_released != calculated_is_released:
+        issue.is_released = calculated_is_released
         changed = True
 
     return changed
 
 
 def calculate_is_released(candidate):
-    given_value = candidate.get("is_released")
-
-    if given_value is not None:
-        return bool(given_value)
-
     store_date = parse_date(candidate.get("store_date"))
 
     if store_date is None:
@@ -885,6 +838,47 @@ def normalize_issue_number(value):
     value = clean_text(value).casefold()
     value = re.sub(r"[^a-z0-9.]+", "", value)
     return value
+
+
+def unique_issue_numbers(numbers):
+    seen = set()
+    unique = []
+
+    for number in numbers:
+        cleaned_number = clean_text(number)
+        normalized_number = normalize_issue_number(cleaned_number)
+
+        if not cleaned_number or normalized_number in seen:
+            continue
+
+        seen.add(normalized_number)
+        unique.append(cleaned_number)
+
+    return unique
+
+
+def sort_issue_numbers(numbers):
+    return sorted(numbers, key=issue_number_sort_key)
+
+
+def sort_candidates(candidates):
+    return sorted(
+        candidates,
+        key=lambda candidate: issue_number_sort_key(candidate["issue_number"]),
+    )
+
+
+def issue_number_sort_key(value):
+    value = clean_text(value)
+    match = re.match(r"^(\d+)(.*)$", value)
+
+    if not match:
+        return (999999, value)
+
+    number = int(match.group(1))
+    suffix = match.group(2)
+
+    return (number, suffix)
 
 
 def clean_text(value):
