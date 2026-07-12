@@ -20,6 +20,65 @@
         </div>
     </div>
 
+    <section class="card erc-panel">
+        <div class="card-body">
+            <form method="get" class="row g-3 align-items-end">
+                <div class="col-12 col-lg-4">
+                    <label for="my-comics-publisher-filter" class="form-label erc-muted">
+                        Publisher
+                    </label>
+                    <select id="my-comics-publisher-filter" name="publisher" class="form-select">
+                        <option value="">All publishers</option>
+                        {% for publisher in publisher_options %}
+                            <option value="{{ publisher.id }}" {% if selected_publisher_id == publisher.id %}selected{% endif %}>
+                                {{ publisher.name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="col-12 col-lg-4">
+                    <label for="my-comics-run-filter" class="form-label erc-muted">
+                        Run
+                    </label>
+                    <select id="my-comics-run-filter" name="run" class="form-select">
+                        <option value="">All runs</option>
+                        {% for run in run_options %}
+                            <option value="{{ run.id }}" {% if selected_run_id == run.id %}selected{% endif %}>
+                                {% if run.start_year %}{{ run.start_year }} — {% endif %}{{ run.title }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="col-12 col-lg-2">
+                    <label for="my-comics-status-filter" class="form-label erc-muted">
+                        Status
+                    </label>
+                    <select id="my-comics-status-filter" name="status" class="form-select">
+                        <option value="">All statuses</option>
+                        {% for value, label in status_filter_choices %}
+                            <option value="{{ value }}" {% if selected_status == value %}selected{% endif %}>
+                                {{ label }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="col-12 col-lg-2 d-flex gap-2">
+                    <button type="submit" class="btn btn-outline-light w-100">
+                        Filter
+                    </button>
+                    {% if filters_active %}
+                        <a href="{% url 'reading:my_comics' %}" class="btn btn-outline-secondary w-100">
+                            Clear
+                        </a>
+                    {% endif %}
+                </div>
+            </form>
+        </div>
+    </section>
+
     <section>
         <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-end gap-2 mb-3">
             <p class="erc-page-kicker mb-0">Followed runs</p>
@@ -85,7 +144,11 @@
                         {% empty %}
                             <tr>
                                 <td colspan="4" class="text-center erc-muted py-4">
-                                    You are not following any runs yet.
+                                    {% if filters_active %}
+                                        No followed runs match these filters.
+                                    {% else %}
+                                        You are not following any runs yet.
+                                    {% endif %}
                                 </td>
                             </tr>
                         {% endfor %}
@@ -98,7 +161,7 @@
 
     <section>
         <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-end gap-2 mb-3">
-            <p class="erc-page-kicker mb-0">Volume progress</p>
+            <p class="erc-page-kicker mb-0">Followed volumes</p>
 
             <p class="erc-muted mb-0">
                 {{ volume_progress|length }} result{% if volume_progress|length != 1 %}s{% endif %}
@@ -142,6 +205,7 @@
                                         action="{% url 'reading:set_volume_status' progress.volume.id %}"
                                         method="post"
                                         class="d-flex gap-2"
+                                        data-item-type="volume"
                                     >
                                         {% csrf_token %}
                                         <input type="hidden" name="next" value="{{ request.get_full_path }}">
@@ -159,7 +223,11 @@
                         {% empty %}
                             <tr>
                                 <td colspan="4" class="text-center erc-muted py-4">
-                                    You have not saved any volume statuses yet.
+                                    {% if filters_active %}
+                                        No followed volumes match these filters.
+                                    {% else %}
+                                        You are not following any volumes yet.
+                                    {% endif %}
                                 </td>
                             </tr>
                         {% endfor %}
@@ -172,7 +240,7 @@
 
     <section>
         <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-end gap-2 mb-3">
-            <p class="erc-page-kicker mb-0">Issue progress</p>
+            <p class="erc-page-kicker mb-0">Followed issues</p>
 
             <p class="erc-muted mb-0">
                 {{ issue_progress|length }} result{% if issue_progress|length != 1 %}s{% endif %}
@@ -216,6 +284,7 @@
                                         action="{% url 'reading:set_issue_status' progress.issue.id %}"
                                         method="post"
                                         class="d-flex gap-2"
+                                        data-item-type="issue"
                                     >
                                         {% csrf_token %}
                                         <input type="hidden" name="next" value="{{ request.get_full_path }}">
@@ -233,7 +302,11 @@
                         {% empty %}
                             <tr>
                                 <td colspan="4" class="text-center erc-muted py-4">
-                                    You have not saved any issue statuses yet.
+                                    {% if filters_active %}
+                                        No followed issues match these filters.
+                                    {% else %}
+                                        You are not following any issues yet.
+                                    {% endif %}
                                 </td>
                             </tr>
                         {% endfor %}
@@ -307,11 +380,29 @@ document.addEventListener("DOMContentLoaded", function () {
         return `You follow ${trackedIssues} of ${totalIssues} ${issueLabel(totalIssues)} in this run. Follow the remaining ${missingIssues} and set all ${totalIssues} to ${label}?`;
     }
 
-    document.querySelectorAll("[data-auto-submit]").forEach(function (select) {
-        select.addEventListener("change", function () {
-            select.form.requestSubmit();
+    function unfollowPromptForForm(form) {
+        const itemType = form.dataset.itemType || "item";
+
+        if (itemType === "issue") {
+            return "Are you sure you want to unfollow this issue?";
+        }
+
+        if (itemType === "volume") {
+            return "Are you sure you want to remove this volume from My Comics?";
+        }
+
+        return "Are you sure you want to unfollow this item?";
+    }
+
+    function resetSelectToCurrentValue(select) {
+        const previousOption = Array.from(select.options).find(function (option) {
+            return option.defaultSelected;
         });
-    });
+
+        if (previousOption) {
+            select.value = previousOption.value;
+        }
+    }
 
     document.querySelectorAll("[data-run-status-form]").forEach(function (form) {
         form.addEventListener("submit", function (event) {
@@ -334,7 +425,7 @@ document.addEventListener("DOMContentLoaded", function () {
             }
 
             if (select.value === unfollowStatusValue) {
-                const confirmed = window.confirm("Unfollow this run?");
+                const confirmed = window.confirm("Are you sure you want to unfollow this run?");
 
                 if (!confirmed) {
                     event.preventDefault();
@@ -363,29 +454,26 @@ document.addEventListener("DOMContentLoaded", function () {
         });
     });
 
-    document.querySelectorAll("select[name='status']").forEach(function (select) {
-        if (select.closest("[data-run-status-form]")) {
-            return;
-        }
+    document.querySelectorAll("form[data-item-type]").forEach(function (form) {
+        form.addEventListener("submit", function (event) {
+            const select = form.querySelector("select[name='status']");
 
-        select.addEventListener("change", function (event) {
-            const previousOption = Array.from(select.options).find(function (option) {
-                return option.defaultSelected;
-            });
-
-            if (select.value !== unfollowStatusValue) {
+            if (!select || select.value !== unfollowStatusValue) {
                 return;
             }
 
-            const confirmed = window.confirm("Remove this saved status?");
+            const confirmed = window.confirm(unfollowPromptForForm(form));
 
             if (!confirmed) {
                 event.preventDefault();
-
-                if (previousOption) {
-                    select.value = previousOption.value;
-                }
+                resetSelectToCurrentValue(select);
             }
+        });
+    });
+
+    document.querySelectorAll("[data-auto-submit]").forEach(function (select) {
+        select.addEventListener("change", function () {
+            select.form.requestSubmit();
         });
     });
 });

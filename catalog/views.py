@@ -243,6 +243,7 @@ def run_details(request, pk):
         )
     )
     attach_issue_credit_display(issues)
+    attach_issue_tracking(request, issues)
 
     volumes = list(
         run.volumes.select_related("publisher", "run").order_by(
@@ -266,6 +267,7 @@ def run_details(request, pk):
         "all_credits": all_credits,
         "current_run_progress": run.user_tracking,
         "run_status_choices": FollowedRun.STATUS_CHOICES,
+        "issue_status_choices": IssueProgress.STATUS_CHOICES,
     }
 
     return render(request, "catalog/run_details.html", context)
