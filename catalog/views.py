@@ -1,6 +1,7 @@
 from urllib.parse import urlencode
 
-from django.db.models import Count, Prefetch
+from django.db.models import Case, Count, IntegerField, Prefetch, Q, Value, When
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 
@@ -13,6 +14,11 @@ from catalog.models import (
     ComicVolumeIssue,
 )
 from reading.models import FollowedRun, IssueProgress, VolumeProgress
+
+
+BROWSE_INITIAL_RESULT_LIMIT = 5
+BROWSE_LOAD_MORE_LIMIT = 10
+BROWSE_OPTION_LIMIT = 10
 
 
 def home(request):
@@ -45,101 +51,49 @@ def home(request):
 
 
 def browse(request):
-    selected_publisher = None
-    selected_run = None
-    selected_volume = None
+    selected_publisher, selected_run, selected_volume = resolve_browse_selection(
+        publisher_id=get_int_query_param(request, "publisher"),
+        run_id=get_int_query_param(request, "run"),
+        volume_id=get_int_query_param(request, "volume"),
+    )
 
-    selected_publisher_id = get_int_query_param(request, "publisher")
-    selected_run_id = get_int_query_param(request, "run")
-    selected_volume_id = get_int_query_param(request, "volume")
+    selected_publisher_id = selected_publisher.id if selected_publisher else None
+    selected_run_id = selected_run.id if selected_run else None
+    selected_volume_id = selected_volume.id if selected_volume else None
 
-    if selected_volume_id:
-        selected_volume = get_object_or_404(
-            ComicVolume.objects.select_related("publisher", "run"),
-            id=selected_volume_id,
+    publishers = list(get_publisher_options(""))
+    run_options = list(
+        get_run_options(
+            "",
+            publisher_id=selected_publisher_id,
         )
-        selected_run = selected_volume.run
-        selected_publisher = selected_volume.publisher
-    elif selected_run_id:
-        selected_run = get_object_or_404(
-            ComicRun.objects.select_related("publisher"),
-            id=selected_run_id,
+    )
+    volume_options = list(
+        get_volume_options(
+            "",
+            publisher_id=selected_publisher_id,
+            run_id=selected_run_id,
         )
-        selected_publisher = selected_run.publisher
-    elif selected_publisher_id:
-        selected_publisher = get_object_or_404(
-            ComicPublisher,
-            id=selected_publisher_id,
-        )
-
-    publishers = ComicPublisher.objects.annotate(
-        run_total=Count("runs", distinct=True),
-        volume_total=Count("volumes", distinct=True),
-    ).order_by("name")
-
-    run_options = ComicRun.objects.select_related("publisher").order_by(
-        "publisher__name",
-        "-start_year",
-        "-first_issue_date",
-        "title",
-    )
-    volume_options = ComicVolume.objects.select_related(
-        "publisher",
-        "run",
-    ).order_by(
-        "publisher__name",
-        "-release_date",
-        "run__title",
-        "volume_number",
-        "title",
     )
 
-    if selected_publisher:
-        run_options = run_options.filter(publisher=selected_publisher)
-        volume_options = volume_options.filter(publisher=selected_publisher)
-
-    if selected_run:
-        volume_options = volume_options.filter(run=selected_run)
-
-    runs = ComicRun.objects.select_related("publisher").order_by(
-        "publisher__name",
-        "-start_year",
-        "-first_issue_date",
-        "title",
-    )
-    volumes = ComicVolume.objects.select_related("publisher", "run").order_by(
-        "publisher__name",
-        "-release_date",
-        "run__title",
-        "volume_number",
-        "title",
-    )
-    issues = ComicIssue.objects.select_related(
-        "run",
-        "run__publisher",
-    ).prefetch_related(
-        issue_credit_prefetch(),
-    ).order_by(
-        "run__publisher__name",
-        "-published_date",
-        "run__title",
-        "issue_number",
+    runs_queryset, volumes_queryset, issues_queryset = get_browse_querysets(
+        selected_publisher=selected_publisher,
+        selected_run=selected_run,
+        selected_volume=selected_volume,
     )
 
-    if selected_volume:
-        runs = runs.filter(id=selected_volume.run_id)
-        volumes = volumes.filter(id=selected_volume.id)
-        issues = issues.filter(collected_in__volume=selected_volume).distinct()
-    elif selected_run:
-        runs = runs.filter(id=selected_run.id)
-        volumes = volumes.filter(run=selected_run)
-        issues = issues.filter(run=selected_run)
-    elif selected_publisher:
-        runs = runs.filter(publisher=selected_publisher)
-        volumes = volumes.filter(publisher=selected_publisher)
-        issues = issues.filter(run__publisher=selected_publisher)
-
-    issue_list = list(issues)
+    runs, has_more_runs = slice_with_has_more(
+        runs_queryset,
+        limit=BROWSE_INITIAL_RESULT_LIMIT,
+    )
+    volumes, has_more_volumes = slice_with_has_more(
+        volumes_queryset,
+        limit=BROWSE_INITIAL_RESULT_LIMIT,
+    )
+    issue_list, has_more_issues = slice_with_has_more(
+        issues_queryset,
+        limit=BROWSE_INITIAL_RESULT_LIMIT,
+    )
     attach_issue_credit_display(issue_list)
 
     selected_items = build_selected_items(
@@ -155,16 +109,106 @@ def browse(request):
         "runs": runs,
         "volumes": volumes,
         "issues": issue_list,
+        "has_more_runs": has_more_runs,
+        "has_more_volumes": has_more_volumes,
+        "has_more_issues": has_more_issues,
         "selected_publisher": selected_publisher,
         "selected_run": selected_run,
         "selected_volume": selected_volume,
-        "selected_publisher_id": selected_publisher.id if selected_publisher else None,
-        "selected_run_id": selected_run.id if selected_run else None,
-        "selected_volume_id": selected_volume.id if selected_volume else None,
+        "selected_publisher_id": selected_publisher_id,
+        "selected_run_id": selected_run_id,
+        "selected_volume_id": selected_volume_id,
         "selected_items": selected_items,
+        "browse_initial_limit": BROWSE_INITIAL_RESULT_LIMIT,
+        "browse_load_more_limit": BROWSE_LOAD_MORE_LIMIT,
+        "browse_option_limit": BROWSE_OPTION_LIMIT,
     }
 
     return render(request, "catalog/browse.html", context)
+
+
+def browse_options(request):
+    option_kind = (request.GET.get("kind") or "").strip()
+    search_value = (request.GET.get("q") or "").strip()
+    selected_option_id = get_int_query_param(request, "selected")
+    selected_publisher_id = get_int_query_param(request, "publisher")
+    selected_run_id = get_int_query_param(request, "run")
+
+    if option_kind == "publisher":
+        options = [
+            build_publisher_option(publisher, selected_option_id)
+            for publisher in get_publisher_options(search_value)
+        ]
+    elif option_kind == "run":
+        options = [
+            build_run_option(run, selected_option_id)
+            for run in get_run_options(
+                search_value,
+                publisher_id=selected_publisher_id,
+            )
+        ]
+    elif option_kind == "volume":
+        options = [
+            build_volume_option(volume, selected_option_id)
+            for volume in get_volume_options(
+                search_value,
+                publisher_id=selected_publisher_id,
+                run_id=selected_run_id,
+            )
+        ]
+    else:
+        return JsonResponse({"options": []}, status=400)
+
+    return JsonResponse({"options": options})
+
+
+def browse_items(request):
+    item_kind = (request.GET.get("kind") or "").strip()
+    offset = get_nonnegative_int_query_param(request, "offset")
+
+    selected_publisher, selected_run, selected_volume = resolve_browse_selection(
+        publisher_id=get_int_query_param(request, "publisher"),
+        run_id=get_int_query_param(request, "run"),
+        volume_id=get_int_query_param(request, "volume"),
+    )
+
+    runs_queryset, volumes_queryset, issues_queryset = get_browse_querysets(
+        selected_publisher=selected_publisher,
+        selected_run=selected_run,
+        selected_volume=selected_volume,
+    )
+
+    if item_kind == "runs":
+        rows, has_more = slice_with_has_more(
+            runs_queryset,
+            limit=BROWSE_LOAD_MORE_LIMIT,
+            offset=offset,
+        )
+        items = [build_run_row_item(run) for run in rows]
+    elif item_kind == "volumes":
+        rows, has_more = slice_with_has_more(
+            volumes_queryset,
+            limit=BROWSE_LOAD_MORE_LIMIT,
+            offset=offset,
+        )
+        items = [build_volume_row_item(volume) for volume in rows]
+    elif item_kind == "issues":
+        rows, has_more = slice_with_has_more(
+            issues_queryset,
+            limit=BROWSE_LOAD_MORE_LIMIT,
+            offset=offset,
+        )
+        attach_issue_credit_display(rows)
+        items = [build_issue_row_item(issue) for issue in rows]
+    else:
+        return JsonResponse({"items": [], "has_more": False}, status=400)
+
+    return JsonResponse(
+        {
+            "items": items,
+            "has_more": has_more,
+        }
+    )
 
 
 def run_details(request, pk):
@@ -330,6 +374,320 @@ def volume_details(request, pk):
     return render(request, "catalog/volume_details.html", context)
 
 
+def resolve_browse_selection(*, publisher_id, run_id, volume_id):
+    selected_publisher = None
+    selected_run = None
+    selected_volume = None
+
+    if volume_id:
+        selected_volume = get_object_or_404(
+            ComicVolume.objects.select_related("publisher", "run"),
+            id=volume_id,
+        )
+        selected_run = selected_volume.run
+        selected_publisher = selected_volume.publisher
+    elif run_id:
+        selected_run = get_object_or_404(
+            ComicRun.objects.select_related("publisher"),
+            id=run_id,
+        )
+        selected_publisher = selected_run.publisher
+    elif publisher_id:
+        selected_publisher = get_object_or_404(
+            ComicPublisher,
+            id=publisher_id,
+        )
+
+    return selected_publisher, selected_run, selected_volume
+
+
+def get_browse_querysets(*, selected_publisher, selected_run, selected_volume):
+    runs = ComicRun.objects.select_related("publisher").order_by(
+        "-start_year",
+        "-first_issue_date",
+        "publisher__name",
+        "title",
+    )
+    volumes = ComicVolume.objects.select_related("publisher", "run").order_by(
+        "-run__start_year",
+        "-release_date",
+        "run__title",
+        "volume_number",
+        "title",
+    )
+    issues = ComicIssue.objects.select_related(
+        "run",
+        "run__publisher",
+    ).prefetch_related(
+        issue_credit_prefetch(),
+    ).order_by(
+        "-run__start_year",
+        "-published_date",
+        "run__title",
+        "issue_number",
+    )
+
+    if selected_volume:
+        runs = runs.filter(id=selected_volume.run_id)
+        volumes = volumes.filter(id=selected_volume.id)
+        issues = issues.filter(collected_in__volume=selected_volume).distinct()
+    elif selected_run:
+        runs = runs.filter(id=selected_run.id)
+        volumes = volumes.filter(run=selected_run)
+        issues = issues.filter(run=selected_run)
+    elif selected_publisher:
+        runs = runs.filter(publisher=selected_publisher)
+        volumes = volumes.filter(publisher=selected_publisher)
+        issues = issues.filter(run__publisher=selected_publisher)
+
+    return runs, volumes, issues
+
+
+def slice_with_has_more(queryset, *, limit, offset=0):
+    items = list(queryset[offset : offset + limit + 1])
+    return items[:limit], len(items) > limit
+
+
+def get_publisher_options(search_value):
+    publishers = ComicPublisher.objects.annotate(
+        run_total=Count("runs", distinct=True),
+        volume_total=Count("volumes", distinct=True),
+    )
+
+    if search_value:
+        publishers = publishers.filter(
+            name__icontains=search_value,
+        ).annotate(
+            search_rank=Case(
+                When(name__iexact=search_value, then=Value(0)),
+                When(name__istartswith=search_value, then=Value(1)),
+                default=Value(2),
+                output_field=IntegerField(),
+            )
+        ).order_by(
+            "search_rank",
+            "name",
+        )
+    else:
+        publishers = publishers.order_by("name")
+
+    return publishers[:BROWSE_OPTION_LIMIT]
+
+
+def get_run_options(search_value, *, publisher_id=None):
+    runs = ComicRun.objects.select_related("publisher")
+
+    if publisher_id:
+        runs = runs.filter(publisher_id=publisher_id)
+
+    if search_value:
+        runs = runs.filter(
+            Q(title__icontains=search_value)
+            | Q(start_year__icontains=search_value)
+            | Q(publisher__name__icontains=search_value)
+        ).annotate(
+            search_rank=Case(
+                When(title__iexact=search_value, then=Value(0)),
+                When(title__istartswith=search_value, then=Value(1)),
+                When(publisher__name__istartswith=search_value, then=Value(2)),
+                When(title__icontains=search_value, then=Value(3)),
+                default=Value(4),
+                output_field=IntegerField(),
+            )
+        ).order_by(
+            "search_rank",
+            "-start_year",
+            "-first_issue_date",
+            "publisher__name",
+            "title",
+        )
+    else:
+        runs = runs.order_by(
+            "-start_year",
+            "-first_issue_date",
+            "publisher__name",
+            "title",
+        )
+
+    return runs[:BROWSE_OPTION_LIMIT]
+
+
+def get_volume_options(search_value, *, publisher_id=None, run_id=None):
+    volumes = ComicVolume.objects.select_related(
+        "publisher",
+        "run",
+    )
+
+    if publisher_id:
+        volumes = volumes.filter(publisher_id=publisher_id)
+
+    if run_id:
+        volumes = volumes.filter(run_id=run_id)
+
+    if search_value:
+        volumes = volumes.filter(
+            Q(title__icontains=search_value)
+            | Q(run__title__icontains=search_value)
+            | Q(volume_number__icontains=search_value)
+            | Q(publisher__name__icontains=search_value)
+        ).annotate(
+            search_rank=Case(
+                When(title__iexact=search_value, then=Value(0)),
+                When(run__title__iexact=search_value, then=Value(1)),
+                When(title__istartswith=search_value, then=Value(2)),
+                When(run__title__istartswith=search_value, then=Value(3)),
+                When(title__icontains=search_value, then=Value(4)),
+                When(run__title__icontains=search_value, then=Value(5)),
+                default=Value(6),
+                output_field=IntegerField(),
+            )
+        ).order_by(
+            "search_rank",
+            "-run__start_year",
+            "-release_date",
+            "run__title",
+            "volume_number",
+            "title",
+        )
+    else:
+        volumes = volumes.order_by(
+            "-run__start_year",
+            "-release_date",
+            "run__title",
+            "volume_number",
+            "title",
+        )
+
+    return volumes[:BROWSE_OPTION_LIMIT]
+
+
+def build_publisher_option(publisher, selected_option_id):
+    meta_parts = [
+        f"{publisher.run_total} runs",
+        f"{publisher.volume_total} volumes",
+    ]
+
+    return {
+        "id": publisher.id,
+        "url": browse_url_with_params(publisher=publisher.id),
+        "label": publisher.name,
+        "meta": " · ".join(meta_parts),
+        "search_label": publisher.name,
+        "active": publisher.id == selected_option_id,
+    }
+
+
+def build_run_option(run, selected_option_id):
+    year = run.start_year or "Unknown year"
+    issue_count = f"{run.issue_count} issues" if run.issue_count else "issue count unknown"
+
+    return {
+        "id": run.id,
+        "url": browse_url_with_params(run=run.id),
+        "label": f"{year} — {run.title}",
+        "meta": f"{run.publisher.name} · {issue_count}",
+        "search_label": f"{run.title} {run.start_year} {run.publisher.name}",
+        "active": run.id == selected_option_id,
+    }
+
+
+def build_volume_option(volume, selected_option_id):
+    meta_parts = [
+        volume.publisher.name,
+        str(volume.run),
+    ]
+
+    if volume.issue_count:
+        meta_parts.append(f"{volume.issue_count} issues")
+
+    return {
+        "id": volume.id,
+        "url": browse_url_with_params(volume=volume.id),
+        "label": str(volume),
+        "meta": " · ".join(meta_parts),
+        "search_label": (
+            f"{volume.title} {volume.run.title} "
+            f"{volume.volume_number} {volume.publisher.name}"
+        ),
+        "active": volume.id == selected_option_id,
+    }
+
+
+def build_run_row_item(run):
+    return {
+        "row_url": reverse("catalog:run_details", args=[run.id]),
+        "aria_label": f"Open run details for {run}",
+        "year": run.start_year or "Unknown",
+        "year_muted": not bool(run.start_year),
+        "title": run.title,
+        "publisher": run.publisher.name,
+        "status": run.get_status_display(),
+        "issue_count": str(run.issue_count) if run.issue_count else "Unknown",
+        "issue_count_muted": not bool(run.issue_count),
+        "first_issue_date": format_date_or_unknown(run.first_issue_date),
+        "first_issue_date_muted": not bool(run.first_issue_date),
+        "last_issue_date": format_date_or_unknown(run.last_issue_date),
+        "last_issue_date_muted": not bool(run.last_issue_date),
+    }
+
+
+def build_volume_row_item(volume):
+    has_issue_range = bool(volume.first_issue_number or volume.last_issue_number)
+
+    return {
+        "row_url": reverse("catalog:volume_details", args=[volume.id]),
+        "aria_label": f"Open volume details for {volume}",
+        "volume": str(volume),
+        "run": str(volume.run),
+        "publisher": volume.publisher.name,
+        "issue_range": (
+            f"#{volume.first_issue_number or '?'}–{volume.last_issue_number or '?'}"
+            if has_issue_range
+            else "Unknown"
+        ),
+        "issue_range_muted": not has_issue_range,
+        "issue_count": str(volume.issue_count) if volume.issue_count else "Unknown",
+        "issue_count_muted": not bool(volume.issue_count),
+        "release_date": format_date_or_unknown(volume.release_date),
+        "release_date_muted": not bool(volume.release_date),
+    }
+
+
+def build_issue_row_item(issue):
+    return {
+        "row_url": reverse("catalog:issue_details", args=[issue.id]),
+        "aria_label": f"Open issue details for issue {issue.issue_number}",
+        "year": issue.run.start_year or "Unknown",
+        "year_muted": not bool(issue.run.start_year),
+        "run": str(issue.run),
+        "issue": f"#{issue.issue_number}",
+        "published_date": format_date_or_unknown(issue.published_date),
+        "published_date_muted": not bool(issue.published_date),
+        "writer": issue.display_writers or "Unknown",
+        "writer_muted": not bool(issue.display_writers),
+    }
+
+
+def format_date_or_unknown(value):
+    if not value:
+        return "Unknown"
+
+    return value.strftime("%Y-%m-%d")
+
+
+def browse_url_with_params(**params):
+    cleaned_params = {
+        key: value
+        for key, value in params.items()
+        if value not in [None, ""]
+    }
+
+    if not cleaned_params:
+        return reverse("catalog:browse")
+
+    return f"{reverse('catalog:browse')}?{urlencode(cleaned_params)}"
+
+
 def issue_credit_prefetch():
     return Prefetch(
         "credits",
@@ -368,6 +726,17 @@ def get_int_query_param(request, name):
         return int(raw_value)
     except (TypeError, ValueError):
         return None
+
+
+def get_nonnegative_int_query_param(request, name):
+    raw_value = request.GET.get(name)
+
+    try:
+        value = int(raw_value)
+    except (TypeError, ValueError):
+        return 0
+
+    return max(value, 0)
 
 
 def build_selected_items(*, selected_publisher, selected_run, selected_volume):

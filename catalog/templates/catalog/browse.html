@@ -20,13 +20,23 @@
 
     <section class="card erc-panel">
         <div class="card-body">
+            <p class="erc-muted small mb-3">
+                Browse loads {{ browse_initial_limit }} rows per section first.
+                Use Load {{ browse_load_more_limit }} more to keep browsing without slowing down the page.
+            </p>
+
             <div class="row g-3 align-items-end">
                 <div class="col-12 col-lg-4">
                     <label class="form-label erc-muted" for="publisher-search-browse">
                         Publisher
                     </label>
 
-                    <div class="dropdown searchable-dropdown">
+                    <div
+                        class="dropdown searchable-dropdown"
+                        data-options-kind="publisher"
+                        data-options-url="{% url 'catalog:browse_options' %}"
+                        data-selected-id="{{ selected_publisher_id|default_if_none:'' }}"
+                    >
                         <button
                             class="btn erc-filter-button dropdown-toggle text-start w-100"
                             type="button"
@@ -55,8 +65,6 @@
                             <a
                                 href="{% url 'catalog:browse' %}"
                                 class="dropdown-item rounded {% if not selected_publisher %}active{% endif %}"
-                                data-dropdown-option
-                                data-search-label="All publishers"
                             >
                                 All publishers
                             </a>
@@ -92,7 +100,13 @@
                         Run
                     </label>
 
-                    <div class="dropdown searchable-dropdown" data-sort-runs="true">
+                    <div
+                        class="dropdown searchable-dropdown"
+                        data-options-kind="run"
+                        data-options-url="{% url 'catalog:browse_options' %}"
+                        data-selected-id="{{ selected_run_id|default_if_none:'' }}"
+                        data-filter-publisher-id="{{ selected_publisher_id|default_if_none:'' }}"
+                    >
                         <button
                             class="btn erc-filter-button dropdown-toggle text-start w-100"
                             type="button"
@@ -127,8 +141,6 @@
                                 <a
                                     href="{% url 'catalog:browse' %}?publisher={{ selected_publisher.id }}"
                                     class="dropdown-item rounded {% if not selected_run %}active{% endif %}"
-                                    data-dropdown-option
-                                    data-search-label="All runs"
                                 >
                                     All {{ selected_publisher.name }} runs
                                 </a>
@@ -136,8 +148,6 @@
                                 <a
                                     href="{% url 'catalog:browse' %}"
                                     class="dropdown-item rounded {% if not selected_run %}active{% endif %}"
-                                    data-dropdown-option
-                                    data-search-label="All runs"
                                 >
                                     All runs
                                 </a>
@@ -152,8 +162,6 @@
                                         class="dropdown-item rounded {% if selected_run_id == run.id %}active{% endif %}"
                                         data-dropdown-option
                                         data-search-label="{{ run.title }} {{ run.start_year }} {{ run.publisher.name }}"
-                                        data-run-name="{{ run.title }}"
-                                        data-run-year="{{ run.start_year }}"
                                     >
                                         <span class="fw-semibold">
                                             {% if run.start_year %}
@@ -189,7 +197,14 @@
                         Collected volume
                     </label>
 
-                    <div class="dropdown searchable-dropdown">
+                    <div
+                        class="dropdown searchable-dropdown"
+                        data-options-kind="volume"
+                        data-options-url="{% url 'catalog:browse_options' %}"
+                        data-selected-id="{{ selected_volume_id|default_if_none:'' }}"
+                        data-filter-publisher-id="{{ selected_publisher_id|default_if_none:'' }}"
+                        data-filter-run-id="{{ selected_run_id|default_if_none:'' }}"
+                    >
                         <button
                             class="btn erc-filter-button dropdown-toggle text-start w-100"
                             type="button"
@@ -223,8 +238,6 @@
                                 <a
                                     href="{% url 'catalog:browse' %}?run={{ selected_run.id }}"
                                     class="dropdown-item rounded {% if not selected_volume %}active{% endif %}"
-                                    data-dropdown-option
-                                    data-search-label="All volumes"
                                 >
                                     All volumes in this run
                                 </a>
@@ -232,8 +245,6 @@
                                 <a
                                     href="{% url 'catalog:browse' %}?publisher={{ selected_publisher.id }}"
                                     class="dropdown-item rounded {% if not selected_volume %}active{% endif %}"
-                                    data-dropdown-option
-                                    data-search-label="All volumes"
                                 >
                                     All {{ selected_publisher.name }} volumes
                                 </a>
@@ -241,8 +252,6 @@
                                 <a
                                     href="{% url 'catalog:browse' %}"
                                     class="dropdown-item rounded {% if not selected_volume %}active{% endif %}"
-                                    data-dropdown-option
-                                    data-search-label="All volumes"
                                 >
                                     All volumes
                                 </a>
@@ -313,7 +322,7 @@
         </div>
     </section>
 
-    <section>
+    <section data-load-section="runs">
         <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-end gap-2 mb-3">
             <div>
                 <p class="erc-page-kicker mb-1">
@@ -332,8 +341,8 @@
                 </h2>
             </div>
 
-            <p class="erc-muted mb-0">
-                {{ runs|length }} result{% if runs|length != 1 %}s{% endif %}
+            <p class="erc-muted mb-0" data-loaded-count>
+                Showing {{ runs|length }} loaded
             </p>
         </div>
 
@@ -353,7 +362,7 @@
                         </tr>
                         </thead>
 
-                        <tbody>
+                        <tbody data-load-target>
                         {% for run in runs %}
                             <tr
                                 class="clickable-row"
@@ -403,11 +412,29 @@
                         </tbody>
                     </table>
                 </div>
+
+                {% if has_more_runs %}
+                    <div class="d-grid mt-3">
+                        <button
+                            type="button"
+                            class="btn btn-outline-light"
+                            data-load-more
+                            data-kind="runs"
+                            data-offset="{{ runs|length }}"
+                            data-items-url="{% url 'catalog:browse_items' %}"
+                            data-filter-publisher-id="{{ selected_publisher_id|default_if_none:'' }}"
+                            data-filter-run-id="{{ selected_run_id|default_if_none:'' }}"
+                            data-filter-volume-id="{{ selected_volume_id|default_if_none:'' }}"
+                        >
+                            Load {{ browse_load_more_limit }} more runs
+                        </button>
+                    </div>
+                {% endif %}
             </div>
         </div>
     </section>
 
-    <section>
+    <section data-load-section="volumes">
         <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-end gap-2 mb-3">
             <div>
                 <p class="erc-page-kicker mb-1">
@@ -426,8 +453,8 @@
                 </h2>
             </div>
 
-            <p class="erc-muted mb-0">
-                {{ volumes|length }} result{% if volumes|length != 1 %}s{% endif %}
+            <p class="erc-muted mb-0" data-loaded-count>
+                Showing {{ volumes|length }} loaded
             </p>
         </div>
 
@@ -446,7 +473,7 @@
                         </tr>
                         </thead>
 
-                        <tbody>
+                        <tbody data-load-target>
                         {% for volume in volumes %}
                             <tr
                                 class="clickable-row"
@@ -489,19 +516,37 @@
                         </tbody>
                     </table>
                 </div>
+
+                {% if has_more_volumes %}
+                    <div class="d-grid mt-3">
+                        <button
+                            type="button"
+                            class="btn btn-outline-light"
+                            data-load-more
+                            data-kind="volumes"
+                            data-offset="{{ volumes|length }}"
+                            data-items-url="{% url 'catalog:browse_items' %}"
+                            data-filter-publisher-id="{{ selected_publisher_id|default_if_none:'' }}"
+                            data-filter-run-id="{{ selected_run_id|default_if_none:'' }}"
+                            data-filter-volume-id="{{ selected_volume_id|default_if_none:'' }}"
+                        >
+                            Load {{ browse_load_more_limit }} more volumes
+                        </button>
+                    </div>
+                {% endif %}
             </div>
         </div>
     </section>
 
-    <section>
+    <section data-load-section="issues">
         <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-end gap-2 mb-3">
             <div>
                 <p class="erc-page-kicker mb-1">Single issues</p>
                 <h2 class="h4 fw-bold mb-0">Issues</h2>
             </div>
 
-            <p class="erc-muted mb-0">
-                {{ issues|length }} result{% if issues|length != 1 %}s{% endif %}
+            <p class="erc-muted mb-0" data-loaded-count>
+                Showing {{ issues|length }} loaded
             </p>
         </div>
 
@@ -518,7 +563,7 @@
                             <th scope="col">Writer</th>
                         </tr>
                         </thead>
-                        <tbody>
+                        <tbody data-load-target>
                         {% for issue in issues %}
                             <tr
                                 class="clickable-row"
@@ -552,7 +597,7 @@
                             </tr>
                         {% empty %}
                             <tr>
-                                <td colspan="6" class="text-center erc-muted py-4">
+                                <td colspan="5" class="text-center erc-muted py-4">
                                     No issues match this filter.
                                 </td>
                             </tr>
@@ -560,6 +605,24 @@
                         </tbody>
                     </table>
                 </div>
+
+                {% if has_more_issues %}
+                    <div class="d-grid mt-3">
+                        <button
+                            type="button"
+                            class="btn btn-outline-light"
+                            data-load-more
+                            data-kind="issues"
+                            data-offset="{{ issues|length }}"
+                            data-items-url="{% url 'catalog:browse_items' %}"
+                            data-filter-publisher-id="{{ selected_publisher_id|default_if_none:'' }}"
+                            data-filter-run-id="{{ selected_run_id|default_if_none:'' }}"
+                            data-filter-volume-id="{{ selected_volume_id|default_if_none:'' }}"
+                        >
+                            Load {{ browse_load_more_limit }} more issues
+                        </button>
+                    </div>
+                {% endif %}
             </div>
         </div>
     </section>
@@ -568,70 +631,51 @@
 <script>
 document.addEventListener("DOMContentLoaded", function () {
     const dropdowns = Array.from(document.querySelectorAll(".searchable-dropdown"));
+    const loadMoreButtons = Array.from(document.querySelectorAll("[data-load-more]"));
 
-    function normalizeSearchValue(value) {
-        return String(value || "")
-            .toLowerCase()
-            .replaceAll("&", "and")
-            .replaceAll("’", "'")
-            .replaceAll("‘", "'")
-            .replaceAll("–", "-")
-            .replaceAll("—", "-")
-            .replace(/[^a-z0-9]+/g, "");
+    function clearElement(element) {
+        while (element.firstChild) {
+            element.removeChild(element.firstChild);
+        }
     }
 
-    function getOptionScore(option, rawSearchValue) {
-        const searchValue = normalizeSearchValue(rawSearchValue);
-        const runName = normalizeSearchValue(option.dataset.runName || "");
-        const label = normalizeSearchValue(option.dataset.searchLabel || option.textContent || "");
-        const year = parseInt(option.dataset.runYear || "0", 10) || 0;
+    function createOptionElement(option) {
+        const link = document.createElement("a");
 
-        if (!searchValue) {
-            return {
-                score: 0,
-                year: year,
-            };
+        link.href = option.url;
+        link.className = "dropdown-item rounded";
+        link.dataset.dropdownOption = "";
+        link.dataset.searchLabel = option.search_label || option.label || "";
+
+        if (option.active) {
+            link.classList.add("active");
         }
 
-        if (runName === searchValue) {
-            return {
-                score: 1000,
-                year: year,
-            };
+        const label = document.createElement("span");
+        label.className = "fw-semibold";
+        label.textContent = option.label || "";
+        link.appendChild(label);
+
+        if (option.meta) {
+            const meta = document.createElement("span");
+            meta.className = "erc-muted";
+            meta.textContent = " · " + option.meta;
+            link.appendChild(meta);
         }
 
-        if (runName.startsWith(searchValue)) {
-            return {
-                score: 800,
-                year: year,
-            };
-        }
+        return link;
+    }
 
-        if (label.startsWith(searchValue)) {
-            return {
-                score: 700,
-                year: year,
-            };
-        }
+    function renderOptions(optionsContainer, noResultsMessage, options) {
+        clearElement(optionsContainer);
 
-        if (runName.includes(searchValue)) {
-            return {
-                score: 500,
-                year: year,
-            };
-        }
+        options.forEach(function (option) {
+            optionsContainer.appendChild(createOptionElement(option));
+        });
 
-        if (label.includes(searchValue)) {
-            return {
-                score: 400,
-                year: year,
-            };
+        if (noResultsMessage) {
+            noResultsMessage.classList.toggle("d-none", options.length !== 0);
         }
-
-        return {
-            score: 0,
-            year: year,
-        };
     }
 
     dropdowns.forEach(function (dropdown) {
@@ -639,79 +683,76 @@ document.addEventListener("DOMContentLoaded", function () {
         const optionsContainer = dropdown.querySelector("[data-dropdown-options]");
         const noResultsMessage = dropdown.querySelector("[data-no-results]");
         const dropdownButton = dropdown.querySelector("[data-bs-toggle='dropdown']");
+        const optionsUrl = dropdown.dataset.optionsUrl;
+        const optionsKind = dropdown.dataset.optionsKind;
 
-        if (!searchInput || !optionsContainer || !dropdownButton) {
+        if (!searchInput || !optionsContainer || !dropdownButton || !optionsUrl || !optionsKind) {
             return;
         }
 
-        const options = Array.from(optionsContainer.querySelectorAll("[data-dropdown-option]"));
+        let debounceTimer = null;
+        let latestRequestNumber = 0;
 
-        options.forEach(function (option, index) {
-            option.dataset.originalIndex = String(index);
-        });
+        function fetchOptions() {
+            latestRequestNumber += 1;
 
-        function restoreOriginalOrder() {
-            options
-                .slice()
-                .sort(function (left, right) {
-                    return Number(left.dataset.originalIndex) - Number(right.dataset.originalIndex);
+            const requestNumber = latestRequestNumber;
+            const url = new URL(optionsUrl, window.location.origin);
+            const searchValue = searchInput.value.trim();
+
+            url.searchParams.set("kind", optionsKind);
+
+            if (searchValue) {
+                url.searchParams.set("q", searchValue);
+            }
+
+            if (dropdown.dataset.selectedId) {
+                url.searchParams.set("selected", dropdown.dataset.selectedId);
+            }
+
+            if (dropdown.dataset.filterPublisherId) {
+                url.searchParams.set("publisher", dropdown.dataset.filterPublisherId);
+            }
+
+            if (dropdown.dataset.filterRunId) {
+                url.searchParams.set("run", dropdown.dataset.filterRunId);
+            }
+
+            fetch(url.toString(), {
+                headers: {
+                    "X-Requested-With": "XMLHttpRequest",
+                },
+            })
+                .then(function (response) {
+                    if (!response.ok) {
+                        throw new Error("Dropdown option request failed.");
+                    }
+
+                    return response.json();
                 })
-                .forEach(function (option) {
-                    optionsContainer.appendChild(option);
+                .then(function (data) {
+                    if (requestNumber !== latestRequestNumber) {
+                        return;
+                    }
+
+                    renderOptions(optionsContainer, noResultsMessage, data.options || []);
+                })
+                .catch(function () {
+                    if (noResultsMessage) {
+                        noResultsMessage.classList.remove("d-none");
+                    }
                 });
         }
 
-        function sortRunOptions(visibleOptions, searchValue) {
-            visibleOptions
-                .slice()
-                .sort(function (left, right) {
-                    const leftScore = getOptionScore(left, searchValue);
-                    const rightScore = getOptionScore(right, searchValue);
+        function scheduleFetchOptions() {
+            window.clearTimeout(debounceTimer);
 
-                    if (rightScore.score !== leftScore.score) {
-                        return rightScore.score - leftScore.score;
-                    }
-
-                    if (rightScore.year !== leftScore.year) {
-                        return rightScore.year - leftScore.year;
-                    }
-
-                    return Number(left.dataset.originalIndex) - Number(right.dataset.originalIndex);
-                })
-                .forEach(function (option) {
-                    optionsContainer.appendChild(option);
-                });
+            debounceTimer = window.setTimeout(function () {
+                fetchOptions();
+            }, 150);
         }
 
-        function filterOptions() {
-            const rawSearchValue = searchInput.value.trim();
-            const normalizedSearchValue = normalizeSearchValue(rawSearchValue);
-            let visibleOptions = [];
-
-            options.forEach(function (option) {
-                const rawLabel = option.dataset.searchLabel || option.textContent || "";
-                const normalizedLabel = normalizeSearchValue(rawLabel);
-                const shouldShow = !normalizedSearchValue || normalizedLabel.includes(normalizedSearchValue);
-
-                option.classList.toggle("d-none", !shouldShow);
-
-                if (shouldShow) {
-                    visibleOptions.push(option);
-                }
-            });
-
-            if (dropdown.dataset.sortRuns === "true" && rawSearchValue) {
-                sortRunOptions(visibleOptions, rawSearchValue);
-            } else {
-                restoreOriginalOrder();
-            }
-
-            if (noResultsMessage) {
-                noResultsMessage.classList.toggle("d-none", visibleOptions.length !== 0);
-            }
-        }
-
-        searchInput.addEventListener("input", filterOptions);
+        searchInput.addEventListener("input", scheduleFetchOptions);
 
         searchInput.addEventListener("click", function (event) {
             event.stopPropagation();
@@ -720,6 +761,178 @@ document.addEventListener("DOMContentLoaded", function () {
         dropdownButton.addEventListener("shown.bs.dropdown", function () {
             searchInput.focus();
             searchInput.select();
+        });
+    });
+
+    function addCell(row, text, options) {
+        const cell = document.createElement("td");
+        const cellOptions = options || {};
+
+        if (cellOptions.bold) {
+            cell.classList.add("fw-semibold");
+        }
+
+        if (cellOptions.muted) {
+            const mutedText = document.createElement("span");
+            mutedText.className = "erc-muted";
+            mutedText.textContent = text;
+            cell.appendChild(mutedText);
+        } else {
+            cell.textContent = text;
+        }
+
+        row.appendChild(cell);
+    }
+
+    function createClickableRow(item) {
+        const row = document.createElement("tr");
+
+        row.className = "clickable-row";
+        row.dataset.rowUrl = item.row_url;
+        row.tabIndex = 0;
+        row.setAttribute("aria-label", item.aria_label || "Open details");
+
+        bindClickableRow(row);
+
+        return row;
+    }
+
+    function bindClickableRow(row) {
+        row.addEventListener("click", function (event) {
+            if (event.target.closest("a, button, input, select, textarea, label")) {
+                return;
+            }
+
+            window.location.href = row.dataset.rowUrl;
+        });
+
+        row.addEventListener("keydown", function (event) {
+            if (event.key !== "Enter" && event.key !== " ") {
+                return;
+            }
+
+            event.preventDefault();
+            window.location.href = row.dataset.rowUrl;
+        });
+    }
+
+    function createRunRow(item) {
+        const row = createClickableRow(item);
+
+        addCell(row, item.year, { muted: item.year_muted });
+        addCell(row, item.title, { bold: true });
+        addCell(row, item.publisher);
+        addCell(row, item.status);
+        addCell(row, item.issue_count, { muted: item.issue_count_muted });
+        addCell(row, item.first_issue_date, { muted: item.first_issue_date_muted });
+        addCell(row, item.last_issue_date, { muted: item.last_issue_date_muted });
+
+        return row;
+    }
+
+    function createVolumeRow(item) {
+        const row = createClickableRow(item);
+
+        addCell(row, item.volume, { bold: true });
+        addCell(row, item.run);
+        addCell(row, item.publisher);
+        addCell(row, item.issue_range, { muted: item.issue_range_muted });
+        addCell(row, item.issue_count, { muted: item.issue_count_muted });
+        addCell(row, item.release_date, { muted: item.release_date_muted });
+
+        return row;
+    }
+
+    function createIssueRow(item) {
+        const row = createClickableRow(item);
+
+        addCell(row, item.year, { muted: item.year_muted });
+        addCell(row, item.run, { bold: true });
+        addCell(row, item.issue);
+        addCell(row, item.published_date, { muted: item.published_date_muted });
+        addCell(row, item.writer, { muted: item.writer_muted });
+
+        return row;
+    }
+
+    function createRow(kind, item) {
+        if (kind === "runs") {
+            return createRunRow(item);
+        }
+
+        if (kind === "volumes") {
+            return createVolumeRow(item);
+        }
+
+        return createIssueRow(item);
+    }
+
+    loadMoreButtons.forEach(function (button) {
+        button.addEventListener("click", function () {
+            const section = button.closest("[data-load-section]");
+            const target = section.querySelector("[data-load-target]");
+            const loadedCount = section.querySelector("[data-loaded-count]");
+            const originalText = button.textContent;
+            const url = new URL(button.dataset.itemsUrl, window.location.origin);
+
+            url.searchParams.set("kind", button.dataset.kind);
+            url.searchParams.set("offset", button.dataset.offset || "0");
+
+            if (button.dataset.filterPublisherId) {
+                url.searchParams.set("publisher", button.dataset.filterPublisherId);
+            }
+
+            if (button.dataset.filterRunId) {
+                url.searchParams.set("run", button.dataset.filterRunId);
+            }
+
+            if (button.dataset.filterVolumeId) {
+                url.searchParams.set("volume", button.dataset.filterVolumeId);
+            }
+
+            button.disabled = true;
+            button.textContent = "Loading...";
+
+            fetch(url.toString(), {
+                headers: {
+                    "X-Requested-With": "XMLHttpRequest",
+                },
+            })
+                .then(function (response) {
+                    if (!response.ok) {
+                        throw new Error("Load more request failed.");
+                    }
+
+                    return response.json();
+                })
+                .then(function (data) {
+                    const items = data.items || [];
+
+                    items.forEach(function (item) {
+                        target.appendChild(createRow(button.dataset.kind, item));
+                    });
+
+                    const previousOffset = Number(button.dataset.offset || "0");
+                    const nextOffset = previousOffset + items.length;
+
+                    button.dataset.offset = String(nextOffset);
+
+                    if (loadedCount) {
+                        loadedCount.textContent = "Showing " + nextOffset + " loaded";
+                    }
+
+                    if (!data.has_more || items.length === 0) {
+                        button.closest(".d-grid").remove();
+                        return;
+                    }
+
+                    button.disabled = false;
+                    button.textContent = originalText;
+                })
+                .catch(function () {
+                    button.disabled = false;
+                    button.textContent = "Could not load more. Try again.";
+                });
         });
     });
 });
