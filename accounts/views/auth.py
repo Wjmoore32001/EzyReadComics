@@ -1,10 +1,13 @@
 import hashlib
+from urllib.parse import urlencode
 
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import login
 from django.core.cache import cache
 from django.shortcuts import redirect, render
+from django.urls import reverse
+from django.utils.http import url_has_allowed_host_and_scheme
 
 from accounts.forms import StyledUserCreationForm
 
@@ -44,8 +47,10 @@ def _signup_is_rate_limited(request):
 
 
 def signup(request):
+    next_url = _get_safe_next_url(request, reverse("account"))
+
     if request.user.is_authenticated:
-        return redirect("account")
+        return redirect(next_url)
 
     if request.method == "POST":
         if _signup_is_rate_limited(request):
@@ -61,8 +66,34 @@ def signup(request):
                 user = form.save()
                 login(request, user)
                 messages.success(request, "Your account has been created.")
-                return redirect("account")
+                return redirect(next_url)
     else:
         form = StyledUserCreationForm()
 
-    return render(request, "registration/signup.html", {"form": form})
+    login_url = reverse("login")
+
+    if next_url != reverse("account"):
+        login_url = f"{login_url}?{urlencode({'next': next_url})}"
+
+    return render(
+        request,
+        "registration/signup.html",
+        {
+            "form": form,
+            "next_url": next_url,
+            "login_url": login_url,
+        },
+    )
+
+
+def _get_safe_next_url(request, fallback_url):
+    next_url = request.POST.get("next") or request.GET.get("next")
+
+    if next_url and url_has_allowed_host_and_scheme(
+        next_url,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return next_url
+
+    return fallback_url

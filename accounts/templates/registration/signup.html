@@ -12,7 +12,7 @@
         <h1 class="h2 fw-bold mb-3">Create an account</h1>
 
         <p class="text-secondary mb-4">
-            Sign up to start using account-based EzyReadComics features as they are added.
+            Sign up to follow comics and track your reading.
         </p>
 
         <div class="alert alert-info mb-4">
@@ -21,6 +21,7 @@
 
         <form method="post" novalidate>
             {% csrf_token %}
+            <input type="hidden" name="next" value="{{ next_url }}">
 
             {% if form.website %}
                 <div class="visually-hidden" aria-hidden="true">
@@ -68,7 +69,7 @@
 
         <p class="text-secondary mb-0">
             Already have an account?
-            <a href="{% url 'login' %}">Log in</a>
+            <a href="{{ login_url }}">Log in</a>
         </p>
     </div>
 </div>
