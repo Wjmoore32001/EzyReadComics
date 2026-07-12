@@ -4,25 +4,72 @@
 {% block title %}My Comics - EzyReadComics{% endblock %}
 
 {% block content %}
-<div class="d-flex flex-column gap-4">
-    <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-end gap-3">
-        <div>
-            <p class="erc-page-kicker mb-2">Reading Tracking</p>
-            <h1 class="display-6 fw-bold mb-1">My Comics</h1>
-            <p class="erc-muted mb-0">
-                Follow runs and track your volume and issue reading status.
-            </p>
+<div class="erc-page-shell">
+    <section class="erc-hero p-4 p-lg-5">
+        <div class="erc-hero-content">
+            <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-end gap-4">
+                <div>
+                    <p class="erc-page-kicker mb-3">Reading Tracking</p>
+                    <h1 class="erc-hero-title display-4 fw-bold mb-3">
+                        My Comics.
+                    </h1>
+                    <p class="erc-hero-subtitle lead mb-0">
+                        Follow runs, save volumes, and track issue progress.
+                    </p>
+                </div>
+
+                <div class="d-flex flex-wrap gap-2">
+                    <a href="{% url 'catalog:browse' %}" class="btn btn-outline-light btn-lg">
+                        Browse comics
+                    </a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="erc-home-stat-grid">
+        <div class="erc-home-stat">
+            <div class="erc-home-stat-value">{{ followed_runs|length }}</div>
+            <div class="erc-muted mt-2">Runs</div>
         </div>
 
-        <div>
-            <a href="{% url 'catalog:browse' %}" class="btn btn-outline-light">
-                Browse comics
-            </a>
+        <div class="erc-home-stat">
+            <div class="erc-home-stat-value">{{ volume_progress|length }}</div>
+            <div class="erc-muted mt-2">Volumes</div>
         </div>
-    </div>
+
+        <div class="erc-home-stat">
+            <div class="erc-home-stat-value">{{ issue_progress|length }}</div>
+            <div class="erc-muted mt-2">Issues</div>
+        </div>
+
+        <div class="erc-home-stat">
+            <div class="erc-home-stat-value">
+                {% if filters_active %}
+                    On
+                {% else %}
+                    Off
+                {% endif %}
+            </div>
+            <div class="erc-muted mt-2">Filters</div>
+        </div>
+    </section>
 
     <section class="card erc-panel">
-        <div class="card-body">
+        <div class="card-body p-4">
+            <div class="erc-section-header">
+                <div>
+                    <p class="erc-page-kicker mb-2">Filters</p>
+                    <h2 class="h3 fw-bold mb-0">Library view</h2>
+                </div>
+
+                {% if filters_active %}
+                    <a href="{% url 'reading:my_comics' %}" class="btn btn-outline-secondary">
+                        Clear filters
+                    </a>
+                {% endif %}
+            </div>
+
             <form method="get" class="row g-3 align-items-end">
                 <div class="col-12 col-lg-4">
                     <label for="my-comics-publisher-filter" class="form-label erc-muted">
@@ -66,31 +113,29 @@
                     </select>
                 </div>
 
-                <div class="col-12 col-lg-2 d-flex gap-2">
+                <div class="col-12 col-lg-2">
                     <button type="submit" class="btn btn-outline-light w-100">
                         Filter
                     </button>
-                    {% if filters_active %}
-                        <a href="{% url 'reading:my_comics' %}" class="btn btn-outline-secondary w-100">
-                            Clear
-                        </a>
-                    {% endif %}
                 </div>
             </form>
         </div>
     </section>
 
     <section>
-        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-end gap-2 mb-3">
-            <p class="erc-page-kicker mb-0">Followed runs</p>
+        <div class="erc-section-header">
+            <div>
+                <p class="erc-page-kicker mb-2">Followed runs</p>
+                <h2 class="h3 fw-bold mb-0">Runs</h2>
+            </div>
 
             <p class="erc-muted mb-0">
                 {{ followed_runs|length }} result{% if followed_runs|length != 1 %}s{% endif %}
             </p>
         </div>
 
-        <div class="card erc-panel-flat">
-            <div class="card-body">
+        <div class="card erc-panel">
+            <div class="card-body p-0">
                 <div class="table-responsive">
                     <table class="table table-dark table-hover align-middle mb-0">
                         <thead>
@@ -161,16 +206,19 @@
     </section>
 
     <section>
-        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-end gap-2 mb-3">
-            <p class="erc-page-kicker mb-0">Followed volumes</p>
+        <div class="erc-section-header">
+            <div>
+                <p class="erc-page-kicker mb-2">Followed volumes</p>
+                <h2 class="h3 fw-bold mb-0">Volumes</h2>
+            </div>
 
             <p class="erc-muted mb-0">
                 {{ volume_progress|length }} result{% if volume_progress|length != 1 %}s{% endif %}
             </p>
         </div>
 
-        <div class="card erc-panel-flat">
-            <div class="card-body">
+        <div class="card erc-panel">
+            <div class="card-body p-0">
                 <div class="table-responsive">
                     <table class="table table-dark table-hover align-middle mb-0">
                         <thead>
@@ -240,16 +288,19 @@
     </section>
 
     <section>
-        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-end gap-2 mb-3">
-            <p class="erc-page-kicker mb-0">Followed issues</p>
+        <div class="erc-section-header">
+            <div>
+                <p class="erc-page-kicker mb-2">Followed issues</p>
+                <h2 class="h3 fw-bold mb-0">Issues</h2>
+            </div>
 
             <p class="erc-muted mb-0">
                 {{ issue_progress|length }} result{% if issue_progress|length != 1 %}s{% endif %}
             </p>
         </div>
 
-        <div class="card erc-panel-flat">
-            <div class="card-body">
+        <div class="card erc-panel">
+            <div class="card-body p-0">
                 <div class="table-responsive">
                     <table class="table table-dark table-hover align-middle mb-0">
                         <thead>

@@ -345,6 +345,55 @@ a {
     cursor: pointer;
 }
 
+.erc-data-card .card-body {
+    padding: 1.5rem;
+}
+
+.erc-data-card .table-responsive {
+    border-radius: 1rem;
+}
+
+.erc-data-table {
+    border-collapse: separate;
+    border-spacing: 0 0.7rem;
+    margin-top: -0.7rem;
+}
+
+.erc-data-table thead th {
+    border-bottom: 0;
+    padding: 0 1rem 0.35rem;
+}
+
+.erc-data-table tbody td {
+    background: rgba(255, 255, 255, 0.025);
+    border-top: 1px solid var(--erc-border-soft);
+    border-bottom: 1px solid var(--erc-border-soft);
+    padding: 0.95rem 1rem;
+    transition: 140ms ease-in-out;
+}
+
+.erc-data-table tbody tr td:first-child {
+    border-left: 1px solid var(--erc-border-soft);
+    border-top-left-radius: 0.95rem;
+    border-bottom-left-radius: 0.95rem;
+    padding-left: 1.15rem;
+}
+
+.erc-data-table tbody tr td:last-child {
+    border-right: 1px solid var(--erc-border-soft);
+    border-top-right-radius: 0.95rem;
+    border-bottom-right-radius: 0.95rem;
+    padding-right: 1.15rem;
+}
+
+.erc-data-table tbody tr:hover td {
+    background: var(--erc-accent-soft) !important;
+}
+
+.erc-data-table .erc-track-cell {
+    min-width: 10rem;
+}
+
 .erc-home-list {
     display: grid;
     gap: 0.75rem;
