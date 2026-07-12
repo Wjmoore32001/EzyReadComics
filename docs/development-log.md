@@ -13,13 +13,56 @@ Current project areas:
 - `accounts` handles signup, login, logout, account settings, username changes, and password changes.
 - `comicvine` stores source data imported from Comic Vine.
 - `catalog` stores confirmed app-facing comic data.
-- `ingestion` exists as a future review/staging layer between source data and confirmed catalog data.
+- `ingestion` stores source-to-catalog staging records and confirmed run candidates.
 - `reading` stores user-specific comic tracking data.
 - The site currently has catalog home, browse, run details, issue details, collected-volume details, and My Comics pages.
 - Comic Vine backfill/import work is ongoing.
+- Comic Vine run and issue ingestion now supports confirmed source-to-catalog promotion.
 - Recommendation logic, reading-order algorithms, character features, creator features, event features, and story-arc features are not built yet.
 
 ## Timeline
+
+### 2026-07-11
+
+- Reworked the Marvel Comic Vine run-ingestion algorithm.
+- Changed ingestion from a future placeholder into an active staging path for confirmed Comic Vine run candidates.
+- Added or updated `ComicVineVolumeCandidate` analysis behavior for local Marvel Comic Vine volume rows.
+- Kept the Comic Vine source layer separate from confirmed catalog data.
+- Confirmed that Comic Vine "volume" records cannot be trusted as app-facing runs by default because some Comic Vine volume records are collected-edition/product-line containers.
+- Removed the old `count_of_issues > 1` threshold from the run decision.
+- Changed the analyzer to classify from actual attached local child issue rows instead of trusting Comic Vine `count_of_issues`.
+- Added the strict child-title safety rule:
+  - If any attached child issue title starts with `Vol.`, `Vol`, or `Volume`, the source is unsafe/unresolved and is not promoted as a run.
+- Added the minimum attached-issue requirement:
+  - A source needs at least two attached local child issues before it can be automatically confirmed as a run.
+  - One attached issue is not enough proof because it may be a one-shot, special, facsimile, product record, or incompletely hydrated source.
+- Kept the analyzer conservative:
+  - False negatives are acceptable.
+  - False positives should be avoided.
+  - Uncertain sources stay ingestion-only.
+- Removed broad run-detection requirements from the current analyzer path:
+  - No title/date overlap rule.
+  - No release-cadence requirement.
+  - No cover-date lead requirement.
+  - No broad parent-title guessing as the core rule.
+- The analyzer now makes no Comic Vine API calls.
+- The analyzer writes no catalog rows.
+- The analyzer does not create or update collected-volume catalog records.
+- Verified the known separation cases:
+  - `Avengers (2023)` confirms as a run.
+  - `Alien (2022)` confirms as a run.
+  - `Avengers by Jed Mackay` stays unresolved because its child issue titles are collected-volume style.
+  - `Fantastic Four by Ryan North` stays unresolved because its child issue titles are collected-volume style.
+  - `X-Men by Jed MacKay` stays unresolved because its child issue titles are collected-volume style.
+- Reviewed confirmed run candidates after analysis.
+- Decided that remaining edge publications such as previews, catalogs, facsimiles, and special digital formats are product-scope questions, not the same structural ingestion bug as collected-volume product lines.
+- Confirmed the apply command path:
+  - It selects only confirmed run candidates from the current analysis version.
+  - It skips unresolved, unsafe, insufficient-data, and conflict candidates.
+  - It promotes confirmed runs and directly attached local issues into the catalog.
+  - It creates or updates run and issue source links.
+  - It does not call Comic Vine during apply.
+  - It does not write collected-volume catalog rows.
 
 ### 2026-07-08
 
@@ -136,9 +179,11 @@ Current project areas:
 
 ## Next Major Goals
 
-- Test the new My Comics tracking flow with real catalog entries.
+- Run the confirmed Comic Vine run and issue catalog apply flow.
+- Check the resulting catalog rows in Browse and detail pages.
+- Continue verifying confirmed run candidates for obvious source mistakes.
 - Keep Comic Vine source-data backfills running.
+- Keep collected-volume catalog work separate from the current run-ingestion path.
 - Continue manually testing confirmed catalog data.
 - Refine catalog models based on real manual entries.
-- Add a review/staging workflow in `ingestion` when source-to-catalog promotion becomes necessary.
 - Improve My Comics filtering once there is enough tracked user data to justify it.

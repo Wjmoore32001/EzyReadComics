@@ -2,7 +2,7 @@
 
 EzyReadComics is a Django web app for helping comic readers figure out what to read, where to start, browse comic information, and track their comic reading.
 
-The long-term goal is to make comics easier to approach by combining curated comic run information, collected-volume information, issue data, user reading progress, and practical starting-point guidance.
+The long-term goal is to make comics easier to approach by combining confirmed comic run information, issue data, collected-volume information, user reading progress, and practical starting-point guidance.
 
 ## Project Status
 
@@ -18,9 +18,17 @@ The current version is focused on building the foundation for:
 - User accounts
 - User comic tracking
 - Comic Vine source-data imports
+- Comic Vine source-to-catalog run and issue ingestion
 - Future starting-point guidance
 
-The app currently supports a manually curated catalog experience while Comic Vine source data continues to be imported and backfilled in the background.
+The app separates imported Comic Vine source data from confirmed app-facing catalog data.
+
+The current catalog can be populated in two ways:
+
+1. Manual catalog entries.
+2. Confirmed Comic Vine run candidates promoted through the ingestion workflow.
+
+Comic Vine source data is not automatically trusted just because it exists locally. The ingestion workflow confirms only safe run-like source records before they are allowed into the public catalog.
 
 ## Current Features
 
@@ -245,9 +253,100 @@ Current Comic Vine source data includes:
 
 ### Ingestion
 
-The `ingestion` app is reserved for future review/staging workflows between source data and confirmed catalog data.
+The `ingestion` app stores review/staging records between Comic Vine source data and confirmed catalog data.
 
 The goal is to avoid pushing uncertain source-data relationships directly into the confirmed catalog.
+
+Current ingestion behavior supports confirmed Comic Vine run candidates and their directly attached issues.
+
+Important ingestion models include:
+
+- `ComicVineVolumeCandidate`
+- `MarvelCatalogRunSource`
+- `MarvelCatalogIssueSource`
+
+The current active ingestion path is run and issue promotion only.
+
+Collected-volume/product-line Comic Vine sources are intentionally not promoted into `ComicVolume` by the current run ingestion commands. Collected-volume catalog data remains separate and should only be added when it is actually confirmed.
+
+## Comic Vine Run Ingestion
+
+Comic Vine uses "volume" records for multiple kinds of containers. A Comic Vine volume may be a real serialized comic run, but it may also be a collected-edition/product-line container whose child "issues" are actually collected books such as `Vol. 1`, `Vol. 2`, or `Volume 1`.
+
+Because of that, EzyReadComics does not treat every Comic Vine volume as an app-facing run.
+
+### Analyze Command
+
+The run analyzer classifies local Marvel Comic Vine volume rows into confirmed run candidates or unsafe/unresolved candidates.
+
+Command:
+
+    python manage.py analyze_marvel_comicvine_volumes --dry-run
+
+Save analysis results:
+
+    python manage.py analyze_marvel_comicvine_volumes --apply
+
+Analyze specific Comic Vine volume IDs:
+
+    python manage.py analyze_marvel_comicvine_volumes --dry-run \
+      --comicvine-volume-id 150431 \
+      --comicvine-volume-id 152130
+
+The analyzer:
+
+- Uses only local `ComicVineVolume` and attached local `ComicVineIssue` rows.
+- Makes no Comic Vine API calls.
+- Writes no catalog rows.
+- Does not create or update collected-volume catalog records.
+- Does not use Comic Vine `count_of_issues` as a threshold.
+- Does not use title/date overlap logic.
+- Does not use broad parent-title guessing like "by creator" as a core rule.
+
+Current run confirmation rule:
+
+- A source volume must be Marvel.
+- A source volume must have at least two attached local child issues.
+- No attached child issue title may start with `Vol.`, `Vol`, or `Volume`.
+- Child issue Comic Vine IDs and issue numbers must be usable.
+- Normalized child issue numbers must be unique.
+
+Current unresolved/unsafe behavior:
+
+- No attached local issues means the source is not ready.
+- Only one attached local issue is not enough proof to auto-confirm a run.
+- Any child issue title starting with `Vol.`, `Vol`, or `Volume` is treated as unsafe for run promotion.
+- Duplicate normalized child issue numbers create a conflict.
+- Missing required child issue data prevents promotion.
+
+This means known collected/product-line style sources such as `Fantastic Four by Ryan North`, `Avengers by Jed Mackay`, and `X-Men by Jed MacKay` stay out of the catalog run path when their child issue titles are `Vol. 1`, `Vol. 2`, `Volume 1`, etc.
+
+### Apply Command
+
+The apply command promotes confirmed run candidates into the catalog.
+
+Preview catalog writes:
+
+    python manage.py apply_marvel_ingestion_to_catalog --dry-run --create-missing-catalog
+
+Write catalog rows:
+
+    python manage.py apply_marvel_ingestion_to_catalog --apply --create-missing-catalog
+
+The apply command:
+
+- Selects only confirmed run candidates from the current analyzer version.
+- Skips unresolved, unsafe, insufficient-data, and conflict candidates.
+- Creates or links `ComicRun` rows.
+- Creates or links directly attached `ComicIssue` rows.
+- Creates or updates `MarvelCatalogRunSource` source links.
+- Creates or updates `MarvelCatalogIssueSource` source links.
+- Makes no Comic Vine API calls.
+- Does not write `ComicVolume` or `ComicVolumeIssue` rows.
+
+Important limitation:
+
+The apply command only promotes issues already stored locally and already attached to confirmed Comic Vine volume rows. It does not fetch missing issues from Comic Vine during apply.
 
 ## Tech Stack
 
@@ -288,6 +387,8 @@ The goal is to avoid pushing uncertain source-data relationships directly into t
             development-log.md
 
         ingestion/
+            models.py
+            management/commands/
 
         reading/
             admin.py
@@ -415,11 +516,30 @@ Run issue hydration:
 
     python manage.py hydrate_issues
 
+Analyze local Marvel Comic Vine volumes for safe run promotion:
+
+    python manage.py analyze_marvel_comicvine_volumes --dry-run
+
+Save run analysis candidates:
+
+    python manage.py analyze_marvel_comicvine_volumes --apply
+
+Preview confirmed run and issue catalog promotion:
+
+    python manage.py apply_marvel_ingestion_to_catalog --dry-run --create-missing-catalog
+
+Apply confirmed run and issue catalog promotion:
+
+    python manage.py apply_marvel_ingestion_to_catalog --apply --create-missing-catalog
+
 ## Current Development Notes
 
 The current app direction is intentionally simple:
 
 - Keep confirmed catalog data separate from Comic Vine source data.
+- Use ingestion candidates to decide what source data is safe to promote.
+- Promote confirmed run and issue data only after analysis.
 - Keep uncertain source-data relationships out of the public catalog until reviewed.
+- Keep collected-volume catalog data separate from run ingestion.
 - Keep reading tracking user-specific.
 - Avoid recommendation logic, reading-order algorithms, events, characters, creators, and story-arc features until the core catalog and tracking experience is stable.
