@@ -1,147 +1,208 @@
 {% extends "base.html" %}
 
-{% block title %}Account | EzyReadComics{% endblock %}
+{% block title %}Account - EzyReadComics{% endblock %}
 
 {% block content %}
-<div class="card border-secondary bg-body-tertiary mx-auto" style="max-width: 48rem;">
-    <div class="card-body p-4 p-md-5">
-        <p class="text-uppercase text-secondary fw-semibold mb-2">
-            Account
-        </p>
+<div class="erc-page-shell">
+    <section class="erc-hero p-4 p-lg-5">
+        <div class="erc-hero-content">
+            <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-end gap-4">
+                <div>
+                    <p class="erc-page-kicker mb-3">Account</p>
+                    <h1 class="erc-hero-title display-5 fw-bold mb-3">
+                        Your account
+                    </h1>
+                    <p class="erc-hero-subtitle lead mb-0">
+                        Manage your username, password, and account access.
+                    </p>
+                </div>
 
-        <h1 class="h2 fw-bold mb-3">Your account</h1>
+                <div class="d-flex flex-wrap gap-2">
+                    {% if request.user.is_staff %}
+                        <a href="{% url 'admin:index' %}" class="btn btn-outline-light">
+                            Open admin
+                        </a>
+                    {% endif %}
 
-        <div class="mb-4">
-            <p class="mb-2">
-                <span class="text-secondary">Username:</span>
-                <span class="fw-semibold">{{ request.user.username }}</span>
-            </p>
+                    <form action="{% url 'logout' %}" method="post">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-outline-secondary">
+                            Log out
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </section>
 
-            <p class="mb-2">
-                <span class="text-secondary">Email:</span>
+    <section class="erc-info-grid">
+        <div class="erc-info-card">
+            <div class="small-muted">Username</div>
+            <div class="h5 fw-bold mt-2 mb-0 text-break">{{ request.user.username }}</div>
+        </div>
+
+        <div class="erc-info-card">
+            <div class="small-muted">Email</div>
+            <div class="h5 fw-bold mt-2 mb-0 text-break">
                 {% if request.user.email %}
-                    <span class="fw-semibold">{{ request.user.email }}</span>
-                    <span class="badge text-bg-secondary ms-1">Optional</span>
+                    {{ request.user.email }}
                 {% else %}
-                    <span class="fw-semibold">Not added</span>
-                    <span class="badge text-bg-secondary ms-1">Optional</span>
+                    <span class="erc-muted">Not added</span>
                 {% endif %}
-            </p>
+            </div>
+        </div>
 
-            <p class="mb-0">
-                <span class="text-secondary">Admin access:</span>
+        <div class="erc-info-card">
+            <div class="small-muted">Admin access</div>
+            <div class="h5 fw-bold mt-2 mb-0">
                 {% if request.user.is_staff %}
-                    <span class="badge text-bg-info">Enabled</span>
+                    Enabled
                 {% else %}
-                    <span class="badge text-bg-secondary">No</span>
+                    No
                 {% endif %}
-            </p>
+            </div>
         </div>
 
-        <div class="d-flex flex-wrap gap-2 mb-4">
-            {% if request.user.is_staff %}
-                <a href="{% url 'admin:index' %}" class="btn btn-outline-info">
-                    Open admin
-                </a>
-            {% endif %}
+        <div class="erc-info-card">
+            <div class="small-muted">Account status</div>
+            <div class="h5 fw-bold mt-2 mb-0">
+                Active
+            </div>
+        </div>
+    </section>
 
-            <form action="{% url 'logout' %}" method="post">
-                {% csrf_token %}
-                <button type="submit" class="btn btn-outline-secondary">
-                    Log out
+    <section class="card erc-panel">
+        <div class="card-body p-4">
+            <div class="erc-section-header">
+                <div>
+                    <h2 class="h3 fw-bold mb-2 erc-section-title">Change username</h2>
+                    <p class="erc-muted mb-0">
+                        Update your username only when you need to.
+                    </p>
+                </div>
+
+                <button
+                    class="btn btn-outline-light"
+                    type="button"
+                    data-bs-toggle="collapse"
+                    data-bs-target="#change-username-form"
+                    aria-expanded="{% if username_form.errors %}true{% else %}false{% endif %}"
+                    aria-controls="change-username-form"
+                >
+                    Change username
                 </button>
-            </form>
-        </div>
+            </div>
 
-        <hr class="border-secondary my-4">
+            <div id="change-username-form" class="collapse {% if username_form.errors %}show{% endif %}">
+                <div class="pt-4 mt-4 border-top border-secondary">
+                    <p class="erc-muted mb-4">
+                        Enter a new available username and confirm your current password.
+                    </p>
 
-        <section class="mb-5">
-            <h2 class="h4 fw-bold mb-2">Change username</h2>
+                    <form method="post" novalidate>
+                        {% csrf_token %}
+                        <input type="hidden" name="account_action" value="change_username">
 
-            <p class="text-secondary mb-4">
-                Enter a new available username and confirm your current password.
-            </p>
-
-            <form method="post" novalidate>
-                {% csrf_token %}
-                <input type="hidden" name="account_action" value="change_username">
-
-                {% if username_form.non_field_errors %}
-                    <div class="alert alert-danger">
-                        {{ username_form.non_field_errors }}
-                    </div>
-                {% endif %}
-
-                {% for field in username_form %}
-                    <div class="mb-3">
-                        <label class="form-label" for="{{ field.id_for_label }}">
-                            {{ field.label }}
-                        </label>
-
-                        {{ field }}
-
-                        {% if field.help_text %}
-                            <div class="form-text">
-                                {{ field.help_text }}
+                        {% if username_form.non_field_errors %}
+                            <div class="alert alert-danger">
+                                {{ username_form.non_field_errors }}
                             </div>
                         {% endif %}
 
-                        {% if field.errors %}
-                            {{ field.errors }}
-                        {% endif %}
-                    </div>
-                {% endfor %}
+                        {% for field in username_form %}
+                            <div class="mb-3">
+                                <label class="form-label" for="{{ field.id_for_label }}">
+                                    {{ field.label }}
+                                </label>
 
-                <button type="submit" class="btn btn-outline-info">
-                    Update username
+                                {{ field }}
+
+                                {% if field.help_text %}
+                                    <div class="form-text">
+                                        {{ field.help_text }}
+                                    </div>
+                                {% endif %}
+
+                                {% if field.errors %}
+                                    {{ field.errors }}
+                                {% endif %}
+                            </div>
+                        {% endfor %}
+
+                        <button type="submit" class="btn btn-outline-light">
+                            Update username
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="card erc-panel">
+        <div class="card-body p-4">
+            <div class="erc-section-header">
+                <div>
+                    <h2 class="h3 fw-bold mb-2 erc-section-title">Change password</h2>
+                    <p class="erc-muted mb-0">
+                        Keep this hidden unless you are updating your password.
+                    </p>
+                </div>
+
+                <button
+                    class="btn btn-outline-light"
+                    type="button"
+                    data-bs-toggle="collapse"
+                    data-bs-target="#change-password-form"
+                    aria-expanded="{% if password_form.errors %}true{% else %}false{% endif %}"
+                    aria-controls="change-password-form"
+                >
+                    Change password
                 </button>
-            </form>
-        </section>
+            </div>
 
-        <hr class="border-secondary my-4">
+            <div id="change-password-form" class="collapse {% if password_form.errors %}show{% endif %}">
+                <div class="pt-4 mt-4 border-top border-secondary">
+                    <p class="erc-muted mb-4">
+                        Enter your current password, then choose a new password.
+                    </p>
 
-        <section>
-            <h2 class="h4 fw-bold mb-2">Change password</h2>
+                    <form method="post" novalidate>
+                        {% csrf_token %}
+                        <input type="hidden" name="account_action" value="change_password">
 
-            <p class="text-secondary mb-4">
-                Enter your current password, then choose a new password.
-            </p>
-
-            <form method="post" novalidate>
-                {% csrf_token %}
-                <input type="hidden" name="account_action" value="change_password">
-
-                {% if password_form.non_field_errors %}
-                    <div class="alert alert-danger">
-                        {{ password_form.non_field_errors }}
-                    </div>
-                {% endif %}
-
-                {% for field in password_form %}
-                    <div class="mb-3">
-                        <label class="form-label" for="{{ field.id_for_label }}">
-                            {{ field.label }}
-                        </label>
-
-                        {{ field }}
-
-                        {% if field.help_text %}
-                            <div class="form-text">
-                                {{ field.help_text }}
+                        {% if password_form.non_field_errors %}
+                            <div class="alert alert-danger">
+                                {{ password_form.non_field_errors }}
                             </div>
                         {% endif %}
 
-                        {% if field.errors %}
-                            {{ field.errors }}
-                        {% endif %}
-                    </div>
-                {% endfor %}
+                        {% for field in password_form %}
+                            <div class="mb-3">
+                                <label class="form-label" for="{{ field.id_for_label }}">
+                                    {{ field.label }}
+                                </label>
 
-                <button type="submit" class="btn btn-outline-info">
-                    Update password
-                </button>
-            </form>
-        </section>
-    </div>
+                                {{ field }}
+
+                                {% if field.help_text %}
+                                    <div class="form-text">
+                                        {{ field.help_text }}
+                                    </div>
+                                {% endif %}
+
+                                {% if field.errors %}
+                                    {{ field.errors }}
+                                {% endif %}
+                            </div>
+                        {% endfor %}
+
+                        <button type="submit" class="btn btn-outline-light">
+                            Update password
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </section>
 </div>
 {% endblock %}
