@@ -83,6 +83,10 @@ DETAIL_ROLE_LABELS = {
     "COVER ARTISTS",
 }
 
+INHERITED_ONE_SHOT_TITLE_FRAGMENTS = {
+    "annual",
+}
+
 
 def build_collection_calendar_url(*, start_date, end_date):
     return (
@@ -586,6 +590,7 @@ def parse_collected_items(collecting_text):
 
     run_links = []
     one_shots = []
+    previous_run_title = ""
 
     for index, token in enumerate(run_tokens):
         next_start = run_tokens[index + 1]["start"] if index + 1 < len(run_tokens) else len(collecting_body)
@@ -607,7 +612,10 @@ def parse_collected_items(collecting_text):
         if one_shot_reason:
             one_shots.append(
                 build_one_shot_candidate(
-                    title=token["title"],
+                    title=one_shot_title_for_token(
+                        token=token,
+                        previous_run_title=previous_run_title,
+                    ),
                     start_year=token["year"],
                     source_issue_expression=issue_expressions[0] if issue_expressions else "",
                     reason=one_shot_reason,
@@ -618,7 +626,10 @@ def parse_collected_items(collecting_text):
         if not issue_expressions:
             one_shots.append(
                 build_one_shot_candidate(
-                    title=token["title"],
+                    title=one_shot_title_for_token(
+                        token=token,
+                        previous_run_title=previous_run_title,
+                    ),
                     start_year=token["year"],
                     source_issue_expression="",
                     reason="no issue number listed; treating as one-shot candidate",
@@ -634,6 +645,7 @@ def parse_collected_items(collecting_text):
                 issue_numbers=issue_numbers,
             )
         )
+        previous_run_title = token["title"]
 
     run_links = merge_run_link_duplicates(run_links)
     one_shots = merge_one_shot_duplicates(one_shots)
@@ -664,6 +676,28 @@ def parse_collected_items(collecting_text):
             ),
         ),
     )
+
+
+def one_shot_title_for_token(*, token, previous_run_title):
+    title = clean_collected_run_title(token.get("title"))
+    previous_run_title = clean_collected_run_title(previous_run_title)
+
+    if not title:
+        return title
+
+    if not previous_run_title:
+        return title
+
+    normalized_title = normalize_title(title)
+    normalized_previous_title = normalize_title(previous_run_title)
+
+    if normalized_title.startswith(normalized_previous_title):
+        return title
+
+    if normalized_title in INHERITED_ONE_SHOT_TITLE_FRAGMENTS:
+        return f"{previous_run_title} {title}"
+
+    return title
 
 
 def normalize_collecting_text(value):

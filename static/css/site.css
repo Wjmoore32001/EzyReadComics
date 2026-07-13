@@ -499,3 +499,50 @@ a {
 .erc-account-card {
   max-width: 48rem;
 }
+
+.erc-volume-run-list {
+  display: grid;
+  gap: 1rem;
+}
+
+.erc-volume-run-card {
+  border: 1px solid var(--erc-border-soft);
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.025);
+  padding: 1rem;
+}
+
+.erc-volume-run-header {
+  display: block;
+  margin-bottom: 1.6rem;
+}
+
+.erc-volume-run-title {
+  color: var(--erc-accent-strong);
+}
+
+.erc-volume-run-table-wrap {
+  margin-top: 0.75rem;
+}
+
+.erc-data-card .erc-volume-run-table-wrap {
+  border-radius: 0;
+}
+
+.erc-volume-run-table {
+  margin-top: 0;
+}
+
+.erc-volume-run-table thead th {
+  padding-top: 0.75rem;
+  padding-bottom: 0.65rem;
+}
+
+.erc-empty-panel {
+  border: 1px solid var(--erc-border-soft);
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.025);
+  color: var(--erc-text-muted);
+  padding: 1.5rem;
+  text-align: center;
+}

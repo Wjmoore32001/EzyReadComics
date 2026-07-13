@@ -122,33 +122,21 @@
                 </p>
             </div>
 
-            <div class="d-flex flex-column gap-4">
+            <div class="erc-volume-run-list">
                 {% for group in volume_issue_groups %}
-                    <div class="border border-secondary rounded-3 overflow-hidden">
-                        <div class="d-flex flex-column flex-lg-row justify-content-between gap-2 p-3 border-bottom border-secondary">
-                            <div>
-                                <div class="small-muted mb-1">Run</div>
-                                <h3 class="h5 fw-bold mb-0">
-                                    <a href="{% url 'catalog:run_details' group.run.id %}" class="erc-data-link">
-                                        {{ group.run }}
-                                    </a>
-                                </h3>
-                            </div>
+                    <article class="erc-volume-run-card">
+                        <header class="erc-volume-run-header">
+                            <h3 class="h5 fw-bold mb-0 erc-volume-run-title">
+                                <a href="{% url 'catalog:run_details' group.run.id %}" class="erc-data-link">
+                                    {{ group.run }}
+                                </a>
+                            </h3>
+                        </header>
 
-                            <div class="text-lg-end">
-                                <div class="small-muted mb-1">Issues</div>
-                                <div class="fw-semibold">
-                                    {% if group.issue_numbers_text %}
-                                        #{{ group.issue_numbers_text }}
-                                    {% else %}
-                                        {{ group.volume_issues|length }} issue{% if group.volume_issues|length != 1 %}s{% endif %}
-                                    {% endif %}
-                                </div>
-                            </div>
-                        </div>
+                        <div aria-hidden="true" style="height: 2rem;"></div>
 
-                        <div class="table-responsive">
-                            <table class="table table-dark table-hover align-middle mb-0 erc-data-table">
+                        <div class="table-responsive erc-volume-run-table-wrap">
+                            <table class="table table-dark table-hover align-middle mb-0 erc-data-table erc-volume-run-table">
                                 <thead>
                                 <tr>
                                     <th scope="col">Issue</th>
@@ -228,9 +216,9 @@
                                 </tbody>
                             </table>
                         </div>
-                    </div>
+                    </article>
                 {% empty %}
-                    <div class="text-center erc-muted py-4 border border-secondary rounded-3">
+                    <div class="erc-empty-panel">
                         No runs or issues have been linked to this volume.
                     </div>
                 {% endfor %}
