@@ -225,7 +225,7 @@
                             id="my-comics-toggle-issues"
                             data-my-comics-section-toggle
                             data-target-section="issues"
-                            checked
+                            {% if selected_issue_id %}checked{% endif %}
                         >
                         <label class="form-check-label erc-muted" for="my-comics-toggle-issues">
                             Show issues
@@ -598,7 +598,7 @@
         </div>
     </section>
 
-    <section class="card erc-panel erc-data-card" data-my-comics-section="issues">
+    <section class="card erc-panel erc-data-card {% if not selected_issue_id %}d-none{% endif %}" data-my-comics-section="issues" {% if not selected_issue_id %}hidden{% endif %}>
         <div class="card-body">
             <div class="erc-section-header">
                 <h2 class="h3 fw-bold mb-0 erc-section-title">Issues</h2>
