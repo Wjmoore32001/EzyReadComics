@@ -10,6 +10,7 @@ from catalog.models.core import (
 )
 from catalog.models.credits import (
     ComicIssueCredit,
+    ComicOneShotCredit,
     ComicRunCredit,
     ComicVolumeCredit,
     CreditPerson,
@@ -29,5 +30,6 @@ __all__ = [
     "CreditRole",
     "ComicRunCredit",
     "ComicIssueCredit",
+    "ComicOneShotCredit",
     "ComicVolumeCredit",
 ]

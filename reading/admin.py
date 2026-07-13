@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from reading.models import FollowedRun, IssueProgress, VolumeProgress
+from reading.models import FollowedRun, IssueProgress, OneShotProgress, VolumeProgress
 
 
 @admin.register(FollowedRun)
@@ -127,3 +127,40 @@ class VolumeProgressAdmin(admin.ModelAdmin):
 
     def publisher(self, obj):
         return obj.volume.publisher.name
+
+
+@admin.register(OneShotProgress)
+class OneShotProgressAdmin(admin.ModelAdmin):
+    list_display = [
+        "user",
+        "one_shot",
+        "publisher",
+        "status",
+        "saved_at",
+        "updated_at",
+    ]
+    list_filter = [
+        "status",
+        "one_shot__publisher",
+        "saved_at",
+        "updated_at",
+    ]
+    search_fields = [
+        "user__username",
+        "one_shot__title",
+        "one_shot__publisher__name",
+    ]
+    autocomplete_fields = [
+        "user",
+        "one_shot",
+    ]
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related(
+            "user",
+            "one_shot",
+            "one_shot__publisher",
+        )
+
+    def publisher(self, obj):
+        return obj.one_shot.publisher.name

@@ -1,16 +1,20 @@
+import re
 from dataclasses import dataclass
 from datetime import datetime
+from urllib.parse import urlparse
 
-from django.db import transaction
+from django.db.models import Count, Max, Min
 from django.utils.text import slugify
 
 from catalog.models import (
     ComicIssue,
     ComicIssueCredit,
     ComicOneShot,
+    ComicOneShotCredit,
     ComicPublisher,
     ComicRun,
     ComicVolume,
+    ComicVolumeCredit,
     ComicVolumeIssue,
     ComicVolumeRun,
     CreditPerson,
@@ -20,6 +24,14 @@ from catalog.models import (
 
 DC_PUBLISHER_NAME = "DC"
 
+SERIES_WITH_YEAR_RE = re.compile(
+    r"^(?P<title>.+?)\s*\((?P<start_year>\d{4})(?P<ongoing>\s*-\s*)?(?P<end_year>\d{4})?\)\s*$",
+    re.IGNORECASE,
+)
+TRAILING_YEAR_RE = re.compile(r"^(?P<title>.+?)\s+(?P<start_year>\d{4})$")
+DETAIL_TITLE_YEAR_RE = re.compile(
+    r"^(?P<title>.+?)\s*\((?P<start_year>\d{4})(?P<ongoing>\s*-\s*)?(?P<end_year>\d{4})?\)"
+)
 
 ROLE_DISPLAY_ORDER = {
     "Writer": 10,
@@ -34,9 +46,16 @@ ROLE_DISPLAY_ORDER = {
 
 
 @dataclass
+class DcRunIdentity:
+    title: str = ""
+    start_year: str = ""
+
+
+@dataclass
 class DcWriteResult:
     runs_created: int = 0
     runs_updated: int = 0
+    run_stats_updated: int = 0
     issues_created: int = 0
     issues_updated: int = 0
     volumes_created: int = 0
@@ -99,6 +118,7 @@ def write_dc_detail(*, detail, dry_run=False):
 def write_issue_detail(*, detail, dry_run=False):
     result = DcWriteResult()
     publisher = preview_publisher() if dry_run else get_or_create_dc_publisher()
+
     run, run_result = get_or_create_run_from_detail(
         publisher=publisher,
         detail=detail,
@@ -120,12 +140,18 @@ def write_issue_detail(*, detail, dry_run=False):
             dry_run=dry_run,
         )
 
+    result.run_stats_updated += sync_run_stats(
+        run=run,
+        dry_run=dry_run,
+    )
+
     return result
 
 
 def write_volume_detail(*, detail, dry_run=False):
     result = DcWriteResult()
     publisher = preview_publisher() if dry_run else get_or_create_dc_publisher()
+
     run, run_result = get_or_create_run_from_detail(
         publisher=publisher,
         detail=detail,
@@ -156,8 +182,7 @@ def write_volume_detail(*, detail, dry_run=False):
     add_results(result, volume_run_result)
 
     for index, link in enumerate(detail.collection_parse.matched_issue_links, start=1):
-        issue_number = link.get("issue_key") or link.get("issue_number") or ""
-        issue_number = issue_number or link_issue_number(link)
+        issue_number = link_issue_key(link)
 
         issue = find_existing_issue_by_url_or_number(
             run=run,
@@ -176,33 +201,40 @@ def write_volume_detail(*, detail, dry_run=False):
         )
         add_results(result, link_result)
 
+    result.run_stats_updated += sync_run_stats(
+        run=run,
+        dry_run=dry_run,
+    )
+
     return result
 
 
 def write_one_shot_detail(*, detail, dry_run=False):
     result = DcWriteResult()
     publisher = preview_publisher() if dry_run else get_or_create_dc_publisher()
+    published_date = parse_dc_date(detail.on_sale_date_text)
 
     one_shot = find_existing_one_shot(
         publisher=publisher,
         source_url=detail.final_url,
         title=detail.title,
-        published_date=parse_dc_date(detail.on_sale_date_text),
+        published_date=published_date,
     )
 
     if one_shot is None:
         result.one_shots_created = 1
 
         if dry_run:
+            result.credits_added += len(detail.credits)
             return result
 
         one_shot = ComicOneShot.objects.create(
             publisher=publisher,
             title=detail.title,
-            start_year=date_year_text(parse_dc_date(detail.on_sale_date_text)),
+            start_year=date_year_text(published_date),
             official_source_key=source_key(detail.final_url),
             official_source_url=detail.final_url,
-            published_date=parse_dc_date(detail.on_sale_date_text),
+            published_date=published_date,
             description=detail.description,
         )
     else:
@@ -214,21 +246,28 @@ def write_one_shot_detail(*, detail, dry_run=False):
             if not dry_run:
                 one_shot.save()
 
+    result.credits_added += add_one_shot_credits(
+        one_shot=one_shot,
+        credits=detail.credits,
+        dry_run=dry_run,
+    )
+
     return result
 
 
 def get_or_create_run_from_detail(*, publisher, detail, dry_run=False):
     result = DcWriteResult()
+    identity = run_identity_from_detail(detail)
 
-    if not detail.series.title:
+    if not identity.title:
         result.skipped = 1
         return None, result
 
     existing = find_existing_run(
         publisher=publisher,
-        title=detail.series.title,
-        start_year=detail.series.start_year,
-        source_url=series_source_url(detail),
+        title=identity.title,
+        start_year=identity.start_year,
+        source_url=series_source_url_from_identity(identity),
     )
 
     if existing is None:
@@ -236,17 +275,18 @@ def get_or_create_run_from_detail(*, publisher, detail, dry_run=False):
 
         if dry_run:
             return PreviewObject(
-                title=detail.series.title,
-                start_year=detail.series.start_year,
+                title=identity.title,
+                start_year=identity.start_year,
+                status=run_status_from_detail(detail),
             ), result
 
         run = ComicRun.objects.create(
             publisher=publisher,
-            title=detail.series.title,
-            start_year=detail.series.start_year,
-            official_source_key=source_key(series_source_url(detail)),
-            official_source_url=series_source_url(detail),
-            status=run_status_from_series(detail.series),
+            title=identity.title,
+            start_year=identity.start_year,
+            official_source_key=source_key(series_source_url_from_identity(identity)),
+            official_source_url=series_source_url_from_identity(identity),
+            status=run_status_from_detail(detail),
             description="",
         )
         return run, result
@@ -319,12 +359,13 @@ def get_or_create_issue_from_detail(*, run, detail, dry_run=False):
 
 def get_or_create_volume_from_detail(*, publisher, run, detail, dry_run=False):
     result = DcWriteResult()
+    release_date = parse_dc_date(detail.on_sale_date_text)
 
     existing = find_existing_volume(
         publisher=publisher,
         source_url=detail.final_url,
         title=detail.title,
-        release_date=parse_dc_date(detail.on_sale_date_text),
+        release_date=release_date,
     )
 
     first_issue = first_issue_number(detail.collection_parse.issue_numbers)
@@ -345,7 +386,7 @@ def get_or_create_volume_from_detail(*, publisher, run, detail, dry_run=False):
             official_source_url=detail.final_url,
             first_issue_number=first_issue,
             last_issue_number=last_issue,
-            release_date=parse_dc_date(detail.on_sale_date_text),
+            release_date=release_date,
             issue_count=len(detail.collection_parse.issue_numbers) or None,
             description=detail.description,
         )
@@ -472,9 +513,33 @@ def find_existing_run(*, publisher, title, start_year, source_url):
     )
 
     if start_year:
-        queryset = queryset.filter(start_year=start_year)
+        match = queryset.filter(start_year=start_year).order_by("id").first()
 
-    return queryset.order_by("id").first()
+        if match:
+            return match
+
+    match = queryset.order_by("id").first()
+
+    if match:
+        return match
+
+    legacy_title = clean_text(f"{title} {start_year}")
+
+    if legacy_title and start_year:
+        legacy_match = (
+            ComicRun.objects.filter(
+                publisher=publisher,
+                title__iexact=legacy_title,
+                start_year="",
+            )
+            .order_by("id")
+            .first()
+        )
+
+        if legacy_match:
+            return legacy_match
+
+    return None
 
 
 def find_existing_issue_by_url_or_number(*, run, source_url, issue_number):
@@ -577,8 +642,17 @@ def find_existing_one_shot(*, publisher, source_url, title, published_date):
 
 def update_run_from_detail(*, run, detail):
     changed = False
+    identity = run_identity_from_detail(detail)
 
-    source_url_value = series_source_url(detail)
+    if identity.title and run.title != identity.title:
+        run.title = identity.title
+        changed = True
+
+    if identity.start_year and run.start_year != identity.start_year:
+        run.start_year = identity.start_year
+        changed = True
+
+    source_url_value = series_source_url_from_identity(identity)
     source_key_value = source_key(source_url_value)
 
     if source_key_value and run.official_source_key != source_key_value:
@@ -589,13 +663,13 @@ def update_run_from_detail(*, run, detail):
         run.official_source_url = source_url_value
         changed = True
 
-    status = run_status_from_series(detail.series)
+    status = run_status_from_detail(detail)
 
     if status and run.status != status:
         run.status = status
         changed = True
 
-    if detail.description and detail.issue_number == "1" and not run.description:
+    if detail.description and is_mainline_first_issue_detail(detail) and run.description != detail.description:
         run.description = detail.description
         changed = True
 
@@ -728,6 +802,41 @@ def update_one_shot_from_detail(*, one_shot, detail):
     return changed
 
 
+def sync_run_stats(*, run, dry_run=False):
+    if run is None or is_preview(run) or dry_run:
+        return 0
+
+    stats = run.issues.aggregate(
+        issue_count=Count("id"),
+        first_issue_date=Min("published_date"),
+        last_issue_date=Max("published_date"),
+    )
+
+    issue_count = stats["issue_count"] or None
+    first_issue_date = stats["first_issue_date"]
+    last_issue_date = stats["last_issue_date"]
+
+    changed = False
+
+    if run.issue_count != issue_count:
+        run.issue_count = issue_count
+        changed = True
+
+    if run.first_issue_date != first_issue_date:
+        run.first_issue_date = first_issue_date
+        changed = True
+
+    if run.last_issue_date != last_issue_date:
+        run.last_issue_date = last_issue_date
+        changed = True
+
+    if changed:
+        run.save()
+        return 1
+
+    return 0
+
+
 def add_issue_credits(*, issue, credits, dry_run=False):
     if issue is None:
         return 0
@@ -738,6 +847,21 @@ def add_issue_credits(*, issue, credits, dry_run=False):
     return add_credits(
         object_name="issue",
         target=issue,
+        credits=credits,
+        dry_run=dry_run,
+    )
+
+
+def add_one_shot_credits(*, one_shot, credits, dry_run=False):
+    if one_shot is None:
+        return 0
+
+    if is_preview(one_shot):
+        return len(credits)
+
+    return add_credits(
+        object_name="one_shot",
+        target=one_shot,
         credits=credits,
         dry_run=dry_run,
     )
@@ -759,6 +883,11 @@ def add_volume_credits(*, volume, credits, dry_run=False):
 
 
 def add_credits(*, object_name, target, credits, dry_run=False):
+    through_model = credit_model_for_object_name(object_name)
+
+    if through_model is None:
+        return 0
+
     created_count = 0
 
     for index, credit in enumerate(credits, start=1):
@@ -773,13 +902,6 @@ def add_credits(*, object_name, target, credits, dry_run=False):
             "person__name__iexact": person_name,
             "role__name__iexact": role_name,
         }
-
-        through_model = ComicIssueCredit if object_name == "issue" else None
-
-        if object_name == "volume":
-            from catalog.models import ComicVolumeCredit
-
-            through_model = ComicVolumeCredit
 
         if through_model.objects.filter(**exists_kwargs).exists():
             continue
@@ -801,6 +923,19 @@ def add_credits(*, object_name, target, credits, dry_run=False):
         through_model.objects.create(**create_kwargs)
 
     return created_count
+
+
+def credit_model_for_object_name(object_name):
+    if object_name == "issue":
+        return ComicIssueCredit
+
+    if object_name == "one_shot":
+        return ComicOneShotCredit
+
+    if object_name == "volume":
+        return ComicVolumeCredit
+
+    return None
 
 
 def get_or_create_credit_role(name):
@@ -839,19 +974,120 @@ def get_or_create_credit_person(name):
     return CreditPerson.objects.create(name=name)
 
 
-def run_status_from_series(series):
-    if series.is_ongoing:
+def run_identity_from_detail(detail):
+    raw = clean_text(detail.series.raw)
+    parsed_title = clean_text(detail.series.title)
+    parsed_start_year = clean_text(detail.series.start_year)
+
+    if parsed_title and parsed_start_year:
+        return DcRunIdentity(
+            title=parsed_title,
+            start_year=parsed_start_year,
+        )
+
+    raw_year_match = TRAILING_YEAR_RE.match(raw)
+
+    if raw_year_match:
+        return DcRunIdentity(
+            title=clean_text(raw_year_match.group("title")),
+            start_year=clean_text(raw_year_match.group("start_year")),
+        )
+
+    raw_parenthetical_match = SERIES_WITH_YEAR_RE.match(raw)
+
+    if raw_parenthetical_match:
+        return DcRunIdentity(
+            title=clean_text(raw_parenthetical_match.group("title")),
+            start_year=clean_text(raw_parenthetical_match.group("start_year")),
+        )
+
+    title_match = DETAIL_TITLE_YEAR_RE.match(clean_text(detail.title))
+
+    if title_match:
+        return DcRunIdentity(
+            title=clean_text(title_match.group("title")),
+            start_year=clean_text(title_match.group("start_year")),
+        )
+
+    if parsed_title:
+        return DcRunIdentity(title=parsed_title)
+
+    if raw:
+        return DcRunIdentity(title=raw)
+
+    return DcRunIdentity()
+
+
+def run_status_from_detail(detail):
+    raw = clean_text(detail.series.raw)
+    raw_parenthetical_match = SERIES_WITH_YEAR_RE.match(raw)
+
+    if raw_parenthetical_match:
+        has_ongoing_dash = bool(raw_parenthetical_match.group("ongoing"))
+        has_end_year = bool(clean_text(raw_parenthetical_match.group("end_year")))
+
+        if has_ongoing_dash and not has_end_year:
+            return ComicRun.STATUS_ONGOING
+
+        return ComicRun.STATUS_ENDED
+
+    if detail.series.is_ongoing:
         return ComicRun.STATUS_ONGOING
 
-    if series.end_year:
+    title_match = DETAIL_TITLE_YEAR_RE.match(clean_text(detail.title))
+
+    if title_match:
+        has_ongoing_dash = bool(title_match.group("ongoing"))
+        has_end_year = bool(clean_text(title_match.group("end_year")))
+
+        if has_ongoing_dash and not has_end_year:
+            return ComicRun.STATUS_ONGOING
+
+        if has_end_year:
+            return ComicRun.STATUS_ENDED
+
+    if clean_text(detail.series.end_year):
         return ComicRun.STATUS_ENDED
 
     return ComicRun.STATUS_UNKNOWN
 
 
-def series_source_url(detail):
-    if detail.series.title and detail.series.start_year:
-        return f"https://www.dc.com/comics/{slugify(detail.series.title)}-{detail.series.start_year}"
+def is_mainline_first_issue_detail(detail):
+    issue_number = clean_text(getattr(detail, "issue_number", ""))
+    issue_key = clean_text(getattr(detail, "issue_key", ""))
+    title = clean_text(getattr(detail, "title", ""))
+
+    if issue_number != "1":
+        return False
+
+    if issue_key and issue_key != issue_number:
+        return False
+
+    return not looks_like_special_issue_text(title)
+
+
+def looks_like_special_issue_text(value):
+    value = f" {clean_text(value).casefold()} "
+    return any(
+        marker in value
+        for marker in [
+            " annual ",
+            " annual #",
+            " noir edition ",
+            " noir edition #",
+            " ark m ",
+            " ark m #",
+            ": ark ",
+            ": ark m",
+            " special ",
+            " special #",
+        ]
+    )
+
+
+def series_source_url_from_identity(identity):
+    if identity.title and identity.start_year:
+        return f"https://www.dc.com/comics/{slugify(identity.title)}-{identity.start_year}"
 
     return ""
 
@@ -861,12 +1097,6 @@ def source_key(url):
 
     if not url:
         return ""
-
-    return urlparse_path(url)
-
-
-def urlparse_path(url):
-    from urllib.parse import urlparse
 
     parsed = urlparse(url)
     path = parsed.path.strip("/")
@@ -883,10 +1113,7 @@ def parse_dc_date(value):
     if not value:
         return None
 
-    value = value.replace("st,", ",")
-    value = value.replace("nd,", ",")
-    value = value.replace("rd,", ",")
-    value = value.replace("th,", ",")
+    value = re.sub(r"(\d+)(st|nd|rd|th),", r"\1,", value)
 
     for fmt in ["%A, %B %d, %Y", "%B %d, %Y"]:
         try:
@@ -984,6 +1211,21 @@ def last_issue_number(issue_numbers):
         return str(max(numeric))
 
     return numbers[-1]
+
+
+def link_issue_key(link):
+    from catalog.dc.browser import build_dc_issue_key
+
+    label = clean_text(link.get("label"))
+    issue_number = link_issue_number(link)
+
+    if not issue_number:
+        return ""
+
+    return build_dc_issue_key(
+        title=label,
+        issue_number=issue_number,
+    )
 
 
 def link_issue_number(link):

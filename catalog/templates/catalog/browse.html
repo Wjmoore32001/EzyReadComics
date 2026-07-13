@@ -14,7 +14,7 @@
                         Browse Comics
                     </h1>
                     <p class="erc-hero-subtitle lead mb-0">
-                        Find runs, collected volumes, and issues.
+                        Find runs, collected volumes, one-shots, and issues.
                     </p>
                 </div>
 
@@ -46,6 +46,11 @@
         </div>
 
         <div class="erc-home-stat">
+            <div class="erc-home-stat-value">{{ catalog_one_shot_count }}</div>
+            <div class="erc-muted mt-2">One-shots in catalog</div>
+        </div>
+
+        <div class="erc-home-stat">
             <div class="erc-home-stat-value">{{ catalog_issue_count }}</div>
             <div class="erc-muted mt-2">Issues in catalog</div>
         </div>
@@ -56,7 +61,7 @@
             <div class="erc-section-header">
                 <h2 class="h3 fw-bold mb-0 erc-section-title">Filters</h2>
 
-                {% if selected_publisher or selected_run or selected_issue or selected_volume %}
+                {% if selected_publisher or selected_run or selected_issue or selected_volume or selected_one_shot %}
                     <a href="{% url 'catalog:browse' %}" class="btn btn-outline-secondary">
                         Clear filters
                     </a>
@@ -64,7 +69,7 @@
             </div>
 
             <div class="row g-3 align-items-end">
-                <div class="col-12 col-xl-3">
+                <div class="col-12 col-lg-6 col-xxl">
                     <label class="form-label erc-muted" for="publisher-search-browse">
                         Publisher
                     </label>
@@ -121,6 +126,7 @@
                                         <span class="erc-muted">
                                             · {{ publisher.run_total }} runs
                                             · {{ publisher.volume_total }} volumes
+                                            · {{ publisher.one_shot_total }} one-shots
                                         </span>
                                     </a>
                                 {% endfor %}
@@ -133,7 +139,7 @@
                     </div>
                 </div>
 
-                <div class="col-12 col-xl-3">
+                <div class="col-12 col-lg-6 col-xxl">
                     <div class="form-check form-switch mb-2">
                         <input
                             class="form-check-input"
@@ -235,7 +241,7 @@
                     </div>
                 </div>
 
-                <div class="col-12 col-xl-3">
+                <div class="col-12 col-lg-6 col-xxl">
                     <div class="form-check form-switch mb-2">
                         <input
                             class="form-check-input"
@@ -344,7 +350,7 @@
                     </div>
                 </div>
 
-                <div class="col-12 col-xl-3">
+                <div class="col-12 col-lg-6 col-xxl">
                     <div class="form-check form-switch mb-2">
                         <input
                             class="form-check-input"
@@ -355,7 +361,7 @@
                             {% if selected_volume %}checked{% endif %}
                         >
                         <label class="form-check-label erc-muted" for="browse-toggle-volumes">
-                            Show collected volumes
+                            Show volumes
                         </label>
                     </div>
 
@@ -451,9 +457,108 @@
                         </div>
                     </div>
                 </div>
+
+                <div class="col-12 col-lg-6 col-xxl">
+                    <div class="form-check form-switch mb-2">
+                        <input
+                            class="form-check-input"
+                            type="checkbox"
+                            id="browse-toggle-one-shots"
+                            data-section-visibility-toggle
+                            data-target-section="one_shots"
+                            {% if selected_one_shot %}checked{% endif %}
+                        >
+                        <label class="form-check-label erc-muted" for="browse-toggle-one-shots">
+                            Show one-shots
+                        </label>
+                    </div>
+
+                    <label class="form-label erc-muted" for="one-shot-search-browse">
+                        One-shot
+                    </label>
+
+                    <div
+                        class="dropdown searchable-dropdown"
+                        data-options-kind="one_shot"
+                        data-options-url="{% url 'catalog:browse_options' %}"
+                        data-selected-id="{{ selected_one_shot_id|default_if_none:'' }}"
+                        data-filter-publisher-id="{{ selected_publisher_id|default_if_none:'' }}"
+                    >
+                        <button
+                            class="btn erc-filter-button dropdown-toggle text-start w-100"
+                            type="button"
+                            id="one-shot-dropdown-browse"
+                            data-bs-toggle="dropdown"
+                            data-bs-auto-close="outside"
+                            aria-expanded="false"
+                        >
+                            {% if selected_one_shot %}
+                                {{ selected_one_shot.title }}
+                            {% elif selected_publisher %}
+                                All {{ selected_publisher.name }} one-shots
+                            {% else %}
+                                All one-shots
+                            {% endif %}
+                        </button>
+
+                        <div class="dropdown-menu p-2" aria-labelledby="one-shot-dropdown-browse">
+                            <input
+                                type="search"
+                                id="one-shot-search-browse"
+                                class="form-control mb-2"
+                                placeholder="Search one-shots..."
+                                autocomplete="off"
+                                data-dropdown-search
+                            >
+
+                            {% if selected_publisher %}
+                                <a
+                                    href="{% url 'catalog:browse' %}?publisher={{ selected_publisher.id }}"
+                                    class="dropdown-item rounded {% if not selected_one_shot %}active{% endif %}"
+                                >
+                                    All {{ selected_publisher.name }} one-shots
+                                </a>
+                            {% else %}
+                                <a
+                                    href="{% url 'catalog:browse' %}"
+                                    class="dropdown-item rounded {% if not selected_one_shot %}active{% endif %}"
+                                >
+                                    All one-shots
+                                </a>
+                            {% endif %}
+
+                            <div class="dropdown-divider"></div>
+
+                            <div data-dropdown-options style="max-height: 22rem; overflow-y: auto;">
+                                {% for one_shot in one_shot_options %}
+                                    <a
+                                        href="{% url 'catalog:browse' %}?one_shot={{ one_shot.id }}"
+                                        class="dropdown-item rounded {% if selected_one_shot_id == one_shot.id %}active{% endif %}"
+                                        data-dropdown-option
+                                        data-search-label="{{ one_shot.title }} {{ one_shot.start_year }} {{ one_shot.publisher.name }}"
+                                    >
+                                        <span class="fw-semibold">{{ one_shot.title }}</span>
+                                        <span class="erc-muted">
+                                            · {{ one_shot.publisher.name }}
+                                            {% if one_shot.published_date %}
+                                                · {{ one_shot.published_date|date:"Y-m-d" }}
+                                            {% elif one_shot.start_year %}
+                                                · {{ one_shot.start_year }}
+                                            {% endif %}
+                                        </span>
+                                    </a>
+                                {% endfor %}
+                            </div>
+
+                            <p class="dropdown-item-text erc-muted mb-0 d-none" data-no-results>
+                                No matching one-shots.
+                            </p>
+                        </div>
+                    </div>
+                </div>
             </div>
 
-            {% if selected_publisher or selected_run or selected_issue or selected_volume %}
+            {% if selected_publisher or selected_run or selected_issue or selected_volume or selected_one_shot %}
                 <div class="d-flex flex-wrap gap-2 mt-4">
                     {% if selected_run %}
                         <a
@@ -479,6 +584,15 @@
                             class="btn btn-sm btn-outline-secondary"
                         >
                             Clear volume
+                        </a>
+                    {% endif %}
+
+                    {% if selected_one_shot %}
+                        <a
+                            href="{% if selected_publisher %}{% url 'catalog:browse' %}?publisher={{ selected_publisher.id }}{% else %}{% url 'catalog:browse' %}{% endif %}"
+                            class="btn btn-sm btn-outline-secondary"
+                        >
+                            Clear one-shot
                         </a>
                     {% endif %}
 
@@ -553,6 +667,8 @@
                                         {% csrf_token %}
                                         <input type="hidden" name="next" value="{{ request.get_full_path }}">
                                         <input type="hidden" name="apply_to_issues" value="">
+                                        <input type="hidden" name="issue_status" value="">
+                                        <input type="hidden" name="issue_status_mode" value="">
                                         <input type="hidden" name="remove_issues" value="">
                                         <select name="status" class="form-select form-select-sm" data-auto-submit>
                                             {% for value, label in run_status_choices %}
@@ -577,6 +693,8 @@
                                         {% csrf_token %}
                                         <input type="hidden" name="next" value="{{ request.get_full_path }}">
                                         <input type="hidden" name="apply_to_issues" value="">
+                                        <input type="hidden" name="issue_status" value="">
+                                        <input type="hidden" name="issue_status_mode" value="">
                                         <button type="submit" class="btn btn-outline-light btn-sm erc-track-button">
                                             Follow
                                         </button>
@@ -607,6 +725,7 @@
                     data-filter-run-id="{{ selected_run_id|default_if_none:'' }}"
                     data-filter-issue-id="{{ selected_issue_id|default_if_none:'' }}"
                     data-filter-volume-id="{{ selected_volume_id|default_if_none:'' }}"
+                    data-filter-one-shot-id="{{ selected_one_shot_id|default_if_none:'' }}"
                 >
                     Load {{ browse_load_more_limit }} more runs
                 </button>
@@ -624,7 +743,7 @@
         </div>
     </section>
 
-    <section class="card erc-panel erc-data-card {% if not selected_volume %}d-none{% endif %}" data-load-section="volumes">
+    <section class="card erc-panel erc-data-card {% if not selected_volume %}d-none{% endif %}" data-load-section="volumes" {% if not selected_volume %}hidden{% endif %}>
         <div class="card-body">
             <div class="erc-section-header">
                 <h2 class="h3 fw-bold mb-0 erc-section-title">Volumes</h2>
@@ -732,6 +851,7 @@
                     data-filter-run-id="{{ selected_run_id|default_if_none:'' }}"
                     data-filter-issue-id="{{ selected_issue_id|default_if_none:'' }}"
                     data-filter-volume-id="{{ selected_volume_id|default_if_none:'' }}"
+                    data-filter-one-shot-id="{{ selected_one_shot_id|default_if_none:'' }}"
                 >
                     Load {{ browse_load_more_limit }} more volumes
                 </button>
@@ -856,6 +976,7 @@
                     data-filter-run-id="{{ selected_run_id|default_if_none:'' }}"
                     data-filter-issue-id="{{ selected_issue_id|default_if_none:'' }}"
                     data-filter-volume-id="{{ selected_volume_id|default_if_none:'' }}"
+                    data-filter-one-shot-id="{{ selected_one_shot_id|default_if_none:'' }}"
                 >
                     Load {{ browse_load_more_limit }} more issues
                 </button>
@@ -868,6 +989,130 @@
                     data-hide-count="{{ browse_load_more_limit }}"
                 >
                     Hide {{ browse_load_more_limit }} issues
+                </button>
+            </div>
+        </div>
+    </section>
+
+    <section class="card erc-panel erc-data-card {% if not selected_one_shot %}d-none{% endif %}" data-load-section="one_shots" {% if not selected_one_shot %}hidden{% endif %}>
+        <div class="card-body">
+            <div class="erc-section-header">
+                <h2 class="h3 fw-bold mb-0 erc-section-title">One-shots</h2>
+
+                <p class="erc-muted mb-0" data-loaded-count>
+                    Showing {{ one_shots|length }} loaded
+                </p>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-dark table-hover align-middle mb-0 erc-data-table">
+                    <thead>
+                    <tr>
+                        <th scope="col">One-shot</th>
+                        <th scope="col">Publisher</th>
+                        <th scope="col">Published Date</th>
+                        <th scope="col" class="text-end">My Comics</th>
+                    </tr>
+                    </thead>
+
+                    <tbody data-load-target>
+                    {% for one_shot in one_shots %}
+                        <tr
+                            class="clickable-row"
+                            data-row-url="{% url 'catalog:one_shot_details' one_shot.id %}"
+                            tabindex="0"
+                            aria-label="Open one-shot details for {{ one_shot.title }}"
+                        >
+                            <td class="fw-semibold">
+                                <a href="{% url 'catalog:one_shot_details' one_shot.id %}" class="erc-data-link">
+                                    {{ one_shot.title }}
+                                </a>
+                            </td>
+                            <td>{{ one_shot.publisher.name }}</td>
+                            <td>
+                                {% if one_shot.published_date %}
+                                    {{ one_shot.published_date|date:"Y-m-d" }}
+                                {% elif one_shot.start_year %}
+                                    {{ one_shot.start_year }}
+                                {% else %}
+                                    <span class="erc-muted">Unknown</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-end erc-track-cell">
+                                {% if one_shot.user_tracking %}
+                                    <form
+                                        action="{% url 'reading:set_one_shot_status' one_shot.id %}"
+                                        method="post"
+                                        class="erc-track-form"
+                                        data-tracking-form
+                                        data-item-type="one_shot"
+                                        data-current-status="{{ one_shot.user_tracking.status }}"
+                                    >
+                                        {% csrf_token %}
+                                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                        <select name="status" class="form-select form-select-sm" data-auto-submit>
+                                            {% for value, label in one_shot_status_choices %}
+                                                <option value="{{ value }}" {% if one_shot.user_tracking.status == value %}selected{% endif %}>
+                                                    {{ label }}
+                                                </option>
+                                            {% endfor %}
+                                            <option value="__unfollow__">Unfollow</option>
+                                        </select>
+                                    </form>
+                                {% else %}
+                                    <form
+                                        action="{% url 'reading:set_one_shot_status' one_shot.id %}"
+                                        method="post"
+                                        class="erc-track-form"
+                                        data-tracking-form
+                                        data-item-type="one_shot"
+                                        data-track-follow
+                                    >
+                                        {% csrf_token %}
+                                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                        <button type="submit" class="btn btn-outline-light btn-sm erc-track-button">
+                                            Follow
+                                        </button>
+                                    </form>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="4" class="text-center erc-muted py-4">
+                                No one-shots match this filter.
+                            </td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="erc-load-actions mt-3">
+                <button
+                    type="button"
+                    class="btn erc-load-button {% if not has_more_one_shots %}d-none{% endif %}"
+                    data-load-more
+                    data-kind="one_shots"
+                    data-offset="{{ one_shots|length }}"
+                    data-items-url="{% url 'catalog:browse_items' %}"
+                    data-filter-publisher-id="{{ selected_publisher_id|default_if_none:'' }}"
+                    data-filter-run-id="{{ selected_run_id|default_if_none:'' }}"
+                    data-filter-issue-id="{{ selected_issue_id|default_if_none:'' }}"
+                    data-filter-volume-id="{{ selected_volume_id|default_if_none:'' }}"
+                    data-filter-one-shot-id="{{ selected_one_shot_id|default_if_none:'' }}"
+                >
+                    Load {{ browse_load_more_limit }} more one-shots
+                </button>
+
+                <button
+                    type="button"
+                    class="btn erc-hide-button d-none"
+                    data-hide-more
+                    data-min-visible="{{ browse_initial_limit }}"
+                    data-hide-count="{{ browse_load_more_limit }}"
+                >
+                    Hide {{ browse_load_more_limit }} one-shots
                 </button>
             </div>
         </div>
@@ -911,5 +1156,5 @@
 {% endblock %}
 
 {% block extra_scripts %}
-<script src="{% static 'js/catalog/browse.js' %}?v=section-toggles-20260713"></script>
+<script src="{% static 'js/catalog/browse.js' %}?v=one-shots-20260713"></script>
 {% endblock %}

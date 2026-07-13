@@ -174,21 +174,18 @@ class ComicIssue(ImageUrlFields):
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
-        self.sync_run_description_from_first_issue()
+        self.sync_run_description_from_mainline_first_issue()
 
-    def sync_run_description_from_first_issue(self):
+    def sync_run_description_from_mainline_first_issue(self):
         description = self.description.strip()
 
         if not self.run_id or not description:
             return
 
-        if not is_first_issue_number(self.issue_number):
+        if not is_mainline_first_issue_number(self.issue_number):
             return
 
-        ComicRun.objects.filter(
-            id=self.run_id,
-            description="",
-        ).update(
+        ComicRun.objects.filter(id=self.run_id).exclude(description=description).update(
             description=description,
             updated_at=timezone.now(),
         )
@@ -378,7 +375,18 @@ class ComicVolumeOneShot(models.Model):
 
 
 def is_first_issue_number(value):
+    return is_mainline_first_issue_number(value)
+
+
+def is_mainline_first_issue_number(value):
     value = str(value or "").strip()
+
+    if not value:
+        return False
+
+    if looks_like_special_issue_number(value):
+        return False
+
     value = re.sub(r"^\s*issue\s*", "", value, flags=re.IGNORECASE)
     value = re.sub(r"^\s*no\.?\s*", "", value, flags=re.IGNORECASE)
 
@@ -386,3 +394,22 @@ def is_first_issue_number(value):
         value = value[1:].strip()
 
     return value == "1"
+
+
+def looks_like_special_issue_number(value):
+    value = f" {str(value or '').strip().casefold()} "
+    return any(
+        marker in value
+        for marker in [
+            " annual ",
+            " annual #",
+            " noir edition ",
+            " noir edition #",
+            " ark m ",
+            " ark m #",
+            ": ark ",
+            ": ark m",
+            " special ",
+            " special #",
+        ]
+    )
