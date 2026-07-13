@@ -255,31 +255,21 @@ class ComicVolume(ImageUrlFields):
 
     @property
     def display_title(self):
-        run_title = self.run.title.strip() if self.run_id and self.run else ""
         volume_title = self.title.strip()
-        volume_number = self.volume_number.strip()
-
-        if not run_title:
-            return volume_title
-
-        normalized_run_title = run_title.casefold()
-        normalized_volume_title = volume_title.casefold()
-
-        if normalized_volume_title.startswith(f"{normalized_run_title} vol"):
-            return volume_title
-
-        if normalized_volume_title == normalized_run_title:
-            volume_title = ""
-
-        display_title = run_title
-
-        if volume_number:
-            display_title = f"{display_title} Vol. {volume_number}"
 
         if volume_title:
-            display_title = f"{display_title}: {volume_title}"
+            return volume_title
 
-        return display_title
+        if self.run_id and self.run:
+            run_title = self.run.title.strip()
+            volume_number = self.volume_number.strip()
+
+            if volume_number:
+                return f"{run_title} Vol. {volume_number}"
+
+            return run_title
+
+        return ""
 
     def __str__(self):
         return self.display_title
