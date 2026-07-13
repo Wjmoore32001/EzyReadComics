@@ -242,140 +242,147 @@ class Command(BaseCommand):
             "credits_added": 0,
         }
 
-        with sync_playwright() as playwright:
-            browser = playwright.chromium.launch(
-                headless=not headed,
+        rendered_calendar = read_calendar_with_playwright(
+            calendar_url=calendar_url,
+            headed=headed,
+            timeout_ms=calendar_timeout,
+        )
+        totals["calendar_browser_reads"] += 1
+
+        if raw:
+            self.print_raw_calendar(rendered_calendar)
+
+        calendar_issues, incomplete_count = extract_calendar_issues(
+            rendered_calendar=rendered_calendar,
+        )
+        totals["calendar_found"] = len(calendar_issues)
+        totals["calendar_incomplete_skipped"] = incomplete_count
+
+        kept_issues, keyword_skipped_issues = filter_skipped_calendar_issues(
+            calendar_issues
+        )
+        totals["keyword_skipped"] = len(keyword_skipped_issues)
+
+        if verbose and calendar_issues:
+            self.stdout.write("")
+            self.stdout.write(self.style.SUCCESS("Calendar issues parsed"))
+
+            for issue in calendar_issues:
+                self.stdout.write(format_calendar_issue(issue))
+
+        if verbose and keyword_skipped_issues:
+            self.stdout.write("")
+            self.stdout.write(self.style.WARNING("Skipped by keyword"))
+
+            for issue in keyword_skipped_issues:
+                self.stdout.write(format_calendar_issue(issue))
+
+        if len(kept_issues) > limit:
+            totals["limit_skipped"] = len(kept_issues) - limit
+            kept_issues = kept_issues[:limit]
+
+        issue_records = []
+
+        for calendar_issue in kept_issues:
+            existing_run = find_existing_run(
+                title=calendar_issue["run_title"],
+                start_year=calendar_issue["start_year"],
             )
-            context = browser.new_context(
-                user_agent=(
-                    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-                    "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-                ),
-                viewport={
-                    "width": 1440,
-                    "height": 1800,
-                },
-                locale="en-US",
-                timezone_id=MARVEL_CALENDAR_TIME_ZONE,
+            existing_issue = find_existing_issue(
+                run=existing_run,
+                issue_number=calendar_issue["issue_number"],
+            )
+            existing_detail_skipped = bool(
+                existing_issue and issue_has_complete_details(existing_issue)
             )
 
-            try:
-                rendered_calendar = read_rendered_calendar_page(
-                    context=context,
-                    calendar_url=calendar_url,
-                    timeout_ms=calendar_timeout,
+            issue_records.append(
+                {
+                    "calendar_issue": calendar_issue,
+                    "existing_issue": existing_issue,
+                    "existing_detail_skipped": existing_detail_skipped,
+                    "detail": empty_detail(),
+                }
+            )
+
+            if existing_detail_skipped and not skip_details:
+                totals["existing_detail_skipped"] += 1
+
+        issues_needing_details = [
+            record["calendar_issue"]
+            for record in issue_records
+            if not skip_details and not record["existing_detail_skipped"]
+        ]
+
+        detail_map = {}
+
+        if issues_needing_details:
+            detail_map = read_issue_details_with_playwright(
+                calendar_issues=issues_needing_details,
+                headed=headed,
+                timeout_ms=detail_timeout,
+            )
+
+        for record in issue_records:
+            calendar_issue = record["calendar_issue"]
+            existing_issue = record["existing_issue"]
+            existing_detail_skipped = record["existing_detail_skipped"]
+
+            totals["processed"] += 1
+
+            if not skip_details and not existing_detail_skipped:
+                detail = detail_map.get(calendar_issue_key(calendar_issue), empty_detail())
+                record["detail"] = detail
+
+                if detail["read_attempted"]:
+                    totals["detail_browser_reads"] += 1
+
+                if detail["error"]:
+                    totals["detail_read_failures"] += 1
+
+                missing_fields = get_preview_missing_fields(
+                    issue=existing_issue,
+                    detail=detail,
                 )
-                totals["calendar_browser_reads"] += 1
+
+                if missing_fields:
+                    totals["incomplete_details"] += 1
+                else:
+                    totals["complete_details"] += 1
+
+                if "description" in missing_fields:
+                    totals["missing_description"] += 1
+
+                if "writer" in missing_fields:
+                    totals["missing_writer"] += 1
 
                 if raw:
-                    self.print_raw_calendar(rendered_calendar)
-
-                calendar_issues, incomplete_count = extract_calendar_issues(
-                    rendered_calendar=rendered_calendar,
-                )
-                totals["calendar_found"] = len(calendar_issues)
-                totals["calendar_incomplete_skipped"] = incomplete_count
-
-                kept_issues, keyword_skipped_issues = filter_skipped_calendar_issues(
-                    calendar_issues
-                )
-                totals["keyword_skipped"] = len(keyword_skipped_issues)
-
-                if verbose and calendar_issues:
-                    self.stdout.write("")
-                    self.stdout.write(self.style.SUCCESS("Calendar issues parsed"))
-
-                    for issue in calendar_issues:
-                        self.stdout.write(format_calendar_issue(issue))
-
-                if verbose and keyword_skipped_issues:
-                    self.stdout.write("")
-                    self.stdout.write(self.style.WARNING("Skipped by keyword"))
-
-                    for issue in keyword_skipped_issues:
-                        self.stdout.write(format_calendar_issue(issue))
-
-                if len(kept_issues) > limit:
-                    totals["limit_skipped"] = len(kept_issues) - limit
-                    kept_issues = kept_issues[:limit]
-
-                for calendar_issue in kept_issues:
-                    totals["processed"] += 1
-
-                    existing_run = find_existing_run(
-                        title=calendar_issue["run_title"],
-                        start_year=calendar_issue["start_year"],
-                    )
-                    existing_issue = find_existing_issue(
-                        run=existing_run,
-                        issue_number=calendar_issue["issue_number"],
-                    )
-
-                    detail = empty_detail()
-
-                    if skip_details:
-                        pass
-                    elif existing_issue and issue_has_complete_details(existing_issue):
-                        totals["existing_detail_skipped"] += 1
-                    else:
-                        detail = read_issue_detail_page(
-                            context=context,
-                            calendar_issue=calendar_issue,
-                            timeout_ms=detail_timeout,
-                        )
-
-                        if detail["read_attempted"]:
-                            totals["detail_browser_reads"] += 1
-
-                        if detail["error"]:
-                            totals["detail_read_failures"] += 1
-
-                        missing_fields = get_preview_missing_fields(
-                            issue=existing_issue,
-                            detail=detail,
-                        )
-
-                        if missing_fields:
-                            totals["incomplete_details"] += 1
-                        else:
-                            totals["complete_details"] += 1
-
-                        if "description" in missing_fields:
-                            totals["missing_description"] += 1
-
-                        if "writer" in missing_fields:
-                            totals["missing_writer"] += 1
-
-                        if raw:
-                            self.print_raw_detail(calendar_issue=calendar_issue, detail=detail)
-
-                    result = apply_calendar_issue(
+                    self.print_raw_detail(
                         calendar_issue=calendar_issue,
                         detail=detail,
-                        dry_run=dry_run,
                     )
 
-                    totals["runs_created"] += result["run_created"]
-                    totals["runs_updated"] += result["run_updated"]
-                    totals["issues_created"] += result["issue_created"]
-                    totals["issues_updated"] += result["issue_updated"]
-                    totals["credits_added"] += result["credits_added"]
+            result = apply_calendar_issue(
+                calendar_issue=calendar_issue,
+                detail=record["detail"],
+                dry_run=dry_run,
+            )
 
-                    if verbose:
-                        self.print_issue_result(
-                            calendar_issue=calendar_issue,
-                            detail=detail,
-                            result=result,
-                            dry_run=dry_run,
-                            skip_details=skip_details,
-                            existing_detail_skipped=bool(
-                                existing_issue and issue_has_complete_details(existing_issue)
-                            ),
-                        )
+            totals["runs_created"] += result["run_created"]
+            totals["runs_updated"] += result["run_updated"]
+            totals["issues_created"] += result["issue_created"]
+            totals["issues_updated"] += result["issue_updated"]
+            totals["credits_added"] += result["credits_added"]
 
-            finally:
-                context.close()
-                browser.close()
+            if verbose:
+                self.print_issue_result(
+                    calendar_issue=calendar_issue,
+                    detail=record["detail"],
+                    result=result,
+                    dry_run=dry_run,
+                    skip_details=skip_details,
+                    existing_detail_skipped=existing_detail_skipped,
+                )
 
         self.print_summary(totals=totals, dry_run=dry_run)
 
@@ -533,6 +540,62 @@ class Command(BaseCommand):
 
         if dry_run:
             self.stdout.write("Dry run only. No catalog data was created or updated.")
+
+
+def read_calendar_with_playwright(*, calendar_url, headed, timeout_ms):
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(
+            headless=not headed,
+        )
+        context = build_browser_context(browser)
+
+        try:
+            return read_rendered_calendar_page(
+                context=context,
+                calendar_url=calendar_url,
+                timeout_ms=timeout_ms,
+            )
+        finally:
+            context.close()
+            browser.close()
+
+
+def read_issue_details_with_playwright(*, calendar_issues, headed, timeout_ms):
+    detail_map = {}
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(
+            headless=not headed,
+        )
+        context = build_browser_context(browser)
+
+        try:
+            for calendar_issue in calendar_issues:
+                detail_map[calendar_issue_key(calendar_issue)] = read_issue_detail_page(
+                    context=context,
+                    calendar_issue=calendar_issue,
+                    timeout_ms=timeout_ms,
+                )
+        finally:
+            context.close()
+            browser.close()
+
+    return detail_map
+
+
+def build_browser_context(browser):
+    return browser.new_context(
+        user_agent=(
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        ),
+        viewport={
+            "width": 1440,
+            "height": 1800,
+        },
+        locale="en-US",
+        timezone_id=MARVEL_CALENDAR_TIME_ZONE,
+    )
 
 
 def read_rendered_calendar_page(*, context, calendar_url, timeout_ms):
@@ -905,6 +968,15 @@ def calendar_issue_identity(issue):
         start_year,
         normalize_issue_number(issue_number),
         published_date,
+    )
+
+
+def calendar_issue_key(issue):
+    return (
+        normalize_title(issue["run_title"]),
+        clean_text(issue["start_year"]),
+        normalize_issue_number(issue["issue_number"]),
+        issue["published_date"],
     )
 
 
