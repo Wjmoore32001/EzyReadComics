@@ -3,12 +3,15 @@ from django.contrib import admin
 from catalog.models import (
     ComicIssue,
     ComicIssueCredit,
+    ComicOneShot,
     ComicPublisher,
     ComicRun,
     ComicRunCredit,
     ComicVolume,
     ComicVolumeCredit,
     ComicVolumeIssue,
+    ComicVolumeOneShot,
+    ComicVolumeRun,
     CreditPerson,
     CreditRole,
 )
@@ -26,10 +29,22 @@ class ComicIssueCreditInline(admin.TabularInline):
     autocomplete_fields = ["person", "role"]
 
 
+class ComicVolumeRunInline(admin.TabularInline):
+    model = ComicVolumeRun
+    extra = 0
+    autocomplete_fields = ["run"]
+
+
 class ComicVolumeIssueInline(admin.TabularInline):
     model = ComicVolumeIssue
     extra = 0
     autocomplete_fields = ["issue"]
+
+
+class ComicVolumeOneShotInline(admin.TabularInline):
+    model = ComicVolumeOneShot
+    extra = 0
+    autocomplete_fields = ["one_shot"]
 
 
 class ComicVolumeCreditInline(admin.TabularInline):
@@ -116,6 +131,31 @@ class ComicIssueAdmin(admin.ModelAdmin):
     ]
 
 
+@admin.register(ComicOneShot)
+class ComicOneShotAdmin(admin.ModelAdmin):
+    list_display = [
+        "title",
+        "publisher",
+        "start_year",
+        "published_date",
+        "created_at",
+        "updated_at",
+    ]
+    list_filter = [
+        "publisher",
+        "start_year",
+        "published_date",
+    ]
+    search_fields = [
+        "title",
+        "publisher__name",
+        "description",
+    ]
+    autocomplete_fields = [
+        "publisher",
+    ]
+
+
 @admin.register(ComicVolume)
 class ComicVolumeAdmin(admin.ModelAdmin):
     list_display = [
@@ -145,8 +185,36 @@ class ComicVolumeAdmin(admin.ModelAdmin):
         "run",
     ]
     inlines = [
+        ComicVolumeRunInline,
         ComicVolumeIssueInline,
+        ComicVolumeOneShotInline,
         ComicVolumeCreditInline,
+    ]
+
+
+@admin.register(ComicVolumeRun)
+class ComicVolumeRunAdmin(admin.ModelAdmin):
+    list_display = [
+        "volume",
+        "run",
+        "issue_numbers_text",
+        "first_issue_number",
+        "last_issue_number",
+        "item_order",
+    ]
+    list_filter = [
+        "volume__publisher",
+        "run__publisher",
+        "run",
+    ]
+    search_fields = [
+        "volume__title",
+        "run__title",
+        "issue_numbers_text",
+    ]
+    autocomplete_fields = [
+        "volume",
+        "run",
     ]
 
 
@@ -170,6 +238,28 @@ class ComicVolumeIssueAdmin(admin.ModelAdmin):
     autocomplete_fields = [
         "volume",
         "issue",
+    ]
+
+
+@admin.register(ComicVolumeOneShot)
+class ComicVolumeOneShotAdmin(admin.ModelAdmin):
+    list_display = [
+        "volume",
+        "one_shot",
+        "item_order",
+    ]
+    list_filter = [
+        "volume__publisher",
+        "volume__run",
+        "one_shot__publisher",
+    ]
+    search_fields = [
+        "volume__title",
+        "one_shot__title",
+    ]
+    autocomplete_fields = [
+        "volume",
+        "one_shot",
     ]
 
 

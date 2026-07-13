@@ -191,6 +191,39 @@ class ComicIssue(ImageUrlFields):
         return f"{self.run} #{self.issue_number}"
 
 
+class ComicOneShot(ImageUrlFields):
+    publisher = models.ForeignKey(
+        ComicPublisher,
+        on_delete=models.PROTECT,
+        related_name="one_shots",
+    )
+
+    title = models.CharField(max_length=500)
+    start_year = models.CharField(max_length=20, blank=True)
+
+    published_date = models.DateField(null=True, blank=True)
+
+    description = models.TextField(blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["publisher__name", "title", "start_year", "published_date"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["publisher", "title", "start_year"],
+                name="unique_comic_one_shot_per_publisher_title_year",
+            )
+        ]
+
+    def __str__(self):
+        if self.start_year:
+            return f"{self.title} ({self.start_year})"
+
+        return self.title
+
+
 class ComicVolume(ImageUrlFields):
     publisher = models.ForeignKey(
         ComicPublisher,
@@ -252,6 +285,42 @@ class ComicVolume(ImageUrlFields):
         return self.display_title
 
 
+class ComicVolumeRun(models.Model):
+    volume = models.ForeignKey(
+        ComicVolume,
+        on_delete=models.CASCADE,
+        related_name="volume_runs",
+    )
+    run = models.ForeignKey(
+        ComicRun,
+        on_delete=models.CASCADE,
+        related_name="collected_volume_links",
+    )
+
+    first_issue_number = models.CharField(max_length=50, blank=True)
+    last_issue_number = models.CharField(max_length=50, blank=True)
+    issue_numbers_text = models.CharField(max_length=500, blank=True)
+
+    item_order = models.PositiveIntegerField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["volume", "item_order", "run__title", "run__start_year"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["volume", "run"],
+                name="unique_comic_volume_run",
+            )
+        ]
+
+    def __str__(self):
+        issue_text = self.issue_numbers_text.strip()
+
+        if issue_text:
+            return f"{self.volume} contains {self.run} #{issue_text}"
+
+        return f"{self.volume} contains {self.run}"
+
+
 class ComicVolumeIssue(models.Model):
     volume = models.ForeignKey(
         ComicVolume,
@@ -277,6 +346,33 @@ class ComicVolumeIssue(models.Model):
 
     def __str__(self):
         return f"{self.volume} contains {self.issue}"
+
+
+class ComicVolumeOneShot(models.Model):
+    volume = models.ForeignKey(
+        ComicVolume,
+        on_delete=models.CASCADE,
+        related_name="volume_one_shots",
+    )
+    one_shot = models.ForeignKey(
+        ComicOneShot,
+        on_delete=models.CASCADE,
+        related_name="collected_in",
+    )
+
+    item_order = models.PositiveIntegerField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["volume", "item_order", "one_shot__published_date", "one_shot__title"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["volume", "one_shot"],
+                name="unique_comic_volume_one_shot",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.volume} contains {self.one_shot}"
 
 
 def is_first_issue_number(value):
