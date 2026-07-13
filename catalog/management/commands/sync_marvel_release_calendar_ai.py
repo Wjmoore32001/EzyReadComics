@@ -952,7 +952,7 @@ def calendar_issue_to_dict(issue):
         "issue_number": issue.issue_number,
         "published_date": issue.published_date,
         "detail_url": issue.detail_url,
-        "marvel_issue_id": issue.marvel_issue_id,
+        "marvel_issue_id": issue.official_source_key,
         "issue_slug": issue.issue_slug,
     }
 

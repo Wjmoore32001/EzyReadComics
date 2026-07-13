@@ -494,8 +494,8 @@ def load_known_series_urls(run_refs):
             start_year=run_link["start_year"],
         )
 
-        if existing_run and clean_text(existing_run.marvel_series_url):
-            urls[run_key] = clean_text(existing_run.marvel_series_url)
+        if existing_run and clean_text(existing_run.official_source_url):
+            urls[run_key] = clean_text(existing_run.official_source_url)
 
     close_old_connections()
     return urls
@@ -555,7 +555,7 @@ def build_issue_detail_plans(*, records, series_lookups):
                 existing_issue = find_existing_issue(
                     run=existing_run,
                     issue_number=series_issue.issue_number,
-                    marvel_issue_id=series_issue.marvel_issue_id,
+                    marvel_issue_id=series_issue.official_source_key,
                 )
                 reason = get_issue_detail_read_reason(
                     existing_issue=existing_issue,
@@ -756,7 +756,7 @@ def resolve_or_create_issue(*, run, series_issue, detail_map, skip_details, dry_
         existing_issue = find_existing_issue(
             run=run,
             issue_number=series_issue.issue_number,
-            marvel_issue_id=series_issue.marvel_issue_id,
+            marvel_issue_id=series_issue.official_source_key,
         )
 
     detail = detail_map.get(series_issue_key(series_issue))
