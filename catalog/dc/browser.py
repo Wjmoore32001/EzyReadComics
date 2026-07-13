@@ -28,6 +28,7 @@ COLLECTED_RANGE_RE = re.compile(
 SERIES_RE = re.compile(
     r"^(?P<title>.+?)\s*\((?P<start_year>\d{4})(?P<ongoing>\s*-\s*)?(?P<end_year>\d{4})?\)\s*$"
 )
+TRAILING_YEAR_RE = re.compile(r"^(?P<title>.+?)\s+(?P<start_year>\d{4})$")
 
 
 @dataclass
@@ -73,6 +74,7 @@ class DcDetail:
     related_graphic_novel_links: list[dict] = field(default_factory=list)
     collection_parse: DcCollectionParse = field(default_factory=DcCollectionParse)
     series_scroll_clicks: int = 0
+    scanned_more_from_series: bool = False
 
 
 def ensure_playwright():
@@ -155,7 +157,14 @@ def read_browse_page(*, context, page_number, timeout_ms=DEFAULT_TIMEOUT_MS):
         page.close()
 
 
-def read_detail_page(*, context, url, timeout_ms=DEFAULT_TIMEOUT_MS):
+def read_detail_page(
+    *,
+    context,
+    url,
+    timeout_ms=DEFAULT_TIMEOUT_MS,
+    scan_more_from_series=True,
+    known_more_from_series_links=None,
+):
     page = context.new_page()
 
     try:
@@ -181,10 +190,14 @@ def read_detail_page(*, context, url, timeout_ms=DEFAULT_TIMEOUT_MS):
 
         page.wait_for_timeout(750)
 
-        more_links, scroll_clicks = collect_more_from_series_links(
-            page=page,
-            timeout_ms=timeout_ms,
-        )
+        if scan_more_from_series:
+            more_links, scroll_clicks = collect_more_from_series_links(
+                page=page,
+                timeout_ms=timeout_ms,
+            )
+        else:
+            more_links = clean_detail_links(known_more_from_series_links or [])
+            scroll_clicks = 0
 
         text = page.locator("body").inner_text(timeout=timeout_ms)
         lines = normalize_lines(text)
@@ -213,6 +226,7 @@ def read_detail_page(*, context, url, timeout_ms=DEFAULT_TIMEOUT_MS):
         collection_parse = parse_collection_relationship(
             description=description,
             candidate_issue_links=candidate_issue_links,
+            series_title=series.title,
         )
         issue_number = extract_issue_number(title)
         issue_key = build_dc_issue_key(title=title, issue_number=issue_number)
@@ -241,6 +255,7 @@ def read_detail_page(*, context, url, timeout_ms=DEFAULT_TIMEOUT_MS):
             related_graphic_novel_links=related_graphic_novel_links,
             collection_parse=collection_parse,
             series_scroll_clicks=scroll_clicks,
+            scanned_more_from_series=scan_more_from_series,
         )
     finally:
         page.close()
@@ -745,13 +760,17 @@ def click_more_from_series_next(page):
         return False
 
 
-def parse_collection_relationship(*, description, candidate_issue_links):
+def parse_collection_relationship(*, description, candidate_issue_links, series_title=""):
     issue_numbers = parse_collected_issue_numbers(description)
     matched_links = []
     unmatched_numbers = []
 
     for number in issue_numbers:
-        match = first_matching_issue_link(number=number, links=candidate_issue_links)
+        match = first_matching_issue_link(
+            number=number,
+            links=candidate_issue_links,
+            series_title=series_title,
+        )
 
         if match:
             matched_links.append(match)
@@ -784,8 +803,9 @@ def parse_collected_issue_numbers(description):
     return unique_list(numbers)
 
 
-def first_matching_issue_link(*, number, links):
+def first_matching_issue_link(*, number, links, series_title=""):
     number = normalize_issue_number(number)
+    exact_series_matches = []
     normal_matches = []
     special_matches = []
 
@@ -796,11 +816,17 @@ def first_matching_issue_link(*, number, links):
             continue
 
         label = clean_item_label(link.get("label"))
+        base_title = link_base_title(label)
 
-        if looks_like_special_issue_label(label):
+        if series_title and normalize_title(base_title) == normalize_title(series_title):
+            exact_series_matches.append(link)
+        elif looks_like_special_issue_label(label):
             special_matches.append(link)
         else:
             normal_matches.append(link)
+
+    if exact_series_matches:
+        return exact_series_matches[0]
 
     if normal_matches:
         return normal_matches[0]
@@ -944,16 +970,25 @@ def parse_series(value):
 
     match = SERIES_RE.match(value)
 
-    if not match:
-        return DcSeriesInfo(raw=value, title=value)
+    if match:
+        return DcSeriesInfo(
+            raw=value,
+            title=clean_text(match.group("title")),
+            start_year=clean_text(match.group("start_year")),
+            end_year=clean_text(match.group("end_year")),
+            is_ongoing=bool(match.group("ongoing")) and not clean_text(match.group("end_year")),
+        )
 
-    return DcSeriesInfo(
-        raw=value,
-        title=clean_text(match.group("title")),
-        start_year=clean_text(match.group("start_year")),
-        end_year=clean_text(match.group("end_year")),
-        is_ongoing=bool(match.group("ongoing")) and not clean_text(match.group("end_year")),
-    )
+    trailing_year_match = TRAILING_YEAR_RE.match(value)
+
+    if trailing_year_match:
+        return DcSeriesInfo(
+            raw=value,
+            title=clean_text(trailing_year_match.group("title")),
+            start_year=clean_text(trailing_year_match.group("start_year")),
+        )
+
+    return DcSeriesInfo(raw=value, title=value)
 
 
 def extract_description(*, lines, item_type, title):
@@ -1110,6 +1145,25 @@ def unique_credits(credits):
         output.append({"role": role, "name": name})
 
     return output
+
+
+def link_base_title(label):
+    label = clean_item_label(label)
+    issue_number = extract_issue_number(label)
+
+    if issue_number:
+        label = re.sub(r"#\s*" + re.escape(issue_number) + r"\s*$", "", label, flags=re.IGNORECASE)
+
+    label = re.sub(r"\(\d{4}\s*-?\s*\)", "", label)
+    return clean_text(label).strip(" :-")
+
+
+def normalize_title(value):
+    value = clean_text(value)
+    value = re.sub(r"\(\d{4}\s*-?\s*\)", "", value)
+    value = re.sub(r"[^A-Za-z0-9]+", " ", value)
+    value = re.sub(r"\s+", " ", value)
+    return value.strip().casefold()
 
 
 def find_marker_index(*, lines, marker, start=0):

@@ -15,4 +15,6 @@ urlpatterns = [
     path("issues/<int:issue_id>/remove/", views.remove_issue_status, name="remove_issue_status"),
     path("volumes/<int:volume_id>/status/", views.set_volume_status, name="set_volume_status"),
     path("volumes/<int:volume_id>/remove/", views.remove_volume_status, name="remove_volume_status"),
+    path("one-shots/<int:one_shot_id>/status/", views.set_one_shot_status, name="set_one_shot_status"),
+    path("one-shots/<int:one_shot_id>/remove/", views.remove_one_shot_status, name="remove_one_shot_status"),
 ]

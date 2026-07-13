@@ -1,7 +1,7 @@
 from django.conf import settings
 from django.db import models
 
-from catalog.models import ComicIssue, ComicRun, ComicVolume
+from catalog.models import ComicIssue, ComicOneShot, ComicRun, ComicVolume
 
 
 class FollowedRun(models.Model):
@@ -179,3 +179,61 @@ class VolumeProgress(models.Model):
 
     def __str__(self):
         return f"{self.user} - {self.volume} - {self.get_status_display()}"
+
+
+class OneShotProgress(models.Model):
+    STATUS_PLANNED = "planned"
+    STATUS_READING = "reading"
+    STATUS_READ = "read"
+
+    STATUS_CHOICES = [
+        (STATUS_PLANNED, "Planned to read"),
+        (STATUS_READING, "Reading"),
+        (STATUS_READ, "Read"),
+    ]
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="one_shot_progress",
+    )
+    one_shot = models.ForeignKey(
+        ComicOneShot,
+        on_delete=models.CASCADE,
+        related_name="user_progress",
+    )
+
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=STATUS_PLANNED,
+    )
+
+    saved_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = [
+            "one_shot__publisher__name",
+            "one_shot__published_date",
+            "one_shot__title",
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "one_shot"],
+                name="unique_user_one_shot_progress",
+            )
+        ]
+        indexes = [
+            models.Index(
+                fields=["user", "status"],
+                name="reading_osp_user_status_idx",
+            ),
+            models.Index(
+                fields=["one_shot"],
+                name="reading_osp_one_shot_idx",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.user} - {self.one_shot} - {self.get_status_display()}"

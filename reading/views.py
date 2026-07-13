@@ -12,9 +12,21 @@ from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_GET, require_POST
 
-from catalog.models import ComicIssue, ComicPublisher, ComicRun, ComicVolume, ComicVolumeIssue
-from reading.forms import IssueProgressForm, RunProgressForm, VolumeProgressForm
-from reading.models import FollowedRun, IssueProgress, VolumeProgress
+from catalog.models import (
+    ComicIssue,
+    ComicOneShot,
+    ComicPublisher,
+    ComicRun,
+    ComicVolume,
+    ComicVolumeIssue,
+)
+from reading.forms import (
+    IssueProgressForm,
+    OneShotProgressForm,
+    RunProgressForm,
+    VolumeProgressForm,
+)
+from reading.models import FollowedRun, IssueProgress, OneShotProgress, VolumeProgress
 
 
 UNFOLLOW_STATUS_VALUE = "__unfollow__"
@@ -81,15 +93,25 @@ def my_comics(request):
         "issue__run__publisher",
     )
 
-    followed_runs, volume_progress, issue_progress = apply_my_comics_filters(
+    one_shot_progress = OneShotProgress.objects.filter(
+        user=request.user,
+    ).select_related(
+        "one_shot",
+        "one_shot__publisher",
+    )
+
+    followed_runs, volume_progress, issue_progress, one_shot_progress = apply_my_comics_filters(
         followed_runs=followed_runs,
         volume_progress=volume_progress,
         issue_progress=issue_progress,
+        one_shot_progress=one_shot_progress,
         filters=filters,
     )
 
+    tracked_publisher_ids = get_user_tracked_publisher_ids(request.user)
     tracked_run_ids = get_user_tracked_run_ids(request.user)
     tracked_issue_ids = get_user_tracked_issue_ids(request.user)
+    tracked_one_shot_ids = get_user_tracked_one_shot_ids(request.user)
 
     selected_publisher = (
         ComicPublisher.objects.filter(id=filters["publisher_id"]).first()
@@ -108,8 +130,15 @@ def my_comics(request):
         if filters["issue_id"]
         else None
     )
+    selected_one_shot = (
+        ComicOneShot.objects.select_related("publisher")
+        .filter(id=filters["one_shot_id"])
+        .first()
+        if filters["one_shot_id"]
+        else None
+    )
 
-    publisher_options = get_my_comics_publisher_options(tracked_run_ids)
+    publisher_options = get_my_comics_publisher_options(tracked_publisher_ids)
     run_options = get_my_comics_run_options(
         tracked_run_ids=tracked_run_ids,
         selected_publisher_id=filters["publisher_id"],
@@ -119,18 +148,25 @@ def my_comics(request):
         selected_publisher_id=filters["publisher_id"],
         selected_run_id=filters["run_id"],
     )
+    one_shot_options = get_my_comics_one_shot_options(
+        tracked_one_shot_ids=tracked_one_shot_ids,
+        selected_publisher_id=filters["publisher_id"],
+    )
 
     context = {
         "followed_runs": followed_runs,
         "volume_progress": volume_progress,
         "issue_progress": issue_progress,
+        "one_shot_progress": one_shot_progress,
         "run_status_choices": FollowedRun.STATUS_CHOICES,
         "issue_status_choices": IssueProgress.STATUS_CHOICES,
         "volume_status_choices": VolumeProgress.STATUS_CHOICES,
+        "one_shot_status_choices": OneShotProgress.STATUS_CHOICES,
         "status_filter_choices": FollowedRun.STATUS_CHOICES,
         "publisher_options": publisher_options,
         "run_options": run_options,
         "issue_options": issue_options,
+        "one_shot_options": one_shot_options,
         "publisher_filter_options": build_my_comics_publisher_filter_options(
             publisher_options=publisher_options,
             selected_status=filters["status"],
@@ -146,6 +182,11 @@ def my_comics(request):
             selected_run_id=filters["run_id"],
             selected_status=filters["status"],
         ),
+        "one_shot_filter_options": build_my_comics_one_shot_filter_options(
+            one_shot_options=one_shot_options,
+            selected_publisher_id=filters["publisher_id"],
+            selected_status=filters["status"],
+        ),
         "status_filter_options": build_my_comics_status_filter_options(filters),
         "all_publishers_url": build_my_comics_url(status=filters["status"]),
         "all_runs_url": build_my_comics_url(
@@ -157,10 +198,15 @@ def my_comics(request):
             run=filters["run_id"],
             status=filters["status"],
         ),
+        "all_one_shots_url": build_my_comics_url(
+            publisher=filters["publisher_id"],
+            status=filters["status"],
+        ),
         "all_statuses_url": build_my_comics_url(
             publisher=filters["publisher_id"],
             run=filters["run_id"],
             issue=filters["issue_id"],
+            one_shot=filters["one_shot_id"],
         ),
         "clear_run_url": build_my_comics_url(
             publisher=filters["publisher_id"],
@@ -171,17 +217,24 @@ def my_comics(request):
             run=filters["run_id"],
             status=filters["status"],
         ),
+        "clear_one_shot_url": build_my_comics_url(
+            publisher=filters["publisher_id"],
+            status=filters["status"],
+        ),
         "clear_status_url": build_my_comics_url(
             publisher=filters["publisher_id"],
             run=filters["run_id"],
             issue=filters["issue_id"],
+            one_shot=filters["one_shot_id"],
         ),
         "selected_publisher": selected_publisher,
         "selected_run": selected_run,
         "selected_issue": selected_issue,
+        "selected_one_shot": selected_one_shot,
         "selected_publisher_id": filters["publisher_id"],
         "selected_run_id": filters["run_id"],
         "selected_issue_id": filters["issue_id"],
+        "selected_one_shot_id": filters["one_shot_id"],
         "selected_status": filters["status"],
         "filters_active": my_comics_filters_active(filters),
         "unfollow_status_value": UNFOLLOW_STATUS_VALUE,
@@ -381,7 +434,7 @@ def set_run_status(request, run_id):
     return tracking_response(
         request,
         ok=True,
-        redirect_url=reverse("catalog:run_details", args=[run.id]),
+        redirect_url=reverse("reading:my_comics"),
         payload={
             "message": message,
             "item_type": "run",
@@ -405,7 +458,6 @@ def unfollow_run_from_status_form(request, run):
             user=request.user,
             run=run,
         ).delete()
-
         removed_issue_count = 0
 
         if remove_issues:
@@ -642,6 +694,87 @@ def remove_volume_status_from_status_form(request, volume):
     )
 
 
+@require_POST
+@signup_required
+def set_one_shot_status(request, one_shot_id):
+    one_shot = get_object_or_404(
+        ComicOneShot.objects.select_related("publisher"),
+        id=one_shot_id,
+    )
+    requested_status = get_requested_status(request, OneShotProgress.STATUS_PLANNED)
+
+    if requested_status == UNFOLLOW_STATUS_VALUE:
+        return remove_one_shot_status_from_status_form(request, one_shot)
+
+    form = OneShotProgressForm({"status": requested_status})
+
+    if not form.is_valid():
+        return invalid_tracking_status_response(
+            request,
+            error_message="Choose a valid reading status.",
+            redirect_url=reverse("catalog:one_shot_details", args=[one_shot.id]),
+        )
+
+    status = form.cleaned_data["status"]
+
+    OneShotProgress.objects.update_or_create(
+        user=request.user,
+        one_shot=one_shot,
+        defaults={
+            "status": status,
+        },
+    )
+
+    message = f"Your status for {one_shot} was saved."
+    messages.success(request, message)
+
+    return tracking_response(
+        request,
+        ok=True,
+        redirect_url=reverse("catalog:one_shot_details", args=[one_shot.id]),
+        payload={
+            "message": message,
+            "item_type": "one_shot",
+            "tracking": build_one_shot_tracking_payload(request.user, one_shot),
+        },
+    )
+
+
+@login_required
+@require_POST
+def remove_one_shot_status(request, one_shot_id):
+    one_shot = get_object_or_404(
+        ComicOneShot.objects.select_related("publisher"),
+        id=one_shot_id,
+    )
+    return remove_one_shot_status_from_status_form(request, one_shot)
+
+
+def remove_one_shot_status_from_status_form(request, one_shot):
+    deleted_count, _ = OneShotProgress.objects.filter(
+        user=request.user,
+        one_shot=one_shot,
+    ).delete()
+
+    if deleted_count:
+        message = f"Your status for {one_shot} was removed."
+        messages.success(request, message)
+    else:
+        message = f"{one_shot} did not have a saved status."
+        messages.info(request, message)
+
+    return tracking_response(
+        request,
+        ok=True,
+        redirect_url=reverse("reading:my_comics"),
+        payload={
+            "message": message,
+            "item_type": "one_shot",
+            "tracking": build_one_shot_tracking_payload(request.user, one_shot),
+        },
+    )
+
+
 def build_run_issue_status_plan(*, request, run, default_status):
     if request.POST.get("apply_to_issues") != "1":
         return []
@@ -847,6 +980,23 @@ def build_volume_tracking_payload(user, volume):
     }
 
 
+def build_one_shot_tracking_payload(user, one_shot):
+    one_shot_progress = OneShotProgress.objects.filter(
+        user=user,
+        one_shot=one_shot,
+    ).first()
+
+    return {
+        "item_type": "one_shot",
+        "action_url": reverse("reading:set_one_shot_status", args=[one_shot.id]),
+        "unfollow_url": reverse("reading:remove_one_shot_status", args=[one_shot.id]),
+        "tracked": bool(one_shot_progress),
+        "status": one_shot_progress.status if one_shot_progress else "",
+        "status_label": one_shot_progress.get_status_display() if one_shot_progress else "",
+        "status_choices": build_status_choices(OneShotProgress.STATUS_CHOICES),
+    }
+
+
 def get_run_issue_counts(user, run):
     catalog_issue_count = ComicIssue.objects.filter(
         run=run,
@@ -894,25 +1044,41 @@ def get_my_comics_filters(request):
         "publisher_id": get_int_query_param(request, "publisher"),
         "run_id": get_int_query_param(request, "run"),
         "issue_id": get_int_query_param(request, "issue"),
+        "one_shot_id": get_int_query_param(request, "one_shot"),
         "status": status,
     }
 
 
-def apply_my_comics_filters(*, followed_runs, volume_progress, issue_progress, filters):
+def apply_my_comics_filters(
+    *,
+    followed_runs,
+    volume_progress,
+    issue_progress,
+    one_shot_progress,
+    filters,
+):
     publisher_id = filters["publisher_id"]
     run_id = filters["run_id"]
     issue_id = filters["issue_id"]
+    one_shot_id = filters["one_shot_id"]
     status = filters["status"]
 
     if publisher_id:
         followed_runs = followed_runs.filter(run__publisher_id=publisher_id)
         volume_progress = volume_progress.filter(volume__publisher_id=publisher_id)
         issue_progress = issue_progress.filter(issue__run__publisher_id=publisher_id)
+        one_shot_progress = one_shot_progress.filter(one_shot__publisher_id=publisher_id)
 
-    if run_id:
+    if one_shot_id:
+        followed_runs = followed_runs.none()
+        volume_progress = volume_progress.none()
+        issue_progress = issue_progress.none()
+        one_shot_progress = one_shot_progress.filter(one_shot_id=one_shot_id)
+    elif run_id:
         followed_runs = followed_runs.filter(run_id=run_id)
         volume_progress = volume_progress.filter(volume__run_id=run_id)
         issue_progress = issue_progress.filter(issue__run_id=run_id)
+        one_shot_progress = one_shot_progress.none()
 
     if issue_id:
         followed_runs = followed_runs.filter(run__issues__id=issue_id).distinct()
@@ -920,13 +1086,15 @@ def apply_my_comics_filters(*, followed_runs, volume_progress, issue_progress, f
             volume__volume_issues__issue_id=issue_id,
         ).distinct()
         issue_progress = issue_progress.filter(issue_id=issue_id)
+        one_shot_progress = one_shot_progress.none()
 
     if status:
         followed_runs = followed_runs.filter(status=status)
         volume_progress = volume_progress.filter(status=status)
         issue_progress = issue_progress.filter(status=status)
+        one_shot_progress = one_shot_progress.filter(status=status)
 
-    return followed_runs, volume_progress, issue_progress
+    return followed_runs, volume_progress, issue_progress, one_shot_progress
 
 
 def my_comics_filters_active(filters):
@@ -934,8 +1102,49 @@ def my_comics_filters_active(filters):
         filters["publisher_id"]
         or filters["run_id"]
         or filters["issue_id"]
+        or filters["one_shot_id"]
         or filters["status"]
     )
+
+
+def get_user_tracked_publisher_ids(user):
+    publisher_ids = set(
+        FollowedRun.objects.filter(
+            user=user,
+        ).values_list(
+            "run__publisher_id",
+            flat=True,
+        )
+    )
+
+    publisher_ids.update(
+        IssueProgress.objects.filter(
+            user=user,
+        ).values_list(
+            "issue__run__publisher_id",
+            flat=True,
+        )
+    )
+
+    publisher_ids.update(
+        VolumeProgress.objects.filter(
+            user=user,
+        ).values_list(
+            "volume__publisher_id",
+            flat=True,
+        )
+    )
+
+    publisher_ids.update(
+        OneShotProgress.objects.filter(
+            user=user,
+        ).values_list(
+            "one_shot__publisher_id",
+            flat=True,
+        )
+    )
+
+    return [publisher_id for publisher_id in publisher_ids if publisher_id]
 
 
 def get_user_tracked_run_ids(user):
@@ -1014,9 +1223,20 @@ def get_user_tracked_issue_ids(user):
     return list(issue_ids)
 
 
-def get_my_comics_publisher_options(tracked_run_ids):
+def get_user_tracked_one_shot_ids(user):
+    return list(
+        OneShotProgress.objects.filter(
+            user=user,
+        ).values_list(
+            "one_shot_id",
+            flat=True,
+        )
+    )
+
+
+def get_my_comics_publisher_options(tracked_publisher_ids):
     return ComicPublisher.objects.filter(
-        runs__id__in=tracked_run_ids,
+        id__in=tracked_publisher_ids,
     ).distinct().order_by(
         "name",
     )
@@ -1059,6 +1279,24 @@ def get_my_comics_issue_options(*, tracked_issue_ids, selected_publisher_id, sel
         "-published_date",
         "run__title",
         "issue_number",
+    )
+
+
+def get_my_comics_one_shot_options(*, tracked_one_shot_ids, selected_publisher_id):
+    one_shots = ComicOneShot.objects.filter(
+        id__in=tracked_one_shot_ids,
+    ).select_related(
+        "publisher",
+    )
+
+    if selected_publisher_id:
+        one_shots = one_shots.filter(publisher_id=selected_publisher_id)
+
+    return one_shots.order_by(
+        "-published_date",
+        "-start_year",
+        "publisher__name",
+        "title",
     )
 
 
@@ -1125,6 +1363,25 @@ def build_my_comics_issue_filter_options(
     ]
 
 
+def build_my_comics_one_shot_filter_options(
+    *,
+    one_shot_options,
+    selected_publisher_id,
+    selected_status,
+):
+    return [
+        {
+            "one_shot": one_shot,
+            "url": build_my_comics_url(
+                publisher=selected_publisher_id,
+                one_shot=one_shot.id,
+                status=selected_status,
+            ),
+        }
+        for one_shot in one_shot_options
+    ]
+
+
 def build_my_comics_status_filter_options(filters):
     return [
         {
@@ -1134,6 +1391,7 @@ def build_my_comics_status_filter_options(filters):
                 publisher=filters["publisher_id"],
                 run=filters["run_id"],
                 issue=filters["issue_id"],
+                one_shot=filters["one_shot_id"],
                 status=value,
             ),
         }

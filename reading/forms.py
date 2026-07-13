@@ -1,6 +1,6 @@
 from django import forms
 
-from reading.models import FollowedRun, IssueProgress, VolumeProgress
+from reading.models import FollowedRun, IssueProgress, OneShotProgress, VolumeProgress
 
 
 class RunProgressForm(forms.Form):
@@ -28,6 +28,17 @@ class IssueProgressForm(forms.Form):
 class VolumeProgressForm(forms.Form):
     status = forms.ChoiceField(
         choices=VolumeProgress.STATUS_CHOICES,
+        widget=forms.Select(
+            attrs={
+                "class": "form-select form-select-sm",
+            }
+        ),
+    )
+
+
+class OneShotProgressForm(forms.Form):
+    status = forms.ChoiceField(
+        choices=OneShotProgress.STATUS_CHOICES,
         widget=forms.Select(
             attrs={
                 "class": "form-select form-select-sm",

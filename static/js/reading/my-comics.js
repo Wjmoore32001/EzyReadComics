@@ -107,6 +107,10 @@ document.addEventListener("DOMContentLoaded", function () {
       return "Are you sure you want to remove this volume from My Comics?";
     }
 
+    if (itemType === "one_shot") {
+      return "Are you sure you want to unfollow this one-shot?";
+    }
+
     return "Are you sure you want to unfollow this item?";
   }
 

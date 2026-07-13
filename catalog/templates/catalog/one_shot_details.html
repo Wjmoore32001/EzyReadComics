@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+
+{% block title %}{{ one_shot.title }} - EzyReadComics{% endblock %}
+
+{% block content %}
+<div class="erc-page-shell">
+    <section class="erc-hero p-4 p-lg-5">
+        <div class="erc-hero-content">
+            <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-end gap-4">
+                <div>
+                    <p class="erc-page-kicker mb-3">One-shot</p>
+                    <h1 class="erc-hero-title display-5 fw-bold mb-3">
+                        {{ one_shot.title }}
+                    </h1>
+                    <p class="erc-hero-subtitle lead mb-0">
+                        {{ one_shot.publisher.name }}
+                        {% if one_shot.published_date %}
+                            · {{ one_shot.published_date|date:"Y-m-d" }}
+                        {% elif one_shot.start_year %}
+                            · {{ one_shot.start_year }}
+                        {% endif %}
+                    </p>
+                </div>
+
+                <div class="d-flex flex-wrap gap-2 align-items-center">
+                    <a href="{% url 'catalog:browse' %}?one_shot={{ one_shot.id }}" class="btn btn-outline-secondary">
+                        Back to browse
+                    </a>
+
+                    {% if current_one_shot_progress %}
+                        <form
+                            action="{% url 'reading:set_one_shot_status' one_shot.id %}"
+                            method="post"
+                            class="erc-track-form"
+                        >
+                            {% csrf_token %}
+                            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                            <select name="status" class="form-select form-select-sm" data-auto-submit>
+                                {% for value, label in one_shot_status_choices %}
+                                    <option value="{{ value }}" {% if current_one_shot_progress.status == value %}selected{% endif %}>
+                                        {{ label }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </form>
+                    {% else %}
+                        <form
+                            action="{% url 'reading:set_one_shot_status' one_shot.id %}"
+                            method="post"
+                            class="erc-track-form"
+                        >
+                            {% csrf_token %}
+                            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                            <button type="submit" class="btn btn-outline-light">
+                                Follow
+                            </button>
+                        </form>
+                    {% endif %}
+
+                    {% if request.user.is_authenticated and request.user.is_staff %}
+                        <a href="/admin/catalog/comiconeshot/{{ one_shot.id }}/change/" class="btn btn-outline-light">
+                            Edit in admin
+                        </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="erc-info-grid">
+        <div class="erc-info-card">
+            <div class="small-muted">Publisher</div>
+            <div class="erc-info-value mt-2">{{ one_shot.publisher.name }}</div>
+        </div>
+
+        <div class="erc-info-card">
+            <div class="small-muted">Published date</div>
+            <div class="erc-info-value mt-2">
+                {% if one_shot.published_date %}
+                    {{ one_shot.published_date|date:"Y-m-d" }}
+                {% else %}
+                    <span class="erc-muted">Unknown</span>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="erc-info-card">
+            <div class="small-muted">Start year</div>
+            <div class="erc-info-value mt-2">
+                {% if one_shot.start_year %}
+                    {{ one_shot.start_year }}
+                {% else %}
+                    <span class="erc-muted">Unknown</span>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="erc-info-card">
+            <div class="small-muted">My Comics</div>
+            <div class="erc-info-value mt-2">
+                {% if current_one_shot_progress %}
+                    {{ current_one_shot_progress.get_status_display }}
+                {% else %}
+                    <span class="erc-muted">Not saved</span>
+                {% endif %}
+            </div>
+        </div>
+    </section>
+
+    {% if one_shot.description %}
+        <section class="card erc-panel">
+            <div class="card-body p-4">
+                <h2 class="h4 fw-bold mb-3 erc-section-title">Description</h2>
+                <p class="description-block mb-0">{{ one_shot.description }}</p>
+            </div>
+        </section>
+    {% endif %}
+
+    {% if default_credits %}
+        <section class="card erc-panel erc-data-card">
+            <div class="card-body">
+                <div class="erc-section-header">
+                    <h2 class="h3 fw-bold mb-0 erc-section-title">Credits</h2>
+                </div>
+
+                <div class="table-responsive">
+                    <table class="table table-dark align-middle mb-0 erc-data-table">
+                        <thead>
+                        <tr>
+                            <th scope="col">Role</th>
+                            <th scope="col">Person</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        {% for credit in default_credits %}
+                            <tr>
+                                <td>{{ credit.role.name }}</td>
+                                <td class="fw-semibold">{{ credit.person.name }}</td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                {% if all_credits|length > default_credits|length %}
+                    <details class="mt-3">
+                        <summary class="erc-muted">Show all credits</summary>
+
+                        <div class="table-responsive mt-3">
+                            <table class="table table-dark align-middle mb-0 erc-data-table">
+                                <thead>
+                                <tr>
+                                    <th scope="col">Role</th>
+                                    <th scope="col">Person</th>
+                                </tr>
+                                </thead>
+                                <tbody>
+                                {% for credit in all_credits %}
+                                    <tr>
+                                        <td>{{ credit.role.name }}</td>
+                                        <td class="fw-semibold">{{ credit.person.name }}</td>
+                                    </tr>
+                                {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </details>
+                {% endif %}
+            </div>
+        </section>
+    {% else %}
+        <section class="card erc-panel">
+            <div class="card-body p-4">
+                <h2 class="h4 fw-bold mb-3 erc-section-title">Credits</h2>
+                <p class="erc-muted mb-0">No credits have been added for this one-shot yet.</p>
+            </div>
+        </section>
+    {% endif %}
+</div>
+{% endblock %}

@@ -1,6 +1,6 @@
 from django.db import models
 
-from catalog.models.core import ComicIssue, ComicRun, ComicVolume
+from catalog.models.core import ComicIssue, ComicOneShot, ComicRun, ComicVolume
 
 
 class CreditPerson(models.Model):
@@ -90,6 +90,38 @@ class ComicIssueCredit(models.Model):
 
     def __str__(self):
         return f"{self.issue} — {self.person} ({self.role})"
+
+
+class ComicOneShotCredit(models.Model):
+    one_shot = models.ForeignKey(
+        ComicOneShot,
+        on_delete=models.CASCADE,
+        related_name="credits",
+    )
+    person = models.ForeignKey(
+        CreditPerson,
+        on_delete=models.CASCADE,
+        related_name="one_shot_credits",
+    )
+    role = models.ForeignKey(
+        CreditRole,
+        on_delete=models.PROTECT,
+        related_name="one_shot_credits",
+    )
+
+    credit_order = models.PositiveIntegerField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["one_shot", "role__display_order", "credit_order", "person__name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["one_shot", "person", "role"],
+                name="unique_comic_one_shot_person_role_credit",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.one_shot} — {self.person} ({self.role})"
 
 
 class ComicVolumeCredit(models.Model):

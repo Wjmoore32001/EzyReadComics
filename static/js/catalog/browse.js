@@ -227,6 +227,7 @@ document.addEventListener("DOMContentLoaded", function () {
             run: "run",
             issue: "issue",
             volume: "volume",
+            one_shot: "one-shot",
         };
 
         return labels[itemType] || "item";
@@ -239,6 +240,10 @@ document.addEventListener("DOMContentLoaded", function () {
 
         if (itemType === "volume") {
             return "Are you sure you want to remove this volume from My Comics?";
+        }
+
+        if (itemType === "one_shot") {
+            return "Are you sure you want to unfollow this one-shot?";
         }
 
         if (itemType === "run") {
@@ -413,12 +418,6 @@ document.addEventListener("DOMContentLoaded", function () {
             individualIssueStatusGroup.classList.toggle("d-none", !individualInput.checked);
         });
 
-        statusModalSelect.addEventListener("change", function () {
-            if (!followIssuesInput.checked) {
-                sharedIssueStatusSelect.value = statusModalSelect.value;
-            }
-        });
-
         return statusModalControls;
     }
 
@@ -436,82 +435,58 @@ document.addEventListener("DOMContentLoaded", function () {
         controls.error.classList.remove("d-none");
     }
 
-    function renderIndividualIssueStatusRows(issues, choices, defaultStatus) {
-        const controls = ensureStatusModalControls();
+    function createIndividualIssueStatusRow(issue, choices, selectedStatus) {
+        const wrapper = document.createElement("div");
+        const label = document.createElement("label");
+        const select = document.createElement("select");
 
-        clearElement(controls.individualIssueStatusList);
+        wrapper.className = "d-flex flex-column gap-1 mb-3";
+        label.className = "form-label erc-muted mb-0";
+        label.textContent = issue.label || "Issue";
+        select.className = "form-select";
+        select.dataset.issueId = String(issue.id);
+        populateSelect(select, choices, issue.status || selectedStatus || "planned");
 
-        if (!issues.length) {
-            const emptyMessage = document.createElement("p");
-
-            emptyMessage.className = "erc-muted mb-0";
-            emptyMessage.textContent = "No issues are currently in this run.";
-            controls.individualIssueStatusList.appendChild(emptyMessage);
-            return;
+        if (issue.meta) {
+            const meta = document.createElement("small");
+            meta.className = "erc-muted";
+            meta.textContent = issue.meta;
+            wrapper.appendChild(label);
+            wrapper.appendChild(meta);
+        } else {
+            wrapper.appendChild(label);
         }
 
-        issues.forEach(function (issue) {
-            const row = document.createElement("div");
-            const labelWrap = document.createElement("div");
-            const label = document.createElement("div");
-            const meta = document.createElement("div");
-            const select = document.createElement("select");
-            const selectedStatus = issue.status || defaultStatus;
+        wrapper.appendChild(select);
 
-            row.className = "d-flex flex-column flex-md-row gap-2 justify-content-between align-items-md-center py-2 border-top border-secondary";
-            labelWrap.className = "me-md-3";
-            label.className = "fw-semibold";
-            label.textContent = issue.label || `Issue ${issue.id}`;
-            meta.className = "erc-muted small";
-            meta.textContent = issue.meta || "";
-            select.className = "form-select form-select-sm";
-            select.name = `issue_status_${issue.id}`;
-            select.dataset.issueId = issue.id;
-
-            populateSelect(select, choices, selectedStatus);
-
-            labelWrap.appendChild(label);
-            labelWrap.appendChild(meta);
-            row.appendChild(labelWrap);
-            row.appendChild(select);
-            controls.individualIssueStatusList.appendChild(row);
-        });
+        return wrapper;
     }
 
     function resetRunModalControls(options) {
         const controls = ensureStatusModalControls();
-        const issues = options && options.issues ? options.issues : [];
-        const issueChoices = options && options.issue_status_choices ? options.issue_status_choices : optionObjectsFromSelect(statusModalSelect);
+        const isRun = statusModalContext && statusModalContext.itemType === "run";
+        const issueChoices = options.issueStatusChoices || optionObjectsFromSelect(statusModalSelect);
+        const selectedStatus = statusModalSelect ? statusModalSelect.value : "planned";
+        const issues = options.issues || [];
 
-        controls.runOptions.classList.add("d-none");
+        controls.runOptions.classList.toggle("d-none", !isRun);
         controls.followIssuesInput.checked = false;
-        controls.followIssuesInput.disabled = false;
         controls.followIssuesSettings.classList.add("d-none");
         controls.individualInput.checked = false;
         controls.sharedIssueStatusGroup.classList.remove("d-none");
         controls.individualIssueStatusGroup.classList.add("d-none");
+        populateSelect(controls.sharedIssueStatusSelect, issueChoices, selectedStatus);
+        clearElement(controls.individualIssueStatusList);
 
-        populateSelect(controls.sharedIssueStatusSelect, issueChoices, statusModalSelect.value);
-        renderIndividualIssueStatusRows(issues, issueChoices, statusModalSelect.value);
-
-        if (statusModalContext && statusModalContext.itemType === "run") {
-            controls.runOptions.classList.remove("d-none");
-
-            if (!issues.length) {
-                controls.followIssuesInput.disabled = true;
-            }
-        }
+        issues.forEach(function (issue) {
+            controls.individualIssueStatusList.appendChild(
+                createIndividualIssueStatusRow(issue, issueChoices, selectedStatus),
+            );
+        });
     }
 
     function buildStatusModalResult() {
         const controls = ensureStatusModalControls();
-
-        if (!statusModalContext || statusModalContext.itemType !== "run") {
-            return {
-                status: statusModalSelect.value,
-            };
-        }
-
         const individualIssueStatuses = [];
 
         controls.individualIssueStatusList.querySelectorAll("select[data-issue-id]").forEach(function (select) {
@@ -838,6 +813,23 @@ document.addEventListener("DOMContentLoaded", function () {
         return row;
     }
 
+    function createOneShotRow(item) {
+        const row = createClickableRow(item);
+
+        addCell(row, item.title, {
+            bold: true,
+            linkLike: true,
+            href: item.row_url,
+        });
+        addCell(row, item.publisher);
+        addCell(row, item.published_date, {
+            muted: item.published_date_muted,
+        });
+        row.appendChild(createTrackingCell(item.tracking));
+
+        return row;
+    }
+
     function createRow(kind, item) {
         if (kind === "runs") {
             return createRunRow(item);
@@ -847,7 +839,11 @@ document.addEventListener("DOMContentLoaded", function () {
             return createVolumeRow(item);
         }
 
-        return createIssueRow(item);
+        if (kind === "issues") {
+            return createIssueRow(item);
+        }
+
+        return createOneShotRow(item);
     }
 
     function updateSectionControls(section) {
@@ -896,6 +892,10 @@ document.addEventListener("DOMContentLoaded", function () {
 
         if (button.dataset.filterVolumeId) {
             url.searchParams.set("volume", button.dataset.filterVolumeId);
+        }
+
+        if (button.dataset.filterOneShotId) {
+            url.searchParams.set("one_shot", button.dataset.filterOneShotId);
         }
 
         return url;
@@ -976,157 +976,174 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     async function fetchRunFollowOptions(form) {
-        const response = await fetch(runFollowOptionsUrl(form.action).toString(), {
+        const response = await fetch(runFollowOptionsUrl(form.action), {
             headers: {
                 "X-Requested-With": "XMLHttpRequest",
             },
         });
 
-        const data = await response.json();
-
-        if (response.status === 401 && data && data.redirect_url) {
-            window.location.href = data.redirect_url;
-            return null;
+        if (!response.ok) {
+            throw new Error("Could not load run issue options.");
         }
 
-        if (!response.ok || !data || data.ok === false) {
-            throw new Error("Could not load the issues for this run.");
-        }
-
-        return data;
+        return response.json();
     }
 
-    async function maybeHandleRunReadOffer(offer) {
-        if (!offer || !offer.action_url || !offer.message) {
-            return;
-        }
+    function setRunIssueFormData(formData, modalResult) {
+        formData.set("apply_to_issues", modalResult.followIssues ? "1" : "");
 
-        const confirmed = window.confirm(offer.message);
-
-        if (!confirmed) {
-            return;
-        }
-
-        const formData = new FormData();
-
-        formData.set("csrfmiddlewaretoken", getCsrfToken());
-        formData.set("next", currentNextValue());
-        formData.set("status", "read");
-
-        const data = await postTrackingForm(offer.action_url, formData);
-
-        if (data && data.tracking) {
-            replaceMatchingTrackingCells(offer.action_url, data.tracking);
-        }
-    }
-
-    function addRunFollowFieldsToFormData(formData, selectedStatus) {
-        if (!selectedStatus.followIssues) {
-            formData.set("apply_to_issues", "");
+        if (!modalResult.followIssues) {
             formData.set("issue_status", "");
             formData.set("issue_status_mode", "");
             return;
         }
 
-        formData.set("apply_to_issues", "1");
-        formData.set("issue_status_mode", selectedStatus.issueStatusMode);
+        formData.set("issue_status_mode", modalResult.issueStatusMode || "single");
 
-        if (selectedStatus.issueStatusMode === "individual") {
+        if (modalResult.issueStatusMode === "individual") {
             formData.set("issue_status", "");
 
-            selectedStatus.individualIssueStatuses.forEach(function (issueStatus) {
+            (modalResult.individualIssueStatuses || []).forEach(function (issueStatus) {
                 formData.set(`issue_status_${issueStatus.issueId}`, issueStatus.status);
             });
+        } else {
+            formData.set("issue_status", modalResult.issueStatus || modalResult.status);
+        }
+    }
+
+    function selectCurrentValue(select) {
+        const defaultOption = Array.from(select.options).find(function (option) {
+            return option.defaultSelected;
+        });
+
+        if (defaultOption) {
+            select.value = defaultOption.value;
+        }
+    }
+
+    async function handleTrackedStatusSubmit(form, select, event) {
+        const currentStatus = form.dataset.currentStatus || "";
+
+        if (!select || select.value === currentStatus) {
+            event.preventDefault();
+            return;
+        }
+
+        if (select.value === unfollowStatusValue) {
+            const confirmed = window.confirm(unfollowPrompt(form.dataset.itemType || ""));
+
+            if (!confirmed) {
+                event.preventDefault();
+                selectCurrentValue(select);
+                return;
+            }
+
+            if (form.dataset.itemType === "run") {
+                const trackedIssues = getCountFromDataset(form, "trackedIssueCount");
+
+                if (trackedIssues > 0) {
+                    const removeIssues = window.confirm(
+                        `Also unfollow the ${trackedIssues} saved ${issueLabel(trackedIssues)} from this run?`,
+                    );
+
+                    if (removeIssues) {
+                        const removeInput = form.querySelector("input[name='remove_issues']");
+
+                        if (removeInput) {
+                            removeInput.value = "1";
+                        }
+                    }
+                }
+            }
 
             return;
         }
 
-        formData.set("issue_status", selectedStatus.issueStatus || selectedStatus.status);
+        if (form.dataset.itemType === "run") {
+            const totalIssues = getCountFromDataset(form, "runIssueCount");
+            const trackedIssues = getCountFromDataset(form, "trackedIssueCount");
+            const message = applyStatusMessage(select.value, totalIssues, trackedIssues);
+            const applyInput = form.querySelector("input[name='apply_to_issues']");
+
+            if (applyInput) {
+                applyInput.value = "";
+            }
+
+            if (message && window.confirm(message) && applyInput) {
+                applyInput.value = "1";
+            }
+        }
     }
 
-    async function buildTrackingFormData(form) {
-        const formData = new FormData(form);
-        const itemType = form.dataset.itemType;
-        const select = form.querySelector("select[name='status']");
-        const currentStatus = form.dataset.currentStatus || "";
-        const totalIssues = getCountFromDataset(form, "runIssueCount");
-        const trackedIssues = getCountFromDataset(form, "trackedIssueCount");
+    async function handleFollowSubmit(form, event) {
+        event.preventDefault();
 
-        formData.set("next", currentNextValue());
+        const itemType = form.dataset.itemType || "item";
+        const submitter = event.submitter || form.querySelector("button[type='submit']");
+        const originalButtonText = submitter ? submitter.textContent : "";
+        let runOptions = null;
 
-        if (form.dataset.trackFollow !== undefined) {
-            let followOptions = {};
+        if (submitter) {
+            submitter.disabled = true;
+            submitter.textContent = "Loading...";
+        }
+
+        try {
+            if (itemType === "run") {
+                const followOptions = await fetchRunFollowOptions(form);
+
+                runOptions = {
+                    issues: followOptions.issues || [],
+                    issueStatusChoices: followOptions.issue_status_choices || [],
+                };
+            }
+
+            const modalResult = await openStatusModal(itemType, runOptions || {});
+
+            if (!modalResult) {
+                return;
+            }
+
+            const formData = new FormData(form);
+
+            formData.set("status", modalResult.status || "planned");
 
             if (itemType === "run") {
-                try {
-                    followOptions = await fetchRunFollowOptions(form);
-                } catch (error) {
-                    followOptions = {
-                        error: error.message || "Could not load the issues for this run.",
-                        issues: [],
-                    };
-                }
+                setRunIssueFormData(formData, modalResult);
             }
 
-            const selectedStatus = await openStatusModal(itemType, followOptions || {});
-
-            if (!selectedStatus) {
-                return null;
+            if (submitter) {
+                submitter.textContent = "Saving...";
             }
 
-            formData.set("status", selectedStatus.status);
+            const data = await postTrackingForm(form.action, formData);
 
+            if (!data) {
+                return;
+            }
+
+            if (data.tracking) {
+                replaceMatchingTrackingCells(form.action, data.tracking);
+            }
+        } catch (error) {
             if (itemType === "run") {
-                addRunFollowFieldsToFormData(formData, selectedStatus);
-            }
+                const modalResult = await openStatusModal(itemType, {
+                    ...(runOptions || {}),
+                    error: error.message,
+                });
 
-            return formData;
-        }
-
-        if (!select) {
-            return formData;
-        }
-
-        if (select.value === currentStatus) {
-            return null;
-        }
-
-        if (select.value === unfollowStatusValue) {
-            const confirmed = window.confirm(unfollowPrompt(itemType));
-
-            if (!confirmed) {
-                select.value = currentStatus;
-                return null;
-            }
-
-            if (itemType === "run" && trackedIssues > 0) {
-                const removeIssues = window.confirm(
-                    `Also unfollow the ${trackedIssues} saved ${issueLabel(trackedIssues)} from this run?`
-                );
-
-                if (removeIssues) {
-                    formData.set("remove_issues", "1");
-                } else {
-                    formData.set("remove_issues", "");
+                if (!modalResult) {
+                    return;
                 }
-            }
-
-            formData.set("status", unfollowStatusValue);
-            return formData;
-        }
-
-        if (itemType === "run") {
-            const message = applyStatusMessage(select.value, totalIssues, trackedIssues);
-
-            if (message && window.confirm(message)) {
-                formData.set("apply_to_issues", "1");
             } else {
-                formData.set("apply_to_issues", "");
+                window.alert(error.message);
+            }
+        } finally {
+            if (submitter && document.body.contains(submitter)) {
+                submitter.disabled = false;
+                submitter.textContent = originalButtonText;
             }
         }
-
-        formData.set("status", select.value);
-        return formData;
     }
 
     function bindTrackingForm(form) {
@@ -1137,119 +1154,97 @@ document.addEventListener("DOMContentLoaded", function () {
         form.dataset.trackingBound = "1";
 
         form.addEventListener("submit", async function (event) {
-            event.preventDefault();
+            const select = form.querySelector("select[name='status']");
 
-            if (form.dataset.submitting === "1") {
+            if (form.dataset.trackFollow !== undefined) {
+                await handleFollowSubmit(form, event);
                 return;
             }
 
-            form.dataset.submitting = "1";
-            setFormDisabled(form, true);
-
-            try {
-                const formData = await buildTrackingFormData(form);
-
-                if (!formData) {
-                    setFormDisabled(form, false);
-                    form.dataset.submitting = "";
-                    return;
-                }
-
-                const data = await postTrackingForm(form.action, formData);
-
-                if (!data) {
-                    return;
-                }
-
-                if (data.tracking) {
-                    replaceTrackingCellForForm(form, data.tracking);
-                }
-
-                await maybeHandleRunReadOffer(data.run_read_offer);
-            } catch (error) {
-                if (form.dataset.trackFollow !== undefined) {
-                    showStatusModalError(error.message || "Could not save tracking status.");
-                    statusModal.show();
-                } else {
-                    window.alert(error.message || "Could not save tracking status.");
-                }
-
-                setFormDisabled(form, false);
-            } finally {
-                form.dataset.submitting = "";
+            if (select) {
+                await handleTrackedStatusSubmit(form, select, event);
             }
         });
     }
 
-    document.querySelectorAll("[data-auto-submit]").forEach(bindAutoSubmitSelect);
     document.querySelectorAll("[data-tracking-form]").forEach(bindTrackingForm);
 
-    document.querySelectorAll("[data-load-more]").forEach(function (button) {
-        button.addEventListener("click", function () {
-            const section = button.closest("[data-load-section]");
-            const target = section.querySelector("[data-load-target]");
-            const originalText = button.textContent;
-            const url = buildItemsUrl(button);
+    document.querySelectorAll("[data-auto-submit]").forEach(function (select) {
+        bindAutoSubmitSelect(select);
+    });
 
-            button.disabled = true;
-            button.textContent = "Loading...";
+    document.querySelectorAll(".clickable-row").forEach(bindClickableRow);
 
-            fetch(url.toString(), {
+    document.addEventListener("click", function (event) {
+        const loadButton = event.target.closest("[data-load-more]");
+
+        if (loadButton) {
+            const section = loadButton.closest("[data-load-section]");
+            const target = section ? section.querySelector("[data-load-target]") : null;
+
+            if (!section || !target) {
+                return;
+            }
+
+            loadButton.disabled = true;
+
+            fetch(buildItemsUrl(loadButton).toString(), {
                 headers: {
                     "X-Requested-With": "XMLHttpRequest",
                 },
             })
                 .then(function (response) {
                     if (!response.ok) {
-                        throw new Error("Load more request failed.");
+                        throw new Error("Could not load more rows.");
                     }
 
                     return response.json();
                 })
                 .then(function (data) {
-                    const items = data.items || [];
-
-                    items.forEach(function (item) {
-                        target.appendChild(createRow(button.dataset.kind, item));
+                    (data.items || []).forEach(function (item) {
+                        target.appendChild(createRow(loadButton.dataset.kind, item));
                     });
 
-                    button.disabled = false;
-                    button.textContent = originalText;
-                    button.classList.toggle("d-none", !data.has_more || items.length === 0);
-
+                    loadButton.classList.toggle("d-none", !data.has_more);
                     updateSectionControls(section);
                 })
-                .catch(function () {
-                    button.disabled = false;
-                    button.textContent = "Could not load more. Try again.";
+                .catch(function (error) {
+                    window.alert(error.message);
+                })
+                .finally(function () {
+                    loadButton.disabled = false;
                 });
-        });
-    });
 
-    document.querySelectorAll("[data-hide-more]").forEach(function (button) {
-        button.addEventListener("click", function () {
-            const section = button.closest("[data-load-section]");
-            const target = section.querySelector("[data-load-target]");
-            const loadButton = section.querySelector("[data-load-more]");
-            const minVisible = Number(button.dataset.minVisible || "5");
-            const hideCount = Number(button.dataset.hideCount || "10");
-            const rows = Array.from(target.querySelectorAll("tr"));
-            const removableCount = Math.min(hideCount, Math.max(rows.length - minVisible, 0));
+            return;
+        }
 
-            for (let index = 0; index < removableCount; index += 1) {
-                rows[rows.length - 1 - index].remove();
+        const hideButton = event.target.closest("[data-hide-more]");
+
+        if (hideButton) {
+            const section = hideButton.closest("[data-load-section]");
+            const target = section ? section.querySelector("[data-load-target]") : null;
+
+            if (!section || !target) {
+                return;
             }
+
+            const rows = Array.from(target.querySelectorAll("tr"));
+            const minVisible = Number(hideButton.dataset.minVisible || "5");
+            const hideCount = Number(hideButton.dataset.hideCount || "10");
+            const removableCount = Math.max(rows.length - minVisible, 0);
+            const countToRemove = Math.min(removableCount, hideCount);
+
+            rows.slice(rows.length - countToRemove).forEach(function (row) {
+                row.remove();
+            });
+
+            const loadButton = section.querySelector("[data-load-more]");
 
             if (loadButton) {
                 loadButton.classList.remove("d-none");
-                loadButton.disabled = false;
             }
 
             updateSectionControls(section);
-        });
-    });
-
-    document.querySelectorAll("[data-load-section]").forEach(function (section) {
-        updateSectionControls(section);
+        }
     });
 });

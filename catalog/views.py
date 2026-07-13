@@ -8,12 +8,14 @@ from django.urls import reverse
 from catalog.models import (
     ComicIssue,
     ComicIssueCredit,
+    ComicOneShot,
+    ComicOneShotCredit,
     ComicPublisher,
     ComicRun,
     ComicVolume,
     ComicVolumeIssue,
 )
-from reading.models import FollowedRun, IssueProgress, VolumeProgress
+from reading.models import FollowedRun, IssueProgress, OneShotProgress, VolumeProgress
 
 
 BROWSE_INITIAL_RESULT_LIMIT = 5
@@ -27,6 +29,7 @@ def home(request):
         "run_count": ComicRun.objects.count(),
         "issue_count": ComicIssue.objects.count(),
         "volume_count": ComicVolume.objects.count(),
+        "one_shot_count": ComicOneShot.objects.count(),
         "recent_runs": ComicRun.objects.select_related("publisher").order_by(
             "-updated_at",
             "publisher__name",
@@ -51,17 +54,25 @@ def home(request):
 
 
 def browse(request):
-    selected_publisher, selected_run, selected_issue, selected_volume = resolve_browse_selection(
+    (
+        selected_publisher,
+        selected_run,
+        selected_issue,
+        selected_volume,
+        selected_one_shot,
+    ) = resolve_browse_selection(
         publisher_id=get_int_query_param(request, "publisher"),
         run_id=get_int_query_param(request, "run"),
         issue_id=get_int_query_param(request, "issue"),
         volume_id=get_int_query_param(request, "volume"),
+        one_shot_id=get_int_query_param(request, "one_shot"),
     )
 
     selected_publisher_id = selected_publisher.id if selected_publisher else None
     selected_run_id = selected_run.id if selected_run else None
     selected_issue_id = selected_issue.id if selected_issue else None
     selected_volume_id = selected_volume.id if selected_volume else None
+    selected_one_shot_id = selected_one_shot.id if selected_one_shot else None
 
     publishers = list(get_publisher_options(""))
     run_options = list(
@@ -84,12 +95,19 @@ def browse(request):
             run_id=selected_run_id,
         )
     )
+    one_shot_options = list(
+        get_one_shot_options(
+            "",
+            publisher_id=selected_publisher_id,
+        )
+    )
 
-    runs_queryset, volumes_queryset, issues_queryset = get_browse_querysets(
+    runs_queryset, volumes_queryset, issues_queryset, one_shots_queryset = get_browse_querysets(
         selected_publisher=selected_publisher,
         selected_run=selected_run,
         selected_issue=selected_issue,
         selected_volume=selected_volume,
+        selected_one_shot=selected_one_shot,
     )
 
     runs, has_more_runs = slice_with_has_more(
@@ -104,17 +122,23 @@ def browse(request):
         issues_queryset,
         limit=BROWSE_INITIAL_RESULT_LIMIT,
     )
+    one_shot_list, has_more_one_shots = slice_with_has_more(
+        one_shots_queryset,
+        limit=BROWSE_INITIAL_RESULT_LIMIT,
+    )
 
     attach_issue_credit_display(issue_list)
     attach_run_tracking(request, runs)
     attach_volume_tracking(request, volumes)
     attach_issue_tracking(request, issue_list)
+    attach_one_shot_tracking(request, one_shot_list)
 
     selected_items = build_selected_items(
         selected_publisher=selected_publisher,
         selected_run=selected_run,
         selected_issue=selected_issue,
         selected_volume=selected_volume,
+        selected_one_shot=selected_one_shot,
     )
 
     context = {
@@ -122,31 +146,38 @@ def browse(request):
         "run_options": run_options,
         "issue_options": issue_options,
         "volume_options": volume_options,
+        "one_shot_options": one_shot_options,
         "runs": runs,
         "volumes": volumes,
         "issues": issue_list,
+        "one_shots": one_shot_list,
         "has_more_runs": has_more_runs,
         "has_more_volumes": has_more_volumes,
         "has_more_issues": has_more_issues,
+        "has_more_one_shots": has_more_one_shots,
         "selected_publisher": selected_publisher,
         "selected_run": selected_run,
         "selected_issue": selected_issue,
         "selected_volume": selected_volume,
+        "selected_one_shot": selected_one_shot,
         "selected_publisher_id": selected_publisher_id,
         "selected_run_id": selected_run_id,
         "selected_issue_id": selected_issue_id,
         "selected_volume_id": selected_volume_id,
+        "selected_one_shot_id": selected_one_shot_id,
         "selected_items": selected_items,
         "catalog_publisher_count": ComicPublisher.objects.count(),
         "catalog_run_count": ComicRun.objects.count(),
         "catalog_volume_count": ComicVolume.objects.count(),
         "catalog_issue_count": ComicIssue.objects.count(),
+        "catalog_one_shot_count": ComicOneShot.objects.count(),
         "browse_initial_limit": BROWSE_INITIAL_RESULT_LIMIT,
         "browse_load_more_limit": BROWSE_LOAD_MORE_LIMIT,
         "browse_option_limit": BROWSE_OPTION_LIMIT,
         "run_status_choices": FollowedRun.STATUS_CHOICES,
         "issue_status_choices": IssueProgress.STATUS_CHOICES,
         "volume_status_choices": VolumeProgress.STATUS_CHOICES,
+        "one_shot_status_choices": OneShotProgress.STATUS_CHOICES,
     }
 
     return render(request, "catalog/browse.html", context)
@@ -190,6 +221,14 @@ def browse_options(request):
                 run_id=selected_run_id,
             )
         ]
+    elif option_kind == "one_shot":
+        options = [
+            build_one_shot_option(one_shot, selected_option_id)
+            for one_shot in get_one_shot_options(
+                search_value,
+                publisher_id=selected_publisher_id,
+            )
+        ]
     else:
         return JsonResponse({"options": []}, status=400)
 
@@ -200,18 +239,26 @@ def browse_items(request):
     item_kind = (request.GET.get("kind") or "").strip()
     offset = get_nonnegative_int_query_param(request, "offset")
 
-    selected_publisher, selected_run, selected_issue, selected_volume = resolve_browse_selection(
+    (
+        selected_publisher,
+        selected_run,
+        selected_issue,
+        selected_volume,
+        selected_one_shot,
+    ) = resolve_browse_selection(
         publisher_id=get_int_query_param(request, "publisher"),
         run_id=get_int_query_param(request, "run"),
         issue_id=get_int_query_param(request, "issue"),
         volume_id=get_int_query_param(request, "volume"),
+        one_shot_id=get_int_query_param(request, "one_shot"),
     )
 
-    runs_queryset, volumes_queryset, issues_queryset = get_browse_querysets(
+    runs_queryset, volumes_queryset, issues_queryset, one_shots_queryset = get_browse_querysets(
         selected_publisher=selected_publisher,
         selected_run=selected_run,
         selected_issue=selected_issue,
         selected_volume=selected_volume,
+        selected_one_shot=selected_one_shot,
     )
 
     if item_kind == "runs":
@@ -239,6 +286,14 @@ def browse_items(request):
         attach_issue_credit_display(rows)
         attach_issue_tracking(request, rows)
         items = [build_issue_row_item(issue) for issue in rows]
+    elif item_kind == "one_shots":
+        rows, has_more = slice_with_has_more(
+            one_shots_queryset,
+            limit=BROWSE_LOAD_MORE_LIMIT,
+            offset=offset,
+        )
+        attach_one_shot_tracking(request, rows)
+        items = [build_one_shot_row_item(one_shot) for one_shot in rows]
     else:
         return JsonResponse({"items": [], "has_more": False}, status=400)
 
@@ -425,6 +480,33 @@ def volume_details(request, pk):
     return render(request, "catalog/volume_details.html", context)
 
 
+def one_shot_details(request, pk):
+    one_shot = get_object_or_404(
+        ComicOneShot.objects.select_related("publisher").prefetch_related(
+            "credits__person",
+            "credits__role",
+        ),
+        pk=pk,
+    )
+
+    attach_one_shot_tracking(request, [one_shot])
+
+    default_credits = one_shot.credits.select_related("person", "role").filter(
+        role__show_by_default=True,
+    )
+    all_credits = one_shot.credits.select_related("person", "role")
+
+    context = {
+        "one_shot": one_shot,
+        "default_credits": default_credits,
+        "all_credits": all_credits,
+        "current_one_shot_progress": one_shot.user_tracking,
+        "one_shot_status_choices": OneShotProgress.STATUS_CHOICES,
+    }
+
+    return render(request, "catalog/one_shot_details.html", context)
+
+
 def build_volume_issue_groups(*, volume_issues, volume_run_links):
     groups = []
     groups_by_run_id = {}
@@ -463,13 +545,20 @@ def build_volume_issue_groups(*, volume_issues, volume_run_links):
     return groups
 
 
-def resolve_browse_selection(*, publisher_id, run_id, issue_id, volume_id):
+def resolve_browse_selection(*, publisher_id, run_id, issue_id, volume_id, one_shot_id):
     selected_publisher = None
     selected_run = None
     selected_issue = None
     selected_volume = None
+    selected_one_shot = None
 
-    if issue_id:
+    if one_shot_id:
+        selected_one_shot = get_object_or_404(
+            ComicOneShot.objects.select_related("publisher"),
+            id=one_shot_id,
+        )
+        selected_publisher = selected_one_shot.publisher
+    elif issue_id:
         selected_issue = get_object_or_404(
             ComicIssue.objects.select_related("run", "run__publisher"),
             id=issue_id,
@@ -495,10 +584,17 @@ def resolve_browse_selection(*, publisher_id, run_id, issue_id, volume_id):
             id=publisher_id,
         )
 
-    return selected_publisher, selected_run, selected_issue, selected_volume
+    return selected_publisher, selected_run, selected_issue, selected_volume, selected_one_shot
 
 
-def get_browse_querysets(*, selected_publisher, selected_run, selected_issue, selected_volume):
+def get_browse_querysets(
+    *,
+    selected_publisher,
+    selected_run,
+    selected_issue,
+    selected_volume,
+    selected_one_shot,
+):
     runs = ComicRun.objects.select_related("publisher").order_by(
         "-start_year",
         "-first_issue_date",
@@ -523,25 +619,42 @@ def get_browse_querysets(*, selected_publisher, selected_run, selected_issue, se
         "run__title",
         "issue_number",
     )
+    one_shots = ComicOneShot.objects.select_related("publisher").prefetch_related(
+        one_shot_credit_prefetch(),
+    ).order_by(
+        "-published_date",
+        "-start_year",
+        "publisher__name",
+        "title",
+    )
 
-    if selected_issue:
+    if selected_one_shot:
+        runs = runs.none()
+        volumes = volumes.none()
+        issues = issues.none()
+        one_shots = one_shots.filter(id=selected_one_shot.id)
+    elif selected_issue:
         runs = runs.filter(id=selected_issue.run_id)
         volumes = volumes.filter(volume_issues__issue=selected_issue).distinct()
         issues = issues.filter(id=selected_issue.id)
+        one_shots = one_shots.none()
     elif selected_volume:
         runs = runs.filter(id=selected_volume.run_id)
         volumes = volumes.filter(id=selected_volume.id)
         issues = issues.filter(collected_in__volume=selected_volume).distinct()
+        one_shots = one_shots.none()
     elif selected_run:
         runs = runs.filter(id=selected_run.id)
         volumes = volumes.filter(run=selected_run)
         issues = issues.filter(run=selected_run)
+        one_shots = one_shots.none()
     elif selected_publisher:
         runs = runs.filter(publisher=selected_publisher)
         volumes = volumes.filter(publisher=selected_publisher)
         issues = issues.filter(run__publisher=selected_publisher)
+        one_shots = one_shots.filter(publisher=selected_publisher)
 
-    return runs, volumes, issues
+    return runs, volumes, issues, one_shots
 
 
 def slice_with_has_more(queryset, *, limit, offset=0):
@@ -553,6 +666,7 @@ def get_publisher_options(search_value):
     publishers = ComicPublisher.objects.annotate(
         run_total=Count("runs", distinct=True),
         volume_total=Count("volumes", distinct=True),
+        one_shot_total=Count("one_shots", distinct=True),
     )
 
     if search_value:
@@ -708,10 +822,49 @@ def get_volume_options(search_value, *, publisher_id=None, run_id=None):
     return volumes[:BROWSE_OPTION_LIMIT]
 
 
+def get_one_shot_options(search_value, *, publisher_id=None):
+    one_shots = ComicOneShot.objects.select_related("publisher")
+
+    if publisher_id:
+        one_shots = one_shots.filter(publisher_id=publisher_id)
+
+    if search_value:
+        one_shots = one_shots.filter(
+            Q(title__icontains=search_value)
+            | Q(start_year__icontains=search_value)
+            | Q(publisher__name__icontains=search_value)
+        ).annotate(
+            search_rank=Case(
+                When(title__iexact=search_value, then=Value(0)),
+                When(title__istartswith=search_value, then=Value(1)),
+                When(publisher__name__istartswith=search_value, then=Value(2)),
+                When(title__icontains=search_value, then=Value(3)),
+                default=Value(4),
+                output_field=IntegerField(),
+            )
+        ).order_by(
+            "search_rank",
+            "-published_date",
+            "-start_year",
+            "publisher__name",
+            "title",
+        )
+    else:
+        one_shots = one_shots.order_by(
+            "-published_date",
+            "-start_year",
+            "publisher__name",
+            "title",
+        )
+
+    return one_shots[:BROWSE_OPTION_LIMIT]
+
+
 def build_publisher_option(publisher, selected_option_id):
     meta_parts = [
         f"{publisher.run_total} runs",
         f"{publisher.volume_total} volumes",
+        f"{publisher.one_shot_total} one-shots",
     ]
 
     return {
@@ -774,6 +927,22 @@ def build_volume_option(volume, selected_option_id):
             f"{volume.volume_number} {volume.publisher.name}"
         ),
         "active": volume.id == selected_option_id,
+    }
+
+
+def build_one_shot_option(one_shot, selected_option_id):
+    meta_parts = [
+        one_shot.publisher.name,
+        format_date_or_unknown(one_shot.published_date),
+    ]
+
+    return {
+        "id": one_shot.id,
+        "url": browse_url_with_params(one_shot=one_shot.id),
+        "label": one_shot.title,
+        "meta": " · ".join(meta_parts),
+        "search_label": f"{one_shot.title} {one_shot.start_year} {one_shot.publisher.name}",
+        "active": one_shot.id == selected_option_id,
     }
 
 
@@ -848,6 +1017,25 @@ def build_issue_row_item(issue):
             action_url=reverse("reading:set_issue_status", args=[issue.id]),
             progress=issue.user_tracking,
             status_choices=IssueProgress.STATUS_CHOICES,
+        ),
+    }
+
+
+def build_one_shot_row_item(one_shot):
+    return {
+        "row_url": reverse("catalog:one_shot_details", args=[one_shot.id]),
+        "aria_label": f"Open one-shot details for {one_shot.title}",
+        "title": one_shot.title,
+        "publisher": one_shot.publisher.name,
+        "published_date": format_date_or_unknown(one_shot.published_date),
+        "published_date_muted": not bool(one_shot.published_date),
+        "start_year": one_shot.start_year or "Unknown",
+        "start_year_muted": not bool(one_shot.start_year),
+        "tracking": build_tracking_data(
+            item_type="one_shot",
+            action_url=reverse("reading:set_one_shot_status", args=[one_shot.id]),
+            progress=one_shot.user_tracking,
+            status_choices=OneShotProgress.STATUS_CHOICES,
         ),
     }
 
@@ -965,6 +1153,26 @@ def attach_volume_tracking(request, volumes):
         volume.user_tracking = progress_by_volume_id.get(volume.id)
 
 
+def attach_one_shot_tracking(request, one_shots):
+    one_shot_ids = [one_shot.id for one_shot in one_shots]
+
+    if not request.user.is_authenticated or not one_shot_ids:
+        for one_shot in one_shots:
+            one_shot.user_tracking = None
+        return
+
+    progress_by_one_shot_id = {
+        progress.one_shot_id: progress
+        for progress in OneShotProgress.objects.filter(
+            user=request.user,
+            one_shot_id__in=one_shot_ids,
+        )
+    }
+
+    for one_shot in one_shots:
+        one_shot.user_tracking = progress_by_one_shot_id.get(one_shot.id)
+
+
 def format_date_or_unknown(value):
     if not value:
         return "Unknown"
@@ -989,6 +1197,17 @@ def issue_credit_prefetch():
     return Prefetch(
         "credits",
         queryset=ComicIssueCredit.objects.select_related("person", "role").order_by(
+            "role__display_order",
+            "credit_order",
+            "person__name",
+        ),
+    )
+
+
+def one_shot_credit_prefetch():
+    return Prefetch(
+        "credits",
+        queryset=ComicOneShotCredit.objects.select_related("person", "role").order_by(
             "role__display_order",
             "credit_order",
             "person__name",
@@ -1072,7 +1291,14 @@ def get_nonnegative_int_query_param(request, name):
     return max(value, 0)
 
 
-def build_selected_items(*, selected_publisher, selected_run, selected_issue, selected_volume):
+def build_selected_items(
+    *,
+    selected_publisher,
+    selected_run,
+    selected_issue,
+    selected_volume,
+    selected_one_shot,
+):
     selected_items = []
 
     if selected_publisher:
@@ -1104,6 +1330,14 @@ def build_selected_items(*, selected_publisher, selected_run, selected_issue, se
             {
                 "label": "Volume",
                 "value": str(selected_volume),
+            }
+        )
+
+    if selected_one_shot:
+        selected_items.append(
+            {
+                "label": "One-shot",
+                "value": selected_one_shot.title,
             }
         )
 

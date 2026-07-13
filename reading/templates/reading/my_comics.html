@@ -14,7 +14,7 @@
                         My Comics
                     </h1>
                     <p class="erc-hero-subtitle lead mb-0">
-                        Follow runs, save volumes, and track issue progress.
+                        Follow runs, save volumes, track one-shots, and track issue progress.
                     </p>
                 </div>
 
@@ -36,6 +36,11 @@
         <div class="erc-home-stat">
             <div class="erc-home-stat-value">{{ volume_progress|length }}</div>
             <div class="erc-muted mt-2">Volumes</div>
+        </div>
+
+        <div class="erc-home-stat">
+            <div class="erc-home-stat-value">{{ one_shot_progress|length }}</div>
+            <div class="erc-muted mt-2">One-shots</div>
         </div>
 
         <div class="erc-home-stat">
@@ -68,7 +73,7 @@
             </div>
 
             <div class="row g-3 align-items-end">
-                <div class="col-12 col-xl-3">
+                <div class="col-12 col-lg-6 col-xxl">
                     <label class="form-label erc-muted" for="my-comics-publisher-search">
                         Publisher
                     </label>
@@ -130,7 +135,7 @@
                     </div>
                 </div>
 
-                <div class="col-12 col-xl-3">
+                <div class="col-12 col-lg-6 col-xxl">
                     <div class="form-check form-switch mb-2">
                         <input
                             class="form-check-input"
@@ -217,7 +222,7 @@
                     </div>
                 </div>
 
-                <div class="col-12 col-xl-3">
+                <div class="col-12 col-lg-6 col-xxl">
                     <div class="form-check form-switch mb-2">
                         <input
                             class="form-check-input"
@@ -307,7 +312,7 @@
                     </div>
                 </div>
 
-                <div class="col-12 col-xl-3">
+                <div class="col-12 col-lg-6 col-xxl">
                     <div class="form-check form-switch mb-2">
                         <input
                             class="form-check-input"
@@ -385,6 +390,98 @@
                         </div>
                     </div>
                 </div>
+
+                <div class="col-12 col-lg-6 col-xxl">
+                    <div class="form-check form-switch mb-2">
+                        <input
+                            class="form-check-input"
+                            type="checkbox"
+                            id="my-comics-toggle-one-shots"
+                            data-my-comics-section-toggle
+                            data-target-section="one_shots"
+                            {% if selected_one_shot_id %}checked{% endif %}
+                        >
+                        <label class="form-check-label erc-muted" for="my-comics-toggle-one-shots">
+                            Show one-shots
+                        </label>
+                    </div>
+
+                    <label class="form-label erc-muted" for="my-comics-one-shot-search">
+                        One-shot
+                    </label>
+
+                    <div class="dropdown searchable-dropdown" data-my-comics-filter-dropdown>
+                        <button
+                            class="btn erc-filter-button dropdown-toggle text-start w-100"
+                            type="button"
+                            id="my-comics-one-shot-dropdown"
+                            data-bs-toggle="dropdown"
+                            data-bs-auto-close="outside"
+                            aria-expanded="false"
+                        >
+                            {% if selected_one_shot %}
+                                {{ selected_one_shot.title }}
+                            {% elif selected_publisher %}
+                                All {{ selected_publisher.name }} one-shots
+                            {% else %}
+                                All one-shots
+                            {% endif %}
+                        </button>
+
+                        <div class="dropdown-menu p-2" aria-labelledby="my-comics-one-shot-dropdown">
+                            <input
+                                type="search"
+                                id="my-comics-one-shot-search"
+                                class="form-control mb-2"
+                                placeholder="Search one-shots..."
+                                autocomplete="off"
+                                data-dropdown-search
+                            >
+
+                            <a
+                                href="{{ all_one_shots_url }}"
+                                class="dropdown-item rounded {% if not selected_one_shot_id %}active{% endif %}"
+                                data-dropdown-option
+                                data-search-label="All one-shots"
+                            >
+                                {% if selected_publisher %}
+                                    All {{ selected_publisher.name }} one-shots
+                                {% else %}
+                                    All one-shots
+                                {% endif %}
+                            </a>
+
+                            <div class="dropdown-divider"></div>
+
+                            <div data-dropdown-options style="max-height: 22rem; overflow-y: auto;">
+                                {% for option in one_shot_filter_options %}
+                                    <a
+                                        href="{{ option.url }}"
+                                        class="dropdown-item rounded {% if selected_one_shot_id == option.one_shot.id %}active{% endif %}"
+                                        data-dropdown-option
+                                        data-search-label="{{ option.one_shot.title }} {{ option.one_shot.start_year }} {{ option.one_shot.publisher.name }}"
+                                    >
+                                        <span class="fw-semibold">
+                                            {{ option.one_shot.title }}
+                                        </span>
+                                        <span class="erc-muted">
+                                            · {{ option.one_shot.publisher.name }}
+                                            {% if option.one_shot.published_date %}
+                                                · {{ option.one_shot.published_date|date:"Y-m-d" }}
+                                            {% elif option.one_shot.start_year %}
+                                                · {{ option.one_shot.start_year }}
+                                            {% endif %}
+                                        </span>
+                                    </a>
+                                {% endfor %}
+                            </div>
+
+                            <p class="dropdown-item-text erc-muted mb-0 d-none" data-no-results>
+                                No matching one-shots.
+                            </p>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             {% if filters_active %}
@@ -398,6 +495,12 @@
                     {% if selected_issue_id %}
                         <a href="{{ clear_issue_url }}" class="btn btn-sm btn-outline-secondary">
                             Clear issue
+                        </a>
+                    {% endif %}
+
+                    {% if selected_one_shot_id %}
+                        <a href="{{ clear_one_shot_url }}" class="btn btn-sm btn-outline-secondary">
+                            Clear one-shot
                         </a>
                     {% endif %}
 
@@ -425,6 +528,13 @@
                         <span class="erc-filter-chip">
                             <span class="erc-filter-chip-label">Issue</span>
                             {{ selected_issue.run.title }} #{{ selected_issue.issue_number }}
+                        </span>
+                    {% endif %}
+
+                    {% if selected_one_shot %}
+                        <span class="erc-filter-chip">
+                            <span class="erc-filter-chip-label">One-shot</span>
+                            {{ selected_one_shot.title }}
                         </span>
                     {% endif %}
 
@@ -674,49 +784,84 @@
             </div>
         </div>
     </section>
+
+    <section class="card erc-panel erc-data-card {% if not selected_one_shot_id %}d-none{% endif %}" data-my-comics-section="one_shots" {% if not selected_one_shot_id %}hidden{% endif %}>
+        <div class="card-body">
+            <div class="erc-section-header">
+                <h2 class="h3 fw-bold mb-0 erc-section-title">One-shots</h2>
+
+                <p class="erc-muted mb-0">
+                    {{ one_shot_progress|length }} result{% if one_shot_progress|length != 1 %}s{% endif %}
+                </p>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-dark table-hover align-middle mb-0 erc-data-table">
+                    <thead>
+                    <tr>
+                        <th scope="col">One-shot</th>
+                        <th scope="col">Publisher</th>
+                        <th scope="col">Published Date</th>
+                        <th scope="col" class="text-end">Status</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    {% for progress in one_shot_progress %}
+                        <tr>
+                            <td class="fw-semibold">
+                                <a href="{% url 'catalog:one_shot_details' progress.one_shot.id %}" class="erc-data-link">
+                                    {{ progress.one_shot.title }}
+                                </a>
+                            </td>
+                            <td>{{ progress.one_shot.publisher.name }}</td>
+                            <td>
+                                {% if progress.one_shot.published_date %}
+                                    {{ progress.one_shot.published_date|date:"Y-m-d" }}
+                                {% elif progress.one_shot.start_year %}
+                                    {{ progress.one_shot.start_year }}
+                                {% else %}
+                                    <span class="erc-muted">Unknown</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-end erc-track-cell">
+                                <form
+                                    action="{% url 'reading:set_one_shot_status' progress.one_shot.id %}"
+                                    method="post"
+                                    class="erc-track-form"
+                                    data-item-type="one_shot"
+                                >
+                                    {% csrf_token %}
+                                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                    <select name="status" class="form-select form-select-sm" data-auto-submit>
+                                        {% for value, label in one_shot_status_choices %}
+                                            <option value="{{ value }}" {% if progress.status == value %}selected{% endif %}>
+                                                {{ label }}
+                                            </option>
+                                        {% endfor %}
+                                        <option value="{{ unfollow_status_value }}">Unfollow</option>
+                                    </select>
+                                </form>
+                            </td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="4" class="text-center erc-muted py-4">
+                                {% if filters_active %}
+                                    No followed one-shots match these filters.
+                                {% else %}
+                                    You are not following any one-shots yet.
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
 </div>
 {% endblock %}
 
 {% block extra_scripts %}
-<script src="{% static 'js/reading/my-comics.js' %}"></script>
-<script>
-document.addEventListener("DOMContentLoaded", function () {
-    function applyMyComicsSectionToggle(toggle) {
-        const targetSection = toggle.dataset.targetSection;
-
-        if (!targetSection) {
-            return;
-        }
-
-        const section = document.querySelector(
-            '[data-my-comics-section="' + targetSection + '"]'
-        );
-
-        if (!section) {
-            return;
-        }
-
-        section.classList.toggle("d-none", !toggle.checked);
-        section.hidden = !toggle.checked;
-    }
-
-    function applyAllMyComicsSectionToggles() {
-        document.querySelectorAll("[data-my-comics-section-toggle]").forEach(function (toggle) {
-            applyMyComicsSectionToggle(toggle);
-        });
-    }
-
-    document.addEventListener("change", function (event) {
-        const toggle = event.target.closest("[data-my-comics-section-toggle]");
-
-        if (!toggle) {
-            return;
-        }
-
-        applyMyComicsSectionToggle(toggle);
-    });
-
-    applyAllMyComicsSectionToggles();
-});
-</script>
+<script src="{% static 'js/reading/my-comics.js' %}?v=one-shots-20260713"></script>
 {% endblock %}
