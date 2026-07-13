@@ -73,6 +73,9 @@ class ComicRun(ImageUrlFields):
     title = models.CharField(max_length=500)
     start_year = models.CharField(max_length=20, blank=True)
 
+    marvel_series_id = models.CharField(max_length=50, blank=True, db_index=True)
+    marvel_series_url = models.URLField(max_length=500, blank=True)
+
     first_issue_date = models.DateField(null=True, blank=True)
     last_issue_date = models.DateField(null=True, blank=True)
 
@@ -117,6 +120,9 @@ class ComicIssue(ImageUrlFields):
     )
 
     issue_number = models.CharField(max_length=50)
+
+    marvel_issue_id = models.CharField(max_length=50, blank=True, db_index=True)
+    marvel_issue_url = models.URLField(max_length=500, blank=True)
 
     # Kept for legacy/manual data only. New ingestion should leave this blank.
     title = models.CharField(max_length=500, blank=True)
@@ -201,6 +207,9 @@ class ComicOneShot(ImageUrlFields):
     title = models.CharField(max_length=500)
     start_year = models.CharField(max_length=20, blank=True)
 
+    marvel_issue_id = models.CharField(max_length=50, blank=True, db_index=True)
+    marvel_issue_url = models.URLField(max_length=500, blank=True)
+
     published_date = models.DateField(null=True, blank=True)
 
     description = models.TextField(blank=True)
@@ -238,6 +247,9 @@ class ComicVolume(ImageUrlFields):
 
     title = models.CharField(max_length=500, blank=True)
     volume_number = models.CharField(max_length=50, blank=True)
+
+    marvel_collection_id = models.CharField(max_length=50, blank=True, db_index=True)
+    marvel_collection_url = models.URLField(max_length=500, blank=True)
 
     first_issue_number = models.CharField(max_length=50, blank=True)
     last_issue_number = models.CharField(max_length=50, blank=True)
