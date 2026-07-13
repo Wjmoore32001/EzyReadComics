@@ -14,3 +14,10 @@
 
 ## Collection Current Calendar
     python manage.py sync_marvel_collection_calendar --verbose
+
+## Updating Run Issue Dates
+    python manage.py update_run_issue_dates --verbose
+
+    python manage.py update_run_issue_dates --publisher Marvel
+    python manage.py update_run_issue_dates --run-id 123 --verbose
+    python manage.py update_run_issue_dates --clear-empty
