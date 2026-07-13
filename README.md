@@ -19,8 +19,10 @@ The current version is focused on building the foundation for:
 - User comic tracking
 - Comic Vine source-data imports
 - Comic Vine source-to-catalog run and issue ingestion
+- Official Marvel.com release calendar syncing
+- Official Marvel.com release calendar backfilling
 - AI-assisted Marvel run discovery
-- Official Marvel.com issue metadata filling
+- Controlled official Marvel.com issue metadata filling
 - Future starting-point guidance
 
 The app separates imported/source data from confirmed app-facing catalog data.
@@ -29,12 +31,15 @@ The current catalog can be populated in several ways:
 
 1. Manual catalog entries.
 2. Confirmed Comic Vine run candidates promoted through the ingestion workflow.
-3. AI-assisted Marvel run discovery for missing catalog runs.
-4. Official Marvel.com issue metadata filling for catalog issues.
+3. Official Marvel.com release calendar sync and backfill commands.
+4. AI-assisted Marvel run discovery for missing catalog runs.
+5. Controlled Marvel issue metadata filling commands.
 
 Comic Vine source data is not automatically trusted just because it exists locally. The ingestion workflow confirms only safe run-like source records before they are allowed into the public catalog.
 
-AI-assisted commands are used as controlled catalog helpers. They do not replace the confirmed catalog layer.
+Official Marvel.com release calendar commands use browser-rendered Marvel pages through Playwright. They do not use AI, Comic Vine, or guessed issue URLs.
+
+AI-assisted commands are controlled catalog helpers. They do not replace the confirmed catalog layer.
 
 ## Current Features
 
@@ -141,6 +146,19 @@ Issue pages currently show:
 Issue title is kept as a legacy/manual field but is not part of the main issue display workflow.
 
 Cover date is kept for possible future/debug use but is not part of the current user-facing issue display workflow.
+
+Official issue detail tracking records whether an issue has been checked for expected Marvel detail fields:
+
+- `unknown`
+- `complete`
+- `incomplete`
+
+The expected official detail fields are:
+
+- Description
+- Writer credit
+
+Missing official detail fields are stored so incomplete upcoming issues can be checked again later.
 
 Logged-in users can track an issue with one of these statuses:
 
@@ -286,6 +304,9 @@ Current catalog issue behavior:
 - `ComicIssue.title` is retained for legacy/manual data but new ingestion should usually leave it blank.
 - `ComicIssue.cover_date` is retained for possible future/debug use but is not currently user-facing.
 - `ComicIssue.description` stores official issue description text when available.
+- `ComicIssue.official_detail_status` tracks whether expected official details are unknown, complete, or incomplete.
+- `ComicIssue.official_detail_checked_at` stores when official details were checked.
+- `ComicIssue.official_detail_missing_fields` stores missing expected official fields such as `description` or `writer`.
 - `ComicIssueCredit` stores issue credits such as Writer, Artist, Penciller, Inker, Colorist, Letterer, Cover Artist, and Editor when available.
 - The current browse UI does not show a dedicated Penciller column.
 - Saving issue #1 with a description automatically fills the parent run description if the run description is blank.
@@ -295,6 +316,7 @@ Current catalog run behavior:
 - `ComicRun.description` can be blank.
 - Run discovery does not search for or generate run descriptions.
 - Run descriptions are expected to come from issue #1 when issue #1 is added with a description.
+- Backfilled Marvel release calendar runs are kept as ongoing for now.
 
 ### Reading Data
 
@@ -405,8 +427,7 @@ Current run confirmation rule:
 - A source volume must be Marvel.
 - A source volume must have at least two attached local child issues.
 - No attached child issue title may start with `Vol.`, `Vol`, or `Volume`.
-- Child issue Comic Vine IDs and issue numbers must be usable.
-- Normalized child issue numbers must be unique.
+- Attached child issue numbers must be usable and non-conflicting.
 
 Current unresolved/unsafe behavior:
 
@@ -444,6 +465,81 @@ The apply command:
 Important limitation:
 
 The apply command only promotes issues already stored locally and already attached to confirmed Comic Vine volume rows. It does not fetch missing issues from Comic Vine during apply.
+
+## Official Marvel.com Release Calendar Commands
+
+These commands use rendered Marvel.com pages through Playwright. They do not use OpenAI, Comic Vine, or guessed issue URLs.
+
+### Current Release Calendar Sync
+
+Command:
+
+    python manage.py sync_marvel_release_calendar_ai --dry-run --verbose
+
+Apply:
+
+    python manage.py sync_marvel_release_calendar_ai
+
+Calendar-only preview:
+
+    python manage.py sync_marvel_release_calendar_ai --dry-run --skip-details --verbose --raw
+
+Current behavior:
+
+- Reads the official Marvel release calendar for the current Marvel/Eastern date through six days later.
+- Uses Playwright Chromium to read rendered Marvel.com pages.
+- Makes no AI calls.
+- Makes no Comic Vine API calls.
+- Creates or updates Marvel catalog runs and issues.
+- Parses issue detail pages for published date, description, and credits.
+- Marks official issue detail status as complete or incomplete.
+- Records missing expected official detail fields.
+- Leaves issue titles blank.
+- Uses `published_date` as the catalog issue date.
+- Fills missing previous issues by following real previous-issue links found on Marvel issue pages.
+- Does not guess Marvel issue URLs.
+- Does not create collected volumes.
+- Skips configured product/licensed/reprint keywords such as facsimiles, Star Wars, Predator, Alien, and Godzilla.
+- Has no default issue-count or missing-page work cap.
+- Optional `--limit` and `--missing-issue-limit` flags can be passed for manual testing.
+
+Useful flags:
+
+    --skip-details
+    --skip-missing-issues
+    --headed
+    --raw
+    --verbose
+    --limit <NUMBER>
+    --missing-issue-limit <NUMBER>
+
+### Release Calendar Backfill
+
+Command:
+
+    python manage.py backfill_marvel_release_calendar --start-date 2026-07-01 --end-date 2026-07-15 --dry-run --verbose
+
+Apply:
+
+    python manage.py backfill_marvel_release_calendar --start-date 2026-07-01 --end-date 2026-07-15
+
+Prompt for date range:
+
+    python manage.py backfill_marvel_release_calendar --dry-run --verbose
+
+Current behavior:
+
+- Accepts an oldest date and newest date.
+- Finds Wednesdays inside the selected range.
+- Processes the newest Wednesday first.
+- Uses Marvel release calendar URLs where `dateStart` and `dateEnd` are the same Wednesday.
+- Reuses the same no-AI calendar, detail, credit, and missing-issue parser used by the current release sync.
+- Makes no AI calls.
+- Makes no Comic Vine API calls.
+- Keeps backfilled runs as ongoing for now.
+- Handles stale long-running database connections during long Playwright backfills.
+- Has no default issue-count or missing-page work cap.
+- Optional `--limit` and `--missing-issue-limit` flags can be passed for manual testing.
 
 ## AI-Assisted Marvel Catalog Commands
 
@@ -549,6 +645,7 @@ Credit behavior:
 - Django 6
 - PostgreSQL / Neon
 - Bootstrap
+- Playwright
 - Comic Vine API
 - OpenAI API
 - Requests
@@ -656,6 +753,10 @@ Install dependencies:
 
     pip install -r requirements.txt
 
+Install the Playwright Chromium browser for rendered Marvel.com calendar/detail commands:
+
+    python -m playwright install chromium
+
 Create a `.env` file in the project root.
 
 Run migrations:
@@ -740,6 +841,24 @@ Apply confirmed run and issue catalog promotion:
 
     python manage.py apply_marvel_ingestion_to_catalog --apply --create-missing-catalog
 
+## Official Marvel.com Calendar Commands
+
+Sync the current Marvel release calendar:
+
+    python manage.py sync_marvel_release_calendar_ai --dry-run --verbose
+
+Apply the current Marvel release calendar sync:
+
+    python manage.py sync_marvel_release_calendar_ai
+
+Backfill a Marvel release calendar date range:
+
+    python manage.py backfill_marvel_release_calendar --start-date 2026-07-01 --end-date 2026-07-15 --dry-run --verbose
+
+Apply a Marvel release calendar backfill:
+
+    python manage.py backfill_marvel_release_calendar --start-date 2026-07-01 --end-date 2026-07-15
+
 ## AI Catalog Commands
 
 Find missing Marvel runs:
@@ -777,13 +896,15 @@ The current app direction is intentionally simple:
 
 - Keep confirmed catalog data separate from Comic Vine source data.
 - Use ingestion candidates to decide what Comic Vine source data is safe to promote.
-- Use AI-assisted commands as controlled helpers for finding missing Marvel runs and filling official Marvel issue metadata.
+- Use official Marvel.com release calendar commands as the no-AI path for current and historical Marvel issue ingestion.
+- Use AI-assisted commands as controlled helpers for finding missing Marvel runs and filling official Marvel issue metadata when needed.
 - Prefer official Marvel.com issue pages for current issue metadata.
 - Promote confirmed run and issue data only after analysis or controlled command review.
 - Keep uncertain source-data relationships out of the public catalog until reviewed.
 - Keep collected-volume catalog data separate from run ingestion.
 - Keep issue titles out of the current user-facing issue workflow.
 - Use published date as the main issue date.
+- Track whether official issue details are complete or incomplete.
 - Let issue #1 populate the parent run description when possible.
 - Keep reading tracking user-specific.
 - Keep run follow actions user-confirmed in the modal when they can affect multiple issue statuses.

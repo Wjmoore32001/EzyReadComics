@@ -16,21 +16,78 @@ Current project areas:
 - `ingestion` stores source-to-catalog staging records and confirmed run candidates.
 - `reading` stores user-specific comic tracking data.
 - The site currently has catalog home, browse, run details, issue details, collected-volume details, My Comics, account, login, and signup pages.
-- The main user-facing pages now share the same dark comic-library UI direction.
+- The main user-facing pages share the same dark comic-library UI direction.
 - Browse is being kept mobile-friendly by limiting initial catalog rows and loading more rows only when requested.
 - Browse supports inline logged-in tracking actions for runs, volumes, and issues.
-- Run follow now uses a modal flow for run status, optional issue following, and optional per-issue status selection.
+- Run follow uses a modal flow for run status, optional issue following, and optional per-issue status selection.
 - My Comics supports filtering followed items by publisher, run, and status.
 - Account username and password forms are hidden behind expand buttons by default.
 - Comic Vine backfill/import work is ongoing.
 - Comic Vine run and issue ingestion supports confirmed source-to-catalog promotion.
-- AI-assisted Marvel catalog commands now support missing run discovery and official Marvel.com issue metadata filling.
+- Official Marvel.com release calendar sync and backfill commands now support no-AI Marvel issue ingestion.
+- AI-assisted Marvel catalog commands support missing run discovery and controlled official Marvel.com issue metadata filling.
 - Issue display has shifted away from issue titles and cover dates.
-- Published date is now the main issue date used by the catalog UI.
+- Published date is the main issue date used by the catalog UI.
+- Official issue detail completeness is tracked on catalog issues.
 - Page JavaScript is being kept in static JS files instead of large inline template scripts.
 - Recommendation logic, reading-order algorithms, character features, creator features, event features, and story-arc features are not built yet.
 
 ## Timeline
+
+### 2026-07-13
+
+- Added official Marvel.com release calendar syncing through `sync_marvel_release_calendar_ai`.
+- Changed the release calendar sync path to use Playwright-rendered Marvel.com pages instead of AI web-search results.
+- Kept the command name `sync_marvel_release_calendar_ai` even though the current implementation makes no AI calls.
+- Added current release calendar behavior:
+  - Reads the current Marvel/Eastern date through six days later.
+  - Uses the official Marvel release calendar URL with `dateStart`, `dateEnd`, `tab=comic`, and `variants=false`.
+  - Parses rendered calendar text and issue links from Marvel.com.
+  - Skips configured product/licensed/reprint keywords such as facsimiles, Star Wars, Predator, Alien, and Godzilla.
+  - Creates or updates catalog runs and issues from the official Marvel page data.
+  - Uses `published_date` as the issue date.
+  - Leaves issue titles blank.
+  - Does not use Comic Vine.
+  - Does not create collected volumes.
+  - Does not use AI.
+- Added direct Marvel issue detail parsing:
+  - Opens each official Marvel issue page with Playwright.
+  - Parses description text from the rendered page.
+  - Parses credits such as Writer, Artist, Penciller, Inker, Colorist, Letterer, Cover Artist, and Editor.
+  - Stores credits through `ComicIssueCredit`.
+  - Uses official issue page links from the calendar instead of guessing URLs.
+- Added missing-issue backfill inside the current release sync:
+  - Detects locally missing previous issue numbers for a run.
+  - Walks backward through real previous-issue links found on Marvel issue pages.
+  - Parses each previous issue page with the same no-AI detail parser.
+  - Creates missing catalog issues when enough official page data exists.
+  - Does not guess issue URLs.
+- Added explicit official issue detail tracking fields to `ComicIssue`:
+  - `official_detail_status`
+  - `official_detail_checked_at`
+  - `official_detail_missing_fields`
+- Added official detail statuses:
+  - `unknown`
+  - `complete`
+  - `incomplete`
+- Marked expected official detail fields as:
+  - Description
+  - Writer credit
+- Added missing-field tracking so upcoming issues that are missing description or Writer can be found and rechecked later.
+- Added official Marvel.com release calendar date-range backfilling through `backfill_marvel_release_calendar`.
+- Added backfill behavior:
+  - Accepts oldest and newest dates through command flags or terminal prompts.
+  - Finds Wednesdays inside the selected range.
+  - Processes the newest Wednesday first.
+  - Uses same-day Marvel calendar URLs where `dateStart` and `dateEnd` are the Wednesday being processed.
+  - Reuses the same no-AI parser and apply behavior as the current release sync.
+  - Keeps backfilled runs as ongoing for now.
+- Removed default work caps from the release calendar sync and backfill commands:
+  - `--limit` only limits calendar issues when explicitly passed.
+  - `--missing-issue-limit` only limits missing issue page reads when explicitly passed.
+- Kept browser page timeouts as per-page safety behavior, not total command runtime limits.
+- Added stale database connection handling to the backfill command so long Playwright runs can continue after idle Neon/PostgreSQL SSL connections are closed.
+- Added dry-run, verbose, raw, headed, skip-details, and skip-missing-issues flows for testing the new Marvel calendar commands.
 
 ### 2026-07-12
 
@@ -263,9 +320,6 @@ Current project areas:
 - Improved command behavior around API limits, timeouts, and partial runs.
 - Added progress reporting for source-data hydration.
 - Reviewed and adjusted model direction toward confirmed data instead of fully automated app-facing imports.
-
-### 2026-06-29
-
 - Added account pages.
 - Added signup.
 - Added login and logout.
@@ -307,6 +361,10 @@ Current project areas:
 
 ## Next Major Goals
 
+- Keep testing the no-AI official Marvel release calendar sync against real weekly release pages.
+- Keep testing the official Marvel release calendar backfill across wider historical date ranges.
+- Add a future command for rechecking issues marked with incomplete official detail fields.
+- Add a future command for marking stale runs as ended after their latest issue date is far enough in the past.
 - Keep testing the run follow modal with real runs that have different issue counts.
 - Continue verifying issue status behavior from Browse, Run Details, Issue Details, Volume Details, and My Comics.
 - Continue verifying confirmed run candidates for obvious source mistakes.
