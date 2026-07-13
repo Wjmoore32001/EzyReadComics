@@ -89,10 +89,35 @@ def my_comics(request):
     )
 
     tracked_run_ids = get_user_tracked_run_ids(request.user)
+    tracked_issue_ids = get_user_tracked_issue_ids(request.user)
+
+    selected_publisher = (
+        ComicPublisher.objects.filter(id=filters["publisher_id"]).first()
+        if filters["publisher_id"]
+        else None
+    )
+    selected_run = (
+        ComicRun.objects.select_related("publisher").filter(id=filters["run_id"]).first()
+        if filters["run_id"]
+        else None
+    )
+    selected_issue = (
+        ComicIssue.objects.select_related("run", "run__publisher")
+        .filter(id=filters["issue_id"])
+        .first()
+        if filters["issue_id"]
+        else None
+    )
+
     publisher_options = get_my_comics_publisher_options(tracked_run_ids)
     run_options = get_my_comics_run_options(
         tracked_run_ids=tracked_run_ids,
         selected_publisher_id=filters["publisher_id"],
+    )
+    issue_options = get_my_comics_issue_options(
+        tracked_issue_ids=tracked_issue_ids,
+        selected_publisher_id=filters["publisher_id"],
+        selected_run_id=filters["run_id"],
     )
 
     context = {
@@ -105,8 +130,13 @@ def my_comics(request):
         "status_filter_choices": FollowedRun.STATUS_CHOICES,
         "publisher_options": publisher_options,
         "run_options": run_options,
+        "issue_options": issue_options,
+        "selected_publisher": selected_publisher,
+        "selected_run": selected_run,
+        "selected_issue": selected_issue,
         "selected_publisher_id": filters["publisher_id"],
         "selected_run_id": filters["run_id"],
+        "selected_issue_id": filters["issue_id"],
         "selected_status": filters["status"],
         "filters_active": my_comics_filters_active(filters),
         "unfollow_status_value": UNFOLLOW_STATUS_VALUE,
@@ -818,6 +848,7 @@ def get_my_comics_filters(request):
     return {
         "publisher_id": get_int_query_param(request, "publisher"),
         "run_id": get_int_query_param(request, "run"),
+        "issue_id": get_int_query_param(request, "issue"),
         "status": status,
     }
 
@@ -825,6 +856,7 @@ def get_my_comics_filters(request):
 def apply_my_comics_filters(*, followed_runs, volume_progress, issue_progress, filters):
     publisher_id = filters["publisher_id"]
     run_id = filters["run_id"]
+    issue_id = filters["issue_id"]
     status = filters["status"]
 
     if publisher_id:
@@ -837,6 +869,13 @@ def apply_my_comics_filters(*, followed_runs, volume_progress, issue_progress, f
         volume_progress = volume_progress.filter(volume__run_id=run_id)
         issue_progress = issue_progress.filter(issue__run_id=run_id)
 
+    if issue_id:
+        followed_runs = followed_runs.filter(run__issues__id=issue_id).distinct()
+        volume_progress = volume_progress.filter(
+            volume__volume_issues__issue_id=issue_id,
+        ).distinct()
+        issue_progress = issue_progress.filter(issue_id=issue_id)
+
     if status:
         followed_runs = followed_runs.filter(status=status)
         volume_progress = volume_progress.filter(status=status)
@@ -846,7 +885,12 @@ def apply_my_comics_filters(*, followed_runs, volume_progress, issue_progress, f
 
 
 def my_comics_filters_active(filters):
-    return bool(filters["publisher_id"] or filters["run_id"] or filters["status"])
+    return bool(
+        filters["publisher_id"]
+        or filters["run_id"]
+        or filters["issue_id"]
+        or filters["status"]
+    )
 
 
 def get_user_tracked_run_ids(user):
@@ -880,6 +924,51 @@ def get_user_tracked_run_ids(user):
     return list(run_ids)
 
 
+def get_user_tracked_issue_ids(user):
+    issue_ids = set(
+        IssueProgress.objects.filter(
+            user=user,
+        ).values_list(
+            "issue_id",
+            flat=True,
+        )
+    )
+
+    followed_run_ids = FollowedRun.objects.filter(
+        user=user,
+    ).values_list(
+        "run_id",
+        flat=True,
+    )
+
+    issue_ids.update(
+        ComicIssue.objects.filter(
+            run_id__in=followed_run_ids,
+        ).values_list(
+            "id",
+            flat=True,
+        )
+    )
+
+    followed_volume_ids = VolumeProgress.objects.filter(
+        user=user,
+    ).values_list(
+        "volume_id",
+        flat=True,
+    )
+
+    issue_ids.update(
+        ComicVolumeIssue.objects.filter(
+            volume_id__in=followed_volume_ids,
+        ).values_list(
+            "issue_id",
+            flat=True,
+        )
+    )
+
+    return list(issue_ids)
+
+
 def get_my_comics_publisher_options(tracked_run_ids):
     return ComicPublisher.objects.filter(
         runs__id__in=tracked_run_ids,
@@ -903,6 +992,28 @@ def get_my_comics_run_options(*, tracked_run_ids, selected_publisher_id):
         "-first_issue_date",
         "publisher__name",
         "title",
+    )
+
+
+def get_my_comics_issue_options(*, tracked_issue_ids, selected_publisher_id, selected_run_id):
+    issues = ComicIssue.objects.filter(
+        id__in=tracked_issue_ids,
+    ).select_related(
+        "run",
+        "run__publisher",
+    )
+
+    if selected_publisher_id:
+        issues = issues.filter(run__publisher_id=selected_publisher_id)
+
+    if selected_run_id:
+        issues = issues.filter(run_id=selected_run_id)
+
+    return issues.order_by(
+        "-run__start_year",
+        "-published_date",
+        "run__title",
+        "issue_number",
     )
 
 

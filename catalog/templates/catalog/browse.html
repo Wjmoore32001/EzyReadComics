@@ -54,7 +54,7 @@
             <div class="erc-section-header">
                 <h2 class="h3 fw-bold mb-0 erc-section-title">Filters</h2>
 
-                {% if selected_publisher or selected_run or selected_volume %}
+                {% if selected_publisher or selected_run or selected_issue or selected_volume %}
                     <a href="{% url 'catalog:browse' %}" class="btn btn-outline-secondary">
                         Clear filters
                     </a>
@@ -62,7 +62,7 @@
             </div>
 
             <div class="row g-3 align-items-end">
-                <div class="col-12 col-lg-4">
+                <div class="col-12 col-xl-3">
                     <label class="form-label erc-muted" for="publisher-search-browse">
                         Publisher
                     </label>
@@ -131,7 +131,21 @@
                     </div>
                 </div>
 
-                <div class="col-12 col-lg-4">
+                <div class="col-12 col-xl-3">
+                    <div class="form-check form-switch mb-2">
+                        <input
+                            class="form-check-input"
+                            type="checkbox"
+                            id="browse-toggle-runs"
+                            data-section-visibility-toggle
+                            data-target-section="runs"
+                            checked
+                        >
+                        <label class="form-check-label erc-muted" for="browse-toggle-runs">
+                            Show runs
+                        </label>
+                    </div>
+
                     <label class="form-label erc-muted" for="run-search-browse">
                         Run
                     </label>
@@ -219,7 +233,130 @@
                     </div>
                 </div>
 
-                <div class="col-12 col-lg-4">
+                <div class="col-12 col-xl-3">
+                    <div class="form-check form-switch mb-2">
+                        <input
+                            class="form-check-input"
+                            type="checkbox"
+                            id="browse-toggle-issues"
+                            data-section-visibility-toggle
+                            data-target-section="issues"
+                            checked
+                        >
+                        <label class="form-check-label erc-muted" for="browse-toggle-issues">
+                            Show issues
+                        </label>
+                    </div>
+
+                    <label class="form-label erc-muted" for="issue-search-browse">
+                        Issues
+                    </label>
+
+                    <div
+                        class="dropdown searchable-dropdown"
+                        data-options-kind="issue"
+                        data-options-url="{% url 'catalog:browse_options' %}"
+                        data-selected-id="{{ selected_issue_id|default_if_none:'' }}"
+                        data-filter-publisher-id="{{ selected_publisher_id|default_if_none:'' }}"
+                        data-filter-run-id="{{ selected_run_id|default_if_none:'' }}"
+                    >
+                        <button
+                            class="btn erc-filter-button dropdown-toggle text-start w-100"
+                            type="button"
+                            id="issue-dropdown-browse"
+                            data-bs-toggle="dropdown"
+                            data-bs-auto-close="outside"
+                            aria-expanded="false"
+                        >
+                            {% if selected_issue %}
+                                {{ selected_issue.run.title }} #{{ selected_issue.issue_number }}
+                            {% elif selected_run %}
+                                All issues in this run
+                            {% elif selected_publisher %}
+                                All {{ selected_publisher.name }} issues
+                            {% else %}
+                                All issues
+                            {% endif %}
+                        </button>
+
+                        <div class="dropdown-menu p-2" aria-labelledby="issue-dropdown-browse">
+                            <input
+                                type="search"
+                                id="issue-search-browse"
+                                class="form-control mb-2"
+                                placeholder="Search issues..."
+                                autocomplete="off"
+                                data-dropdown-search
+                            >
+
+                            {% if selected_run %}
+                                <a
+                                    href="{% url 'catalog:browse' %}?run={{ selected_run.id }}"
+                                    class="dropdown-item rounded {% if not selected_issue %}active{% endif %}"
+                                >
+                                    All issues in this run
+                                </a>
+                            {% elif selected_publisher %}
+                                <a
+                                    href="{% url 'catalog:browse' %}?publisher={{ selected_publisher.id }}"
+                                    class="dropdown-item rounded {% if not selected_issue %}active{% endif %}"
+                                >
+                                    All {{ selected_publisher.name }} issues
+                                </a>
+                            {% else %}
+                                <a
+                                    href="{% url 'catalog:browse' %}"
+                                    class="dropdown-item rounded {% if not selected_issue %}active{% endif %}"
+                                >
+                                    All issues
+                                </a>
+                            {% endif %}
+
+                            <div class="dropdown-divider"></div>
+
+                            <div data-dropdown-options style="max-height: 22rem; overflow-y: auto;">
+                                {% for issue in issue_options %}
+                                    <a
+                                        href="{% url 'catalog:browse' %}?issue={{ issue.id }}"
+                                        class="dropdown-item rounded {% if selected_issue_id == issue.id %}active{% endif %}"
+                                        data-dropdown-option
+                                        data-search-label="{{ issue.run.title }} {{ issue.run.start_year }} {{ issue.issue_number }} {{ issue.run.publisher.name }}"
+                                    >
+                                        <span class="fw-semibold">
+                                            {{ issue.run.title }} #{{ issue.issue_number }}
+                                        </span>
+                                        <span class="erc-muted">
+                                            · {{ issue.run.publisher.name }}
+                                            {% if issue.published_date %}
+                                                · {{ issue.published_date|date:"Y-m-d" }}
+                                            {% endif %}
+                                        </span>
+                                    </a>
+                                {% endfor %}
+                            </div>
+
+                            <p class="dropdown-item-text erc-muted mb-0 d-none" data-no-results>
+                                No matching issues.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-12 col-xl-3">
+                    <div class="form-check form-switch mb-2">
+                        <input
+                            class="form-check-input"
+                            type="checkbox"
+                            id="browse-toggle-volumes"
+                            data-section-visibility-toggle
+                            data-target-section="volumes"
+                            {% if selected_volume %}checked{% endif %}
+                        >
+                        <label class="form-check-label erc-muted" for="browse-toggle-volumes">
+                            Show collected volumes
+                        </label>
+                    </div>
+
                     <label class="form-label erc-muted" for="volume-search-browse">
                         Collected volume
                     </label>
@@ -314,7 +451,7 @@
                 </div>
             </div>
 
-            {% if selected_publisher or selected_run or selected_volume %}
+            {% if selected_publisher or selected_run or selected_issue or selected_volume %}
                 <div class="d-flex flex-wrap gap-2 mt-4">
                     {% if selected_run %}
                         <a
@@ -322,6 +459,15 @@
                             class="btn btn-sm btn-outline-secondary"
                         >
                             Clear run
+                        </a>
+                    {% endif %}
+
+                    {% if selected_issue %}
+                        <a
+                            href="{% if selected_run %}{% url 'catalog:browse' %}?run={{ selected_run.id }}{% elif selected_publisher %}{% url 'catalog:browse' %}?publisher={{ selected_publisher.id }}{% else %}{% url 'catalog:browse' %}{% endif %}"
+                            class="btn btn-sm btn-outline-secondary"
+                        >
+                            Clear issue
                         </a>
                     {% endif %}
 
@@ -457,6 +603,7 @@
                     data-items-url="{% url 'catalog:browse_items' %}"
                     data-filter-publisher-id="{{ selected_publisher_id|default_if_none:'' }}"
                     data-filter-run-id="{{ selected_run_id|default_if_none:'' }}"
+                    data-filter-issue-id="{{ selected_issue_id|default_if_none:'' }}"
                     data-filter-volume-id="{{ selected_volume_id|default_if_none:'' }}"
                 >
                     Load {{ browse_load_more_limit }} more runs
@@ -475,7 +622,7 @@
         </div>
     </section>
 
-    <section class="card erc-panel erc-data-card" data-load-section="volumes">
+    <section class="card erc-panel erc-data-card {% if not selected_volume %}d-none{% endif %}" data-load-section="volumes">
         <div class="card-body">
             <div class="erc-section-header">
                 <h2 class="h3 fw-bold mb-0 erc-section-title">Volumes</h2>
@@ -581,6 +728,7 @@
                     data-items-url="{% url 'catalog:browse_items' %}"
                     data-filter-publisher-id="{{ selected_publisher_id|default_if_none:'' }}"
                     data-filter-run-id="{{ selected_run_id|default_if_none:'' }}"
+                    data-filter-issue-id="{{ selected_issue_id|default_if_none:'' }}"
                     data-filter-volume-id="{{ selected_volume_id|default_if_none:'' }}"
                 >
                     Load {{ browse_load_more_limit }} more volumes
@@ -704,6 +852,7 @@
                     data-items-url="{% url 'catalog:browse_items' %}"
                     data-filter-publisher-id="{{ selected_publisher_id|default_if_none:'' }}"
                     data-filter-run-id="{{ selected_run_id|default_if_none:'' }}"
+                    data-filter-issue-id="{{ selected_issue_id|default_if_none:'' }}"
                     data-filter-volume-id="{{ selected_volume_id|default_if_none:'' }}"
                 >
                     Load {{ browse_load_more_limit }} more issues

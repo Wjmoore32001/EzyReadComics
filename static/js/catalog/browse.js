@@ -159,6 +159,25 @@ document.addEventListener("DOMContentLoaded", function () {
         });
     });
 
+    function bindSectionVisibilityToggle(toggle) {
+        function applyToggle() {
+            const section = document.querySelector(
+                "[data-load-section='" + toggle.dataset.targetSection + "']"
+            );
+
+            if (!section) {
+                return;
+            }
+
+            section.classList.toggle("d-none", !toggle.checked);
+        }
+
+        toggle.addEventListener("change", applyToggle);
+        applyToggle();
+    }
+
+    document.querySelectorAll("[data-section-visibility-toggle]").forEach(bindSectionVisibilityToggle);
+
     function getCountFromDataset(source, name) {
         const value = Number(source.dataset[name] || "0");
 
@@ -849,6 +868,10 @@ document.addEventListener("DOMContentLoaded", function () {
 
         if (button.dataset.filterRunId) {
             url.searchParams.set("run", button.dataset.filterRunId);
+        }
+
+        if (button.dataset.filterIssueId) {
+            url.searchParams.set("issue", button.dataset.filterIssueId);
         }
 
         if (button.dataset.filterVolumeId) {
