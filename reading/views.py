@@ -131,6 +131,51 @@ def my_comics(request):
         "publisher_options": publisher_options,
         "run_options": run_options,
         "issue_options": issue_options,
+        "publisher_filter_options": build_my_comics_publisher_filter_options(
+            publisher_options=publisher_options,
+            selected_status=filters["status"],
+        ),
+        "run_filter_options": build_my_comics_run_filter_options(
+            run_options=run_options,
+            selected_publisher_id=filters["publisher_id"],
+            selected_status=filters["status"],
+        ),
+        "issue_filter_options": build_my_comics_issue_filter_options(
+            issue_options=issue_options,
+            selected_publisher_id=filters["publisher_id"],
+            selected_run_id=filters["run_id"],
+            selected_status=filters["status"],
+        ),
+        "status_filter_options": build_my_comics_status_filter_options(filters),
+        "all_publishers_url": build_my_comics_url(status=filters["status"]),
+        "all_runs_url": build_my_comics_url(
+            publisher=filters["publisher_id"],
+            status=filters["status"],
+        ),
+        "all_issues_url": build_my_comics_url(
+            publisher=filters["publisher_id"],
+            run=filters["run_id"],
+            status=filters["status"],
+        ),
+        "all_statuses_url": build_my_comics_url(
+            publisher=filters["publisher_id"],
+            run=filters["run_id"],
+            issue=filters["issue_id"],
+        ),
+        "clear_run_url": build_my_comics_url(
+            publisher=filters["publisher_id"],
+            status=filters["status"],
+        ),
+        "clear_issue_url": build_my_comics_url(
+            publisher=filters["publisher_id"],
+            run=filters["run_id"],
+            status=filters["status"],
+        ),
+        "clear_status_url": build_my_comics_url(
+            publisher=filters["publisher_id"],
+            run=filters["run_id"],
+            issue=filters["issue_id"],
+        ),
         "selected_publisher": selected_publisher,
         "selected_run": selected_run,
         "selected_issue": selected_issue,
@@ -1015,6 +1060,85 @@ def get_my_comics_issue_options(*, tracked_issue_ids, selected_publisher_id, sel
         "run__title",
         "issue_number",
     )
+
+
+def build_my_comics_url(**params):
+    clean_params = {
+        key: value
+        for key, value in params.items()
+        if value not in [None, ""]
+    }
+
+    base_url = reverse("reading:my_comics")
+
+    if not clean_params:
+        return base_url
+
+    return f"{base_url}?{urlencode(clean_params)}"
+
+
+def build_my_comics_publisher_filter_options(*, publisher_options, selected_status):
+    return [
+        {
+            "publisher": publisher,
+            "url": build_my_comics_url(
+                publisher=publisher.id,
+                status=selected_status,
+            ),
+        }
+        for publisher in publisher_options
+    ]
+
+
+def build_my_comics_run_filter_options(*, run_options, selected_publisher_id, selected_status):
+    return [
+        {
+            "run": run,
+            "url": build_my_comics_url(
+                publisher=selected_publisher_id,
+                run=run.id,
+                status=selected_status,
+            ),
+        }
+        for run in run_options
+    ]
+
+
+def build_my_comics_issue_filter_options(
+    *,
+    issue_options,
+    selected_publisher_id,
+    selected_run_id,
+    selected_status,
+):
+    return [
+        {
+            "issue": issue,
+            "url": build_my_comics_url(
+                publisher=selected_publisher_id,
+                run=selected_run_id,
+                issue=issue.id,
+                status=selected_status,
+            ),
+        }
+        for issue in issue_options
+    ]
+
+
+def build_my_comics_status_filter_options(filters):
+    return [
+        {
+            "value": value,
+            "label": label,
+            "url": build_my_comics_url(
+                publisher=filters["publisher_id"],
+                run=filters["run_id"],
+                issue=filters["issue_id"],
+                status=value,
+            ),
+        }
+        for value, label in FollowedRun.STATUS_CHOICES
+    ]
 
 
 def build_status_choices(status_choices):

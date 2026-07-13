@@ -68,7 +68,7 @@
             </div>
 
             <div class="row g-3 align-items-end">
-                <div class="col-12 col-lg-4">
+                <div class="col-12 col-xl-3">
                     <label class="form-label erc-muted" for="my-comics-publisher-search">
                         Publisher
                     </label>
@@ -82,12 +82,8 @@
                             data-bs-auto-close="outside"
                             aria-expanded="false"
                         >
-                            {% if selected_publisher_id %}
-                                {% for publisher in publisher_options %}
-                                    {% if selected_publisher_id == publisher.id %}
-                                        {{ publisher.name }}
-                                    {% endif %}
-                                {% endfor %}
+                            {% if selected_publisher %}
+                                {{ selected_publisher.name }}
                             {% else %}
                                 All publishers
                             {% endif %}
@@ -104,7 +100,7 @@
                             >
 
                             <a
-                                href="{% url 'reading:my_comics' %}{% if selected_status %}?status={{ selected_status }}{% endif %}"
+                                href="{{ all_publishers_url }}"
                                 class="dropdown-item rounded {% if not selected_publisher_id %}active{% endif %}"
                                 data-dropdown-option
                                 data-search-label="All publishers"
@@ -115,14 +111,14 @@
                             <div class="dropdown-divider"></div>
 
                             <div data-dropdown-options style="max-height: 18rem; overflow-y: auto;">
-                                {% for publisher in publisher_options %}
+                                {% for option in publisher_filter_options %}
                                     <a
-                                        href="{% url 'reading:my_comics' %}?publisher={{ publisher.id }}{% if selected_status %}&status={{ selected_status }}{% endif %}"
-                                        class="dropdown-item rounded {% if selected_publisher_id == publisher.id %}active{% endif %}"
+                                        href="{{ option.url }}"
+                                        class="dropdown-item rounded {% if selected_publisher_id == option.publisher.id %}active{% endif %}"
                                         data-dropdown-option
-                                        data-search-label="{{ publisher.name }}"
+                                        data-search-label="{{ option.publisher.name }}"
                                     >
-                                        <span class="fw-semibold">{{ publisher.name }}</span>
+                                        <span class="fw-semibold">{{ option.publisher.name }}</span>
                                     </a>
                                 {% endfor %}
                             </div>
@@ -134,7 +130,21 @@
                     </div>
                 </div>
 
-                <div class="col-12 col-lg-4">
+                <div class="col-12 col-xl-3">
+                    <div class="form-check form-switch mb-2">
+                        <input
+                            class="form-check-input"
+                            type="checkbox"
+                            id="my-comics-toggle-runs"
+                            data-my-comics-section-toggle
+                            data-target-section="runs"
+                            checked
+                        >
+                        <label class="form-check-label erc-muted" for="my-comics-toggle-runs">
+                            Show runs
+                        </label>
+                    </div>
+
                     <label class="form-label erc-muted" for="my-comics-run-search">
                         Run
                     </label>
@@ -148,12 +158,8 @@
                             data-bs-auto-close="outside"
                             aria-expanded="false"
                         >
-                            {% if selected_run_id %}
-                                {% for run in run_options %}
-                                    {% if selected_run_id == run.id %}
-                                        {% if run.start_year %}{{ run.start_year }} — {% endif %}{{ run.title }}
-                                    {% endif %}
-                                {% endfor %}
+                            {% if selected_run %}
+                                {% if selected_run.start_year %}{{ selected_run.start_year }} — {% endif %}{{ selected_run.title }}
                             {% else %}
                                 All runs
                             {% endif %}
@@ -170,7 +176,7 @@
                             >
 
                             <a
-                                href="{% url 'reading:my_comics' %}{% if selected_publisher_id and selected_status %}?publisher={{ selected_publisher_id }}&status={{ selected_status }}{% elif selected_publisher_id %}?publisher={{ selected_publisher_id }}{% elif selected_status %}?status={{ selected_status }}{% endif %}"
+                                href="{{ all_runs_url }}"
                                 class="dropdown-item rounded {% if not selected_run_id %}active{% endif %}"
                                 data-dropdown-option
                                 data-search-label="All runs"
@@ -181,24 +187,24 @@
                             <div class="dropdown-divider"></div>
 
                             <div data-dropdown-options style="max-height: 22rem; overflow-y: auto;">
-                                {% for run in run_options %}
+                                {% for option in run_filter_options %}
                                     <a
-                                        href="{% url 'reading:my_comics' %}{% if selected_publisher_id and selected_status %}?publisher={{ selected_publisher_id }}&run={{ run.id }}&status={{ selected_status }}{% elif selected_publisher_id %}?publisher={{ selected_publisher_id }}&run={{ run.id }}{% elif selected_status %}?run={{ run.id }}&status={{ selected_status }}{% else %}?run={{ run.id }}{% endif %}"
-                                        class="dropdown-item rounded {% if selected_run_id == run.id %}active{% endif %}"
+                                        href="{{ option.url }}"
+                                        class="dropdown-item rounded {% if selected_run_id == option.run.id %}active{% endif %}"
                                         data-dropdown-option
-                                        data-search-label="{{ run.title }} {{ run.start_year }} {{ run.publisher.name }}"
+                                        data-search-label="{{ option.run.title }} {{ option.run.start_year }} {{ option.run.publisher.name }}"
                                     >
                                         <span class="fw-semibold">
-                                            {% if run.start_year %}
-                                                {{ run.start_year }}
+                                            {% if option.run.start_year %}
+                                                {{ option.run.start_year }}
                                             {% else %}
                                                 Unknown year
                                             {% endif %}
                                         </span>
                                         —
-                                        {{ run.title }}
+                                        {{ option.run.title }}
                                         <span class="erc-muted">
-                                            · {{ run.publisher.name }}
+                                            · {{ option.run.publisher.name }}
                                         </span>
                                     </a>
                                 {% endfor %}
@@ -211,7 +217,110 @@
                     </div>
                 </div>
 
-                <div class="col-12 col-lg-4">
+                <div class="col-12 col-xl-3">
+                    <div class="form-check form-switch mb-2">
+                        <input
+                            class="form-check-input"
+                            type="checkbox"
+                            id="my-comics-toggle-issues"
+                            data-my-comics-section-toggle
+                            data-target-section="issues"
+                            checked
+                        >
+                        <label class="form-check-label erc-muted" for="my-comics-toggle-issues">
+                            Show issues
+                        </label>
+                    </div>
+
+                    <label class="form-label erc-muted" for="my-comics-issue-search">
+                        Issues
+                    </label>
+
+                    <div class="dropdown searchable-dropdown" data-my-comics-filter-dropdown>
+                        <button
+                            class="btn erc-filter-button dropdown-toggle text-start w-100"
+                            type="button"
+                            id="my-comics-issue-dropdown"
+                            data-bs-toggle="dropdown"
+                            data-bs-auto-close="outside"
+                            aria-expanded="false"
+                        >
+                            {% if selected_issue %}
+                                {{ selected_issue.run.title }} #{{ selected_issue.issue_number }}
+                            {% elif selected_run %}
+                                All issues in this run
+                            {% else %}
+                                All issues
+                            {% endif %}
+                        </button>
+
+                        <div class="dropdown-menu p-2" aria-labelledby="my-comics-issue-dropdown">
+                            <input
+                                type="search"
+                                id="my-comics-issue-search"
+                                class="form-control mb-2"
+                                placeholder="Search issues..."
+                                autocomplete="off"
+                                data-dropdown-search
+                            >
+
+                            <a
+                                href="{{ all_issues_url }}"
+                                class="dropdown-item rounded {% if not selected_issue_id %}active{% endif %}"
+                                data-dropdown-option
+                                data-search-label="All issues"
+                            >
+                                {% if selected_run %}
+                                    All issues in this run
+                                {% else %}
+                                    All issues
+                                {% endif %}
+                            </a>
+
+                            <div class="dropdown-divider"></div>
+
+                            <div data-dropdown-options style="max-height: 22rem; overflow-y: auto;">
+                                {% for option in issue_filter_options %}
+                                    <a
+                                        href="{{ option.url }}"
+                                        class="dropdown-item rounded {% if selected_issue_id == option.issue.id %}active{% endif %}"
+                                        data-dropdown-option
+                                        data-search-label="{{ option.issue.run.title }} {{ option.issue.run.start_year }} {{ option.issue.issue_number }} {{ option.issue.run.publisher.name }}"
+                                    >
+                                        <span class="fw-semibold">
+                                            {{ option.issue.run.title }} #{{ option.issue.issue_number }}
+                                        </span>
+                                        <span class="erc-muted">
+                                            · {{ option.issue.run.publisher.name }}
+                                            {% if option.issue.published_date %}
+                                                · {{ option.issue.published_date|date:"Y-m-d" }}
+                                            {% endif %}
+                                        </span>
+                                    </a>
+                                {% endfor %}
+                            </div>
+
+                            <p class="dropdown-item-text erc-muted mb-0 d-none" data-no-results>
+                                No matching issues.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-12 col-xl-3">
+                    <div class="form-check form-switch mb-2">
+                        <input
+                            class="form-check-input"
+                            type="checkbox"
+                            id="my-comics-toggle-volumes"
+                            data-my-comics-section-toggle
+                            data-target-section="volumes"
+                        >
+                        <label class="form-check-label erc-muted" for="my-comics-toggle-volumes">
+                            Show volumes
+                        </label>
+                    </div>
+
                     <label class="form-label erc-muted" for="my-comics-status-search">
                         Status
                     </label>
@@ -247,7 +356,7 @@
                             >
 
                             <a
-                                href="{% url 'reading:my_comics' %}{% if selected_publisher_id and selected_run_id %}?publisher={{ selected_publisher_id }}&run={{ selected_run_id }}{% elif selected_publisher_id %}?publisher={{ selected_publisher_id }}{% elif selected_run_id %}?run={{ selected_run_id }}{% endif %}"
+                                href="{{ all_statuses_url }}"
                                 class="dropdown-item rounded {% if not selected_status %}active{% endif %}"
                                 data-dropdown-option
                                 data-search-label="All statuses"
@@ -258,14 +367,14 @@
                             <div class="dropdown-divider"></div>
 
                             <div data-dropdown-options style="max-height: 18rem; overflow-y: auto;">
-                                {% for value, label in status_filter_choices %}
+                                {% for option in status_filter_options %}
                                     <a
-                                        href="{% url 'reading:my_comics' %}{% if selected_publisher_id and selected_run_id %}?publisher={{ selected_publisher_id }}&run={{ selected_run_id }}&status={{ value }}{% elif selected_publisher_id %}?publisher={{ selected_publisher_id }}&status={{ value }}{% elif selected_run_id %}?run={{ selected_run_id }}&status={{ value }}{% else %}?status={{ value }}{% endif %}"
-                                        class="dropdown-item rounded {% if selected_status == value %}active{% endif %}"
+                                        href="{{ option.url }}"
+                                        class="dropdown-item rounded {% if selected_status == option.value %}active{% endif %}"
                                         data-dropdown-option
-                                        data-search-label="{{ label }}"
+                                        data-search-label="{{ option.label }}"
                                     >
-                                        <span class="fw-semibold">{{ label }}</span>
+                                        <span class="fw-semibold">{{ option.label }}</span>
                                     </a>
                                 {% endfor %}
                             </div>
@@ -281,43 +390,42 @@
             {% if filters_active %}
                 <div class="d-flex flex-wrap gap-2 mt-4">
                     {% if selected_run_id %}
-                        <a
-                            href="{% url 'reading:my_comics' %}{% if selected_publisher_id and selected_status %}?publisher={{ selected_publisher_id }}&status={{ selected_status }}{% elif selected_publisher_id %}?publisher={{ selected_publisher_id }}{% elif selected_status %}?status={{ selected_status }}{% endif %}"
-                            class="btn btn-sm btn-outline-secondary"
-                        >
+                        <a href="{{ clear_run_url }}" class="btn btn-sm btn-outline-secondary">
                             Clear run
                         </a>
                     {% endif %}
 
+                    {% if selected_issue_id %}
+                        <a href="{{ clear_issue_url }}" class="btn btn-sm btn-outline-secondary">
+                            Clear issue
+                        </a>
+                    {% endif %}
+
                     {% if selected_status %}
-                        <a
-                            href="{% url 'reading:my_comics' %}{% if selected_publisher_id and selected_run_id %}?publisher={{ selected_publisher_id }}&run={{ selected_run_id }}{% elif selected_publisher_id %}?publisher={{ selected_publisher_id }}{% elif selected_run_id %}?run={{ selected_run_id }}{% endif %}"
-                            class="btn btn-sm btn-outline-secondary"
-                        >
+                        <a href="{{ clear_status_url }}" class="btn btn-sm btn-outline-secondary">
                             Clear status
                         </a>
                     {% endif %}
 
-                    {% if selected_publisher_id %}
-                        {% for publisher in publisher_options %}
-                            {% if selected_publisher_id == publisher.id %}
-                                <span class="erc-filter-chip">
-                                    <span class="erc-filter-chip-label">Publisher</span>
-                                    {{ publisher.name }}
-                                </span>
-                            {% endif %}
-                        {% endfor %}
+                    {% if selected_publisher %}
+                        <span class="erc-filter-chip">
+                            <span class="erc-filter-chip-label">Publisher</span>
+                            {{ selected_publisher.name }}
+                        </span>
                     {% endif %}
 
-                    {% if selected_run_id %}
-                        {% for run in run_options %}
-                            {% if selected_run_id == run.id %}
-                                <span class="erc-filter-chip">
-                                    <span class="erc-filter-chip-label">Run</span>
-                                    {{ run }}
-                                </span>
-                            {% endif %}
-                        {% endfor %}
+                    {% if selected_run %}
+                        <span class="erc-filter-chip">
+                            <span class="erc-filter-chip-label">Run</span>
+                            {{ selected_run }}
+                        </span>
+                    {% endif %}
+
+                    {% if selected_issue %}
+                        <span class="erc-filter-chip">
+                            <span class="erc-filter-chip-label">Issue</span>
+                            {{ selected_issue.run.title }} #{{ selected_issue.issue_number }}
+                        </span>
                     {% endif %}
 
                     {% if selected_status %}
@@ -335,7 +443,7 @@
         </div>
     </section>
 
-    <section class="card erc-panel erc-data-card">
+    <section class="card erc-panel erc-data-card" data-my-comics-section="runs">
         <div class="card-body">
             <div class="erc-section-header">
                 <h2 class="h3 fw-bold mb-0 erc-section-title">Runs</h2>
@@ -413,7 +521,7 @@
         </div>
     </section>
 
-    <section class="card erc-panel erc-data-card">
+    <section class="card erc-panel erc-data-card d-none" data-my-comics-section="volumes" hidden>
         <div class="card-body">
             <div class="erc-section-header">
                 <h2 class="h3 fw-bold mb-0 erc-section-title">Volumes</h2>
@@ -490,7 +598,7 @@
         </div>
     </section>
 
-    <section class="card erc-panel erc-data-card">
+    <section class="card erc-panel erc-data-card" data-my-comics-section="issues">
         <div class="card-body">
             <div class="erc-section-header">
                 <h2 class="h3 fw-bold mb-0 erc-section-title">Issues</h2>
@@ -571,4 +679,44 @@
 
 {% block extra_scripts %}
 <script src="{% static 'js/reading/my-comics.js' %}"></script>
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    function applyMyComicsSectionToggle(toggle) {
+        const targetSection = toggle.dataset.targetSection;
+
+        if (!targetSection) {
+            return;
+        }
+
+        const section = document.querySelector(
+            '[data-my-comics-section="' + targetSection + '"]'
+        );
+
+        if (!section) {
+            return;
+        }
+
+        section.classList.toggle("d-none", !toggle.checked);
+        section.hidden = !toggle.checked;
+    }
+
+    function applyAllMyComicsSectionToggles() {
+        document.querySelectorAll("[data-my-comics-section-toggle]").forEach(function (toggle) {
+            applyMyComicsSectionToggle(toggle);
+        });
+    }
+
+    document.addEventListener("change", function (event) {
+        const toggle = event.target.closest("[data-my-comics-section-toggle]");
+
+        if (!toggle) {
+            return;
+        }
+
+        applyMyComicsSectionToggle(toggle);
+    });
+
+    applyAllMyComicsSectionToggles();
+});
+</script>
 {% endblock %}

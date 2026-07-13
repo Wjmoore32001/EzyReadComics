@@ -1,6 +1,43 @@
 document.addEventListener("DOMContentLoaded", function () {
   const unfollowStatusValue = "__unfollow__";
 
+  function applyMyComicsSectionToggle(toggle) {
+    const targetSection = toggle.dataset.targetSection;
+
+    if (!targetSection) {
+      return;
+    }
+
+    const section = document.querySelector(
+      `[data-my-comics-section="${targetSection}"]`,
+    );
+
+    if (!section) {
+      return;
+    }
+
+    section.classList.toggle("d-none", !toggle.checked);
+    section.hidden = !toggle.checked;
+  }
+
+  function applyAllMyComicsSectionToggles() {
+    document
+      .querySelectorAll("[data-my-comics-section-toggle]")
+      .forEach(applyMyComicsSectionToggle);
+  }
+
+  document.addEventListener("change", function (event) {
+    const toggle = event.target.closest("[data-my-comics-section-toggle]");
+
+    if (!toggle) {
+      return;
+    }
+
+    applyMyComicsSectionToggle(toggle);
+  });
+
+  applyAllMyComicsSectionToggles();
+
   function getCount(form, name) {
     const value = Number(form.dataset[name] || "0");
 
