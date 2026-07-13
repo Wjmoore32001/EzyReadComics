@@ -123,6 +123,10 @@ def browse(request):
         "selected_run_id": selected_run_id,
         "selected_volume_id": selected_volume_id,
         "selected_items": selected_items,
+        "catalog_publisher_count": ComicPublisher.objects.count(),
+        "catalog_run_count": ComicRun.objects.count(),
+        "catalog_volume_count": ComicVolume.objects.count(),
+        "catalog_issue_count": ComicIssue.objects.count(),
         "browse_initial_limit": BROWSE_INITIAL_RESULT_LIMIT,
         "browse_load_more_limit": BROWSE_LOAD_MORE_LIMIT,
         "browse_option_limit": BROWSE_OPTION_LIMIT,
@@ -283,6 +287,20 @@ def issue_details(request, pk):
     )
     attach_issue_credit_display([issue])
 
+    parent_run_issues = list(
+        issue.run.issues.select_related(
+            "run",
+            "run__publisher",
+        ).prefetch_related(
+            issue_credit_prefetch(),
+        ).order_by(
+            "published_date",
+            "issue_number",
+        )
+    )
+    attach_issue_credit_display(parent_run_issues)
+    attach_issue_tracking(request, parent_run_issues)
+
     collected_in = ComicVolumeIssue.objects.select_related(
         "volume",
         "volume__run",
@@ -305,6 +323,7 @@ def issue_details(request, pk):
 
     context = {
         "issue": issue,
+        "parent_run_issues": parent_run_issues,
         "collected_in": collected_in,
         "default_credits": default_credits,
         "all_credits": all_credits,

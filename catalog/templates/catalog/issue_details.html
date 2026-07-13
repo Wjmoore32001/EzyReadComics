@@ -108,6 +108,99 @@
     <section class="card erc-panel erc-data-card">
         <div class="card-body">
             <div class="erc-section-header">
+                <h2 class="h3 fw-bold mb-0 erc-section-title">Issues in this run</h2>
+
+                <p class="erc-muted mb-0">
+                    {{ parent_run_issues|length }} result{% if parent_run_issues|length != 1 %}s{% endif %}
+                </p>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-dark table-hover align-middle mb-0 erc-data-table">
+                    <thead>
+                    <tr>
+                        <th scope="col">Issue</th>
+                        <th scope="col">Published Date</th>
+                        <th scope="col">Writer</th>
+                        <th scope="col" class="text-end">My Comics</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    {% for run_issue in parent_run_issues %}
+                        <tr
+                            class="clickable-row"
+                            data-row-url="{% url 'catalog:issue_details' run_issue.id %}"
+                            tabindex="0"
+                            aria-label="Open issue details for issue {{ run_issue.issue_number }}"
+                        >
+                            <td class="fw-semibold">
+                                <a href="{% url 'catalog:issue_details' run_issue.id %}" class="erc-data-link">
+                                    #{{ run_issue.issue_number }}
+                                </a>
+                            </td>
+                            <td>
+                                {% if run_issue.published_date %}
+                                    {{ run_issue.published_date|date:"Y-m-d" }}
+                                {% else %}
+                                    <span class="erc-muted">Unknown</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if run_issue.display_writers %}
+                                    {{ run_issue.display_writers }}
+                                {% else %}
+                                    <span class="erc-muted">Unknown</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-end erc-track-cell">
+                                {% if run_issue.user_tracking %}
+                                    <form
+                                        action="{% url 'reading:set_issue_status' run_issue.id %}"
+                                        method="post"
+                                        class="erc-track-form"
+                                    >
+                                        {% csrf_token %}
+                                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                        <select name="status" class="form-select form-select-sm" data-auto-submit>
+                                            {% for value, label in issue_status_choices %}
+                                                <option value="{{ value }}" {% if run_issue.user_tracking.status == value %}selected{% endif %}>
+                                                    {{ label }}
+                                                </option>
+                                            {% endfor %}
+                                            <option value="__unfollow__">Unfollow</option>
+                                        </select>
+                                    </form>
+                                {% else %}
+                                    <form
+                                        action="{% url 'reading:set_issue_status' run_issue.id %}"
+                                        method="post"
+                                        class="erc-track-form"
+                                    >
+                                        {% csrf_token %}
+                                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                        <button type="submit" class="btn btn-outline-light btn-sm erc-track-button">
+                                            Follow
+                                        </button>
+                                    </form>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="4" class="text-center erc-muted py-4">
+                                No issues have been added for this run.
+                            </td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <section class="card erc-panel erc-data-card">
+        <div class="card-body">
+            <div class="erc-section-header">
                 <h2 class="h3 fw-bold mb-0 erc-section-title">Issue credits</h2>
             </div>
 
@@ -212,51 +305,6 @@
             </div>
         </section>
     {% endif %}
-
-    <section class="card erc-panel erc-data-card">
-        <div class="card-body">
-            <div class="erc-section-header">
-                <h2 class="h3 fw-bold mb-0 erc-section-title">Run context</h2>
-            </div>
-
-            <div class="table-responsive">
-                <table class="table table-dark table-hover align-middle mb-0 erc-data-table">
-                    <thead>
-                    <tr>
-                        <th scope="col">Run</th>
-                        <th scope="col">Publisher</th>
-                        <th scope="col">Issues</th>
-                    </tr>
-                    </thead>
-                    <tbody>
-                    <tr
-                        class="clickable-row"
-                        data-row-url="{% url 'catalog:run_details' issue.run.id %}"
-                        tabindex="0"
-                        aria-label="Open run details for {{ issue.run }}"
-                    >
-                        <td class="fw-semibold">
-                            <a href="{% url 'catalog:run_details' issue.run.id %}" class="erc-data-link">
-                                {{ issue.run.title }}{% if issue.run.start_year %} ({{ issue.run.start_year }}){% endif %}
-                            </a>
-                        </td>
-                        <td>
-                            {{ issue.run.publisher.name }}
-                            <span class="erc-muted">· {{ issue.run.get_status_display }}</span>
-                        </td>
-                        <td>
-                            {% if issue.run.issue_count %}
-                                {{ issue.run.issue_count }}
-                            {% else %}
-                                <span class="erc-muted">Unknown</span>
-                            {% endif %}
-                        </td>
-                    </tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </section>
 </div>
 {% endblock %}
 

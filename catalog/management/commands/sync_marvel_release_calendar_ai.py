@@ -347,6 +347,7 @@ class Command(BaseCommand):
             existing_detail_skipped = bool(
                 existing_issue
                 and issue_has_complete_details(existing_issue)
+                and not issue_has_suspicious_credits(existing_issue)
                 and not has_missing_issue_targets
                 and not skip_details
             )
@@ -984,7 +985,7 @@ def read_issue_detail_page(*, context, calendar_issue, timeout_ms):
         page.wait_for_timeout(1000)
 
         text = page.locator("body").inner_text(timeout=timeout_ms)
-        links = page.eval_on_selector_all(
+        issue_links = page.eval_on_selector_all(
             "a",
             """
             elements => elements
@@ -995,15 +996,17 @@ def read_issue_detail_page(*, context, calendar_issue, timeout_ms):
                 .filter((item) => item.href && item.href.includes("/comics/issue/"))
             """,
         )
+        dom_credits = extract_detail_credits_from_page(page)
 
         detail = parse_issue_detail_text(
             text=text,
             calendar_issue=calendar_issue,
+            dom_credits=dom_credits,
         )
         detail["checked"] = True
         detail["read_attempted"] = True
         detail["error"] = ""
-        detail["issue_links"] = links
+        detail["issue_links"] = issue_links
         detail["text_preview"] = text[:2000]
         return detail
 
@@ -1017,12 +1020,248 @@ def read_issue_detail_page(*, context, calendar_issue, timeout_ms):
         page.close()
 
 
-def parse_issue_detail_text(*, text, calendar_issue):
+def extract_detail_credits_from_page(page):
+    try:
+        return normalize_credit_list(
+            page.eval_on_selector_all(
+                "li, dd, dt, div, p",
+                """
+                elements => {
+                    const roleMap = {
+                        "WRITER": "Writer",
+                        "WRITERS": "Writer",
+                        "ARTIST": "Artist",
+                        "ARTISTS": "Artist",
+                        "PENCILLER": "Penciller",
+                        "PENCILLERS": "Penciller",
+                        "PENCILER": "Penciller",
+                        "PENCILERS": "Penciller",
+                        "INKER": "Inker",
+                        "INKERS": "Inker",
+                        "COLORIST": "Colorist",
+                        "COLORISTS": "Colorist",
+                        "COLOURIST": "Colorist",
+                        "COLOURISTS": "Colorist",
+                        "LETTERER": "Letterer",
+                        "LETTERERS": "Letterer",
+                        "COVER ARTIST": "Cover Artist",
+                        "COVER ARTISTS": "Cover Artist",
+                        "EDITOR": "Editor",
+                        "EDITORS": "Editor"
+                    };
+
+                    const skipNames = new Set([
+                        "skip menu",
+                        "log in",
+                        "sign up",
+                        "marvel unlimited",
+                        "subscribe",
+                        "news",
+                        "comics",
+                        "characters",
+                        "games",
+                        "movies",
+                        "tv shows",
+                        "videos",
+                        "more",
+                        "back to series",
+                        "prev",
+                        "next",
+                        "see all",
+                        "see variant covers",
+                        "digital issue",
+                        "read online"
+                    ]);
+
+                    function normalizeText(value) {
+                        return String(value || "")
+                            .replace(/\\u00a0/g, " ")
+                            .replace(/[ \\t]+/g, " ")
+                            .replace(/\\n[ \\t]+/g, "\\n")
+                            .replace(/[ \\t]+\\n/g, "\\n")
+                            .trim();
+                    }
+
+                    function normalizeLabel(value) {
+                        return normalizeText(value)
+                            .replace(/\\s*\\([^)]*\\)\\s*/g, " ")
+                            .replace(/:.*$/, "")
+                            .replace(/:$/, "")
+                            .replace(/\\s+/g, " ")
+                            .trim()
+                            .toUpperCase();
+                    }
+
+                    function roleFromText(text) {
+                        const lines = normalizeText(text)
+                            .split(/\\n+/)
+                            .map((line) => line.trim())
+                            .filter(Boolean);
+
+                        if (!lines.length) {
+                            return null;
+                        }
+
+                        const firstLine = lines[0];
+                        const label = normalizeLabel(firstLine);
+
+                        return roleMap[label] || null;
+                    }
+
+                    function roleLabelCount(text) {
+                        const lines = normalizeText(text)
+                            .split(/\\n+/)
+                            .map((line) => line.trim())
+                            .filter(Boolean);
+                        let count = 0;
+
+                        for (const line of lines) {
+                            if (roleFromText(line)) {
+                                count += 1;
+                            }
+                        }
+
+                        return count;
+                    }
+
+                    function isVisible(element) {
+                        const style = window.getComputedStyle(element);
+
+                        if (!style || style.display === "none" || style.visibility === "hidden") {
+                            return false;
+                        }
+
+                        const rect = element.getBoundingClientRect();
+
+                        return rect.width > 0 && rect.height > 0;
+                    }
+
+                    function cleanName(value) {
+                        return normalizeText(value)
+                            .replace(/^by\\s+/i, "")
+                            .replace(/^[•\\-*]+\\s*/, "")
+                            .replace(/\\s+/g, " ")
+                            .replace(/^[,;:]+|[,;:]+$/g, "")
+                            .trim();
+                    }
+
+                    function acceptableName(text, href) {
+                        const name = cleanName(text);
+
+                        if (!name) {
+                            return false;
+                        }
+
+                        const key = name.toLowerCase();
+
+                        if (skipNames.has(key)) {
+                            return false;
+                        }
+
+                        if (/\\(\\d{4}/.test(name) || /#\\d/.test(name)) {
+                            return false;
+                        }
+
+                        if (/^(published|writer|writers|artist|artists|penciller|pencillers|inker|inkers|colorist|colorists|letterer|letterers|cover artist|cover artists|editor|editors)$/i.test(name)) {
+                            return false;
+                        }
+
+                        if (href && href.includes("/comics/issue/")) {
+                            return false;
+                        }
+
+                        if (href && href.includes("/comics/series/")) {
+                            return false;
+                        }
+
+                        return true;
+                    }
+
+                    const credits = [];
+
+                    for (const element of elements) {
+                        if (!isVisible(element)) {
+                            continue;
+                        }
+
+                        const text = normalizeText(element.innerText || element.textContent || "");
+
+                        if (!text || text.length > 600) {
+                            continue;
+                        }
+
+                        const role = roleFromText(text);
+
+                        if (!role) {
+                            continue;
+                        }
+
+                        if (roleLabelCount(text) > 1) {
+                            continue;
+                        }
+
+                        const links = Array.from(element.querySelectorAll("a"));
+                        let names = links
+                            .map((link) => ({
+                                name: cleanName(link.innerText || link.textContent || ""),
+                                href: link.href || ""
+                            }))
+                            .filter((item) => acceptableName(item.name, item.href))
+                            .map((item) => item.name);
+
+                        if (!names.length) {
+                            const lines = text
+                                .split(/\\n+/)
+                                .map((line) => line.trim())
+                                .filter(Boolean);
+                            let inlineValue = "";
+
+                            if (lines.length && lines[0].includes(":")) {
+                                inlineValue = lines[0].split(":").slice(1).join(":").trim();
+                            }
+
+                            const fallbackParts = [];
+
+                            if (inlineValue) {
+                                fallbackParts.push(inlineValue);
+                            }
+
+                            for (const line of lines.slice(1)) {
+                                if (!roleFromText(line)) {
+                                    fallbackParts.push(line);
+                                }
+                            }
+
+                            const fallbackText = fallbackParts.join(", ").trim();
+
+                            if (fallbackText) {
+                                names = [fallbackText];
+                            }
+                        }
+
+                        for (const name of names) {
+                            credits.push({
+                                role,
+                                name
+                            });
+                        }
+                    }
+
+                    return credits;
+                }
+                """,
+            )
+        )
+    except Exception:
+        return []
+
+
+def parse_issue_detail_text(*, text, calendar_issue, dom_credits=None):
     lines = normalize_page_lines(text)
     title_index = find_detail_title_index(lines=lines, calendar_issue=calendar_issue)
     end_index = find_detail_end_index(lines=lines, start_index=title_index)
 
-    credits = []
+    text_credits = []
     published_date = None
     last_metadata_index = title_index
     index = title_index + 1
@@ -1079,7 +1318,7 @@ def parse_issue_detail_text(*, text, calendar_issue):
                 index += 1
 
             for person_name in split_credit_names(names_text):
-                credits.append(
+                text_credits.append(
                     {
                         "role": role,
                         "name": person_name,
@@ -1108,16 +1347,40 @@ def parse_issue_detail_text(*, text, calendar_issue):
     if published_date is None:
         published_date = calendar_issue.get("published_date")
 
+    credits = combine_dom_and_text_credits(
+        dom_credits=dom_credits or [],
+        text_credits=text_credits,
+    )
+
     return {
         "checked": False,
         "read_attempted": False,
         "error": "",
         "published_date": published_date,
         "description": description,
-        "credits": normalize_credit_list(credits),
+        "credits": credits,
         "issue_links": [],
         "text_preview": text[:2000],
     }
+
+
+def combine_dom_and_text_credits(*, dom_credits, text_credits):
+    normalized_dom_credits = normalize_credit_list(dom_credits)
+    normalized_text_credits = normalize_credit_list(text_credits)
+    roles_with_dom_credits = {
+        credit["role"].casefold()
+        for credit in normalized_dom_credits
+    }
+
+    combined = list(normalized_dom_credits)
+
+    for credit in normalized_text_credits:
+        if credit["role"].casefold() in roles_with_dom_credits:
+            continue
+
+        combined.append(credit)
+
+    return normalize_credit_list(combined)
 
 
 def extract_calendar_issues(*, rendered_calendar):
@@ -1796,6 +2059,9 @@ def issue_needs_release_update(issue, calendar_issue, detail):
     if issue.title:
         return True
 
+    if issue_has_suspicious_credits(issue):
+        return True
+
     if detail.get("checked"):
         status, missing_fields = preview_official_detail_tracking(
             issue=issue,
@@ -1904,6 +2170,9 @@ def get_detail_missing_fields(detail):
 
 
 def issue_has_complete_details(issue):
+    if issue_has_suspicious_credits(issue):
+        return False
+
     if not clean_text(issue.description):
         return False
 
@@ -1920,10 +2189,24 @@ def issue_has_role(issue, role_name):
     return False
 
 
+def issue_has_suspicious_credits(issue):
+    for credit in issue.credits.select_related("person").all():
+        if looks_like_concatenated_credit_name(credit.person.name):
+            return True
+
+    return False
+
+
 def add_issue_credits(*, issue, credits):
+    normalized_credits = normalize_credit_list(credits)
+    remove_suspicious_issue_credits_for_replacement_roles(
+        issue=issue,
+        replacement_credits=normalized_credits,
+    )
+
     created_count = 0
 
-    for index, credit in enumerate(normalize_credit_list(credits), start=1):
+    for index, credit in enumerate(normalized_credits, start=1):
         role_name = normalize_credit_role(credit.get("role"))
         person_name = clean_credit_name(credit.get("name"))
 
@@ -1946,6 +2229,31 @@ def add_issue_credits(*, issue, credits):
             created_count += 1
 
     return created_count
+
+
+def remove_suspicious_issue_credits_for_replacement_roles(*, issue, replacement_credits):
+    roles_with_replacements = {
+        normalize_credit_role(credit.get("role")).casefold()
+        for credit in replacement_credits
+        if normalize_credit_role(credit.get("role"))
+    }
+
+    if not roles_with_replacements:
+        return 0
+
+    removed_count = 0
+
+    for credit in issue.credits.select_related("person", "role").all():
+        if credit.role.name.casefold() not in roles_with_replacements:
+            continue
+
+        if not looks_like_concatenated_credit_name(credit.person.name):
+            continue
+
+        credit.delete()
+        removed_count += 1
+
+    return removed_count
 
 
 def count_new_issue_credits(*, issue, credits):
@@ -2024,23 +2332,24 @@ def normalize_credit_list(value):
             continue
 
         role = normalize_credit_role(item.get("role"))
-        name = clean_credit_name(item.get("name"))
+        names = split_credit_names(item.get("name"))
 
-        if not role or not name:
+        if not role or not names:
             continue
 
-        key = (role.casefold(), name.casefold())
+        for name in names:
+            key = (role.casefold(), name.casefold())
 
-        if key in seen:
-            continue
+            if key in seen:
+                continue
 
-        seen.add(key)
-        credits.append(
-            {
-                "role": role,
-                "name": name,
-            }
-        )
+            seen.add(key)
+            credits.append(
+                {
+                    "role": role,
+                    "name": name,
+                }
+            )
 
     return credits
 
@@ -2050,6 +2359,7 @@ def normalize_credit_role(value):
     value = value.replace("_", " ")
     value = value.replace("-", " ")
     value = re.sub(r"\s+", " ", value).strip(" :;,.")
+    value = re.sub(r"\s*\([^)]*\)\s*", " ", value).strip()
     key = value.casefold()
 
     role_aliases = {
@@ -2197,7 +2507,7 @@ def looks_like_people_line(line):
     if not line:
         return False
 
-    if len(line) > 120:
+    if len(line) > 180:
         return False
 
     if re.search(r"[!?]", line):
@@ -2205,7 +2515,7 @@ def looks_like_people_line(line):
 
     words = re.findall(r"[A-Za-z][A-Za-z.'-]*", line)
 
-    if len(words) > 10:
+    if len(words) > 16:
         return False
 
     return True
@@ -2218,7 +2528,9 @@ def split_credit_names(value):
         return []
 
     value = value.replace("\n", ", ")
+    value = insert_glued_credit_name_separators(value)
     value = re.sub(r"\s+and\s+", ", ", value, flags=re.IGNORECASE)
+    value = re.sub(r"\s*&\s*", ", ", value)
     pieces = re.split(r"\s*,\s*|\s*;\s*", value)
     names = []
 
@@ -2231,6 +2543,70 @@ def split_credit_names(value):
         names.append(name)
 
     return names
+
+
+def insert_glued_credit_name_separators(value):
+    value = clean_text(value)
+
+    if not value:
+        return ""
+
+    result = []
+
+    for index, character in enumerate(value):
+        if index > 0 and should_insert_credit_name_separator(value, index):
+            result.append(", ")
+
+        result.append(character)
+
+    return "".join(result)
+
+
+def should_insert_credit_name_separator(value, index):
+    previous_character = value[index - 1]
+    current_character = value[index]
+    next_character = value[index + 1] if index + 1 < len(value) else ""
+
+    if not previous_character.islower():
+        return False
+
+    if not current_character.isupper():
+        return False
+
+    if next_character and not next_character.islower():
+        return False
+
+    current_word_start = index - 1
+
+    while current_word_start >= 0 and value[current_word_start].isalpha():
+        current_word_start -= 1
+
+    current_word = value[current_word_start + 1:index]
+
+    if current_word in {"Mac", "Mc", "O"}:
+        return False
+
+    if current_word.endswith("Mac") or current_word.endswith("Mc"):
+        return False
+
+    return True
+
+
+def looks_like_concatenated_credit_name(value):
+    value = clean_credit_name(value)
+
+    if not value:
+        return False
+
+    if "," in value or ";" in value:
+        return True
+
+    split_names = split_credit_names(value)
+
+    if len(split_names) <= 1:
+        return False
+
+    return any(name != value for name in split_names)
 
 
 def should_skip_description_line(line):
