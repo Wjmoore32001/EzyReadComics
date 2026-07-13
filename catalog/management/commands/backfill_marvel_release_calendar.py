@@ -35,13 +35,13 @@ from catalog.marvel.text import (
     normalize_title,
 )
 from catalog.marvel.writer import (
-    WriteResult,
     upsert_issue_from_series_issue,
     upsert_run_from_series,
 )
 
 
 WEDNESDAY_WEEKDAY = 2
+WINDOW_DAYS = 7
 
 DEFAULT_LIMIT = None
 DEFAULT_MISSING_ISSUE_LIMIT = None
@@ -59,7 +59,8 @@ class SeriesReadRecord:
 
 class Command(BaseCommand):
     help = (
-        "Backfill old Marvel release calendar issues by walking Wednesday release dates. "
+        "Backfill old Marvel release calendar issues by walking weekly Wednesday windows. "
+        "Each backfill window uses dateStart=Wednesday and dateEnd=Wednesday+6 days. "
         "Series-first flow: calendar issue -> Back to Series -> full series issue map -> needed issue details. "
         "No AI calls. No Comic Vine calls."
     )
@@ -77,7 +78,7 @@ class Command(BaseCommand):
             "--limit",
             type=int,
             default=DEFAULT_LIMIT,
-            help="Maximum kept calendar issues to use as series seeds per Wednesday. Default: unlimited.",
+            help="Maximum kept calendar issues to use as series seeds per weekly window. Default: unlimited.",
         )
         parser.add_argument(
             "--calendar-timeout",
@@ -101,7 +102,7 @@ class Command(BaseCommand):
             "--detail-limit",
             type=int,
             default=None,
-            help="Maximum planned issue detail pages to read per Wednesday. Default: unlimited.",
+            help="Maximum planned issue detail pages to read per weekly window. Default: unlimited.",
         )
         parser.add_argument(
             "--missing-issue-limit",
@@ -183,12 +184,12 @@ class Command(BaseCommand):
         if missing_issue_limit is not None and missing_issue_limit < 0:
             raise CommandError("--missing-issue-limit cannot be negative.")
 
-        wednesdays = get_wednesdays_newest_first(
+        week_start_dates = get_wednesdays_newest_first(
             start_date=start_date,
             end_date=end_date,
         )
 
-        if not wednesdays:
+        if not week_start_dates:
             self.stdout.write(
                 self.style.WARNING(
                     "No Wednesdays were found inside the selected date range."
@@ -210,7 +211,7 @@ class Command(BaseCommand):
             dry_run=dry_run,
             start_date=start_date,
             end_date=end_date,
-            wednesdays=wednesdays,
+            week_start_dates=week_start_dates,
             limit=limit,
             detail_limit=detail_limit,
             skip_details=skip_details,
@@ -221,18 +222,22 @@ class Command(BaseCommand):
             detail_timeout=detail_timeout,
         )
 
-        for release_date in wednesdays:
+        for week_start_date in week_start_dates:
             close_old_connections()
+
+            week_end_date = week_start_date + timedelta(days=WINDOW_DAYS - 1)
 
             self.stdout.write("")
             self.stdout.write(
                 self.style.SUCCESS(
-                    f"Processing Marvel calendar date: {release_date.isoformat()}"
+                    "Processing Marvel release calendar window: "
+                    f"{week_start_date.isoformat()} to {week_end_date.isoformat()}"
                 )
             )
 
-            date_totals = self.process_release_date(
-                release_date=release_date,
+            date_totals = self.process_release_window(
+                calendar_start_date=week_start_date,
+                calendar_end_date=week_end_date,
                 limit=limit,
                 detail_limit=detail_limit,
                 calendar_timeout=calendar_timeout,
@@ -250,10 +255,11 @@ class Command(BaseCommand):
         close_old_connections()
         self.print_summary(totals=totals, dry_run=dry_run)
 
-    def process_release_date(
+    def process_release_window(
         self,
         *,
-        release_date,
+        calendar_start_date,
+        calendar_end_date,
         limit,
         detail_limit,
         calendar_timeout,
@@ -268,11 +274,11 @@ class Command(BaseCommand):
     ):
         totals = new_totals()
         calendar_url = build_release_calendar_url(
-            start_date=release_date,
-            end_date=release_date,
+            start_date=calendar_start_date,
+            end_date=calendar_end_date,
         )
 
-        read_result = read_calendar_and_series_pages_for_date(
+        read_result = read_calendar_and_series_pages_for_window(
             calendar_url=calendar_url,
             limit=limit,
             headed=headed,
@@ -343,8 +349,8 @@ class Command(BaseCommand):
                 self.stdout.write(format_calendar_issue(issue))
 
         if not kept_calendar_issues:
-            self.stdout.write("No kept calendar issues for this Wednesday.")
-            self.print_date_summary(totals)
+            self.stdout.write("No kept calendar issues for this weekly window.")
+            self.print_window_summary(totals)
             return totals
 
         seed_issue_identities = {
@@ -494,7 +500,7 @@ class Command(BaseCommand):
                     )
 
         close_old_connections()
-        self.print_date_summary(totals)
+        self.print_window_summary(totals)
         return totals
 
     def write_header(
@@ -503,7 +509,7 @@ class Command(BaseCommand):
         dry_run,
         start_date,
         end_date,
-        wednesdays,
+        week_start_dates,
         limit,
         detail_limit,
         skip_details,
@@ -513,14 +519,22 @@ class Command(BaseCommand):
         calendar_timeout,
         detail_timeout,
     ):
+        first_window_end = week_start_dates[0] + timedelta(days=WINDOW_DAYS - 1)
+        last_window_end = week_start_dates[-1] + timedelta(days=WINDOW_DAYS - 1)
+
         self.stdout.write("")
         self.stdout.write(self.style.SUCCESS("Marvel release calendar backfill"))
         self.stdout.write(f"Mode: {'dry run' if dry_run else 'apply'}")
-        self.stdout.write(f"Range oldest date: {start_date.isoformat()}")
-        self.stdout.write(f"Range newest date: {end_date.isoformat()}")
-        self.stdout.write(f"Wednesdays to process: {len(wednesdays)}")
-        self.stdout.write(f"First processed: {wednesdays[0].isoformat()}")
-        self.stdout.write(f"Last processed: {wednesdays[-1].isoformat()}")
+        self.stdout.write(f"Requested range oldest date: {start_date.isoformat()}")
+        self.stdout.write(f"Requested range newest date: {end_date.isoformat()}")
+        self.stdout.write(f"Weekly windows to process: {len(week_start_dates)}")
+        self.stdout.write(
+            f"First processed window: {week_start_dates[0].isoformat()} to {first_window_end.isoformat()}"
+        )
+        self.stdout.write(
+            f"Last processed window: {week_start_dates[-1].isoformat()} to {last_window_end.isoformat()}"
+        )
+        self.stdout.write(f"Window size: {WINDOW_DAYS} days")
         self.stdout.write(f"Calendar timezone: {MARVEL_CALENDAR_TIME_ZONE}")
         self.stdout.write("Reader: Playwright Chromium")
         self.stdout.write(f"Browser mode: {'headed' if headed else 'headless'}")
@@ -531,11 +545,11 @@ class Command(BaseCommand):
         self.stdout.write("Navigation: release calendar issue -> Back to Series -> full series issue map")
         self.stdout.write("Run status behavior: series page Present => ongoing")
         self.stdout.write(
-            "Calendar seed limit per Wednesday: "
+            "Calendar seed limit per weekly window: "
             + (str(limit) if limit is not None else "unlimited")
         )
         self.stdout.write(
-            "Issue detail read limit per Wednesday: "
+            "Issue detail read limit per weekly window: "
             + (str(detail_limit) if detail_limit is not None else "unlimited")
         )
         self.stdout.write(f"Detail lookup: {'off' if skip_details else 'on'}")
@@ -669,9 +683,9 @@ class Command(BaseCommand):
         self.stdout.write("    Skipped write: missing local issue and detail read failed/incomplete enough to avoid skeleton issue")
         self.stdout.write(f"    Detail error: {get_detail_value(detail, 'error') or 'none'}")
 
-    def print_date_summary(self, totals):
+    def print_window_summary(self, totals):
         self.stdout.write("")
-        self.stdout.write("Wednesday summary:")
+        self.stdout.write("Weekly window summary:")
         self.stdout.write(f"  Calendar issues found: {totals['calendar_found']}")
         self.stdout.write(f"  Calendar issues used as seeds: {totals['calendar_processed']}")
         self.stdout.write(f"  Duplicate series seeds skipped: {totals['duplicate_series_seeds']}")
@@ -723,7 +737,7 @@ class Command(BaseCommand):
             self.stdout.write("Dry run only. No catalog data was created or updated.")
 
 
-def read_calendar_and_series_pages_for_date(
+def read_calendar_and_series_pages_for_window(
     *,
     calendar_url,
     limit,

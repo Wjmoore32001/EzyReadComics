@@ -364,6 +364,17 @@ def volume_details(request, pk):
         pk=pk,
     )
 
+    volume_run_links = list(
+        volume.volume_runs.select_related(
+            "run",
+            "run__publisher",
+        ).order_by(
+            "item_order",
+            "run__title",
+            "run__start_year",
+        )
+    )
+
     volume_issues = list(
         ComicVolumeIssue.objects.select_related(
             "issue",
@@ -385,6 +396,12 @@ def volume_details(request, pk):
 
     issues = [volume_issue.issue for volume_issue in volume_issues]
     attach_issue_credit_display(issues)
+    attach_issue_tracking(request, issues)
+
+    volume_issue_groups = build_volume_issue_groups(
+        volume_issues=volume_issues,
+        volume_run_links=volume_run_links,
+    )
 
     default_credits = volume.credits.select_related("person", "role").filter(
         role__show_by_default=True,
@@ -396,14 +413,54 @@ def volume_details(request, pk):
     context = {
         "volume": volume,
         "volume_issues": volume_issues,
+        "volume_issue_groups": volume_issue_groups,
         "issues": issues,
         "default_credits": default_credits,
         "all_credits": all_credits,
         "current_volume_progress": volume.user_tracking,
         "volume_status_choices": VolumeProgress.STATUS_CHOICES,
+        "issue_status_choices": IssueProgress.STATUS_CHOICES,
     }
 
     return render(request, "catalog/volume_details.html", context)
+
+
+def build_volume_issue_groups(*, volume_issues, volume_run_links):
+    groups = []
+    groups_by_run_id = {}
+
+    def get_or_create_group(run, issue_numbers_text=""):
+        if not run:
+            return None
+
+        group = groups_by_run_id.get(run.id)
+
+        if group is None:
+            group = {
+                "run": run,
+                "issue_numbers_text": issue_numbers_text,
+                "volume_issues": [],
+            }
+            groups_by_run_id[run.id] = group
+            groups.append(group)
+        elif issue_numbers_text and not group["issue_numbers_text"]:
+            group["issue_numbers_text"] = issue_numbers_text
+
+        return group
+
+    for volume_run_link in volume_run_links:
+        get_or_create_group(
+            volume_run_link.run,
+            issue_numbers_text=volume_run_link.issue_numbers_text,
+        )
+
+    for volume_issue in volume_issues:
+        group = get_or_create_group(volume_issue.issue.run)
+
+        if group is not None:
+            group["volume_issues"].append(volume_issue)
+
+    return groups
 
 
 def resolve_browse_selection(*, publisher_id, run_id, issue_id, volume_id):

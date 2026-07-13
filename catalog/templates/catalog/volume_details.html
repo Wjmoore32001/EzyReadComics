@@ -110,75 +110,130 @@
     <section class="card erc-panel erc-data-card">
         <div class="card-body">
             <div class="erc-section-header">
-                <h2 class="h3 fw-bold mb-0 erc-section-title">Issues</h2>
+                <h2 class="h3 fw-bold mb-0 erc-section-title">
+                    Runs and issues in this volume
+                </h2>
 
                 <p class="erc-muted mb-0">
-                    {{ volume_issues|length }} result{% if volume_issues|length != 1 %}s{% endif %}
+                    {{ volume_issues|length }} issue{% if volume_issues|length != 1 %}s{% endif %}
+                    {% if volume_issue_groups %}
+                        across {{ volume_issue_groups|length }} run{% if volume_issue_groups|length != 1 %}s{% endif %}
+                    {% endif %}
                 </p>
             </div>
 
-            <div class="table-responsive">
-                <table class="table table-dark table-hover align-middle mb-0 erc-data-table">
-                    <thead>
-                    <tr>
-                        <th scope="col">Order</th>
-                        <th scope="col">Issue</th>
-                        <th scope="col">Published Date</th>
-                        <th scope="col">Writer</th>
-                        <th scope="col">Penciller</th>
-                    </tr>
-                    </thead>
-                    <tbody>
-                    {% for volume_issue in volume_issues %}
-                        <tr
-                            class="clickable-row"
-                            data-row-url="{% url 'catalog:issue_details' volume_issue.issue.id %}"
-                            tabindex="0"
-                            aria-label="Open issue details for issue {{ volume_issue.issue.issue_number }}"
-                        >
-                            <td>
-                                {% if volume_issue.issue_order %}
-                                    {{ volume_issue.issue_order }}
-                                {% else %}
-                                    <span class="erc-muted">—</span>
-                                {% endif %}
-                            </td>
-                            <td class="fw-semibold">
-                                <a href="{% url 'catalog:issue_details' volume_issue.issue.id %}" class="erc-data-link">
-                                    #{{ volume_issue.issue.issue_number }}
-                                </a>
-                            </td>
-                            <td>
-                                {% if volume_issue.issue.published_date %}
-                                    {{ volume_issue.issue.published_date|date:"Y-m-d" }}
-                                {% else %}
-                                    <span class="erc-muted">Unknown</span>
-                                {% endif %}
-                            </td>
-                            <td>
-                                {% if volume_issue.issue.display_writers %}
-                                    {{ volume_issue.issue.display_writers }}
-                                {% else %}
-                                    <span class="erc-muted">Unknown</span>
-                                {% endif %}
-                            </td>
-                            <td>
-                                {% if volume_issue.issue.display_pencillers %}
-                                    {{ volume_issue.issue.display_pencillers }}
-                                {% else %}
-                                    <span class="erc-muted">Unknown</span>
-                                {% endif %}
-                            </td>
-                        </tr>
-                    {% empty %}
-                        <tr>
-                            <td colspan="5" class="text-center erc-muted py-4">
-                                No issues have been linked to this volume.
-                            </td>
-                        </tr>
-                    {% endfor %}
-                    </tbody>
-                </table>
+            <div class="d-flex flex-column gap-4">
+                {% for group in volume_issue_groups %}
+                    <div class="border border-secondary rounded-3 overflow-hidden">
+                        <div class="d-flex flex-column flex-lg-row justify-content-between gap-2 p-3 border-bottom border-secondary">
+                            <div>
+                                <div class="small-muted mb-1">Run</div>
+                                <h3 class="h5 fw-bold mb-0">
+                                    <a href="{% url 'catalog:run_details' group.run.id %}" class="erc-data-link">
+                                        {{ group.run }}
+                                    </a>
+                                </h3>
+                            </div>
+
+                            <div class="text-lg-end">
+                                <div class="small-muted mb-1">Issues</div>
+                                <div class="fw-semibold">
+                                    {% if group.issue_numbers_text %}
+                                        #{{ group.issue_numbers_text }}
+                                    {% else %}
+                                        {{ group.volume_issues|length }} issue{% if group.volume_issues|length != 1 %}s{% endif %}
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="table table-dark table-hover align-middle mb-0 erc-data-table">
+                                <thead>
+                                <tr>
+                                    <th scope="col">Issue</th>
+                                    <th scope="col">Published Date</th>
+                                    <th scope="col">Writer</th>
+                                    <th scope="col" class="text-end">My Comics</th>
+                                </tr>
+                                </thead>
+                                <tbody>
+                                {% for volume_issue in group.volume_issues %}
+                                    {% with issue=volume_issue.issue %}
+                                        <tr
+                                            class="clickable-row"
+                                            data-row-url="{% url 'catalog:issue_details' issue.id %}"
+                                            tabindex="0"
+                                            aria-label="Open issue details for issue {{ issue.issue_number }}"
+                                        >
+                                            <td class="fw-semibold">
+                                                <a href="{% url 'catalog:issue_details' issue.id %}" class="erc-data-link">
+                                                    #{{ issue.issue_number }}
+                                                </a>
+                                            </td>
+                                            <td>
+                                                {% if issue.published_date %}
+                                                    {{ issue.published_date|date:"Y-m-d" }}
+                                                {% else %}
+                                                    <span class="erc-muted">Unknown</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if issue.display_writers %}
+                                                    {{ issue.display_writers }}
+                                                {% else %}
+                                                    <span class="erc-muted">Unknown</span>
+                                                {% endif %}
+                                            </td>
+                                            <td class="text-end erc-track-cell">
+                                                {% if issue.user_tracking %}
+                                                    <form
+                                                        action="{% url 'reading:set_issue_status' issue.id %}"
+                                                        method="post"
+                                                        class="erc-track-form"
+                                                    >
+                                                        {% csrf_token %}
+                                                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                                        <select name="status" class="form-select form-select-sm" data-auto-submit>
+                                                            {% for value, label in issue_status_choices %}
+                                                                <option value="{{ value }}" {% if issue.user_tracking.status == value %}selected{% endif %}>
+                                                                    {{ label }}
+                                                                </option>
+                                                            {% endfor %}
+                                                        </select>
+                                                    </form>
+                                                {% else %}
+                                                    <form
+                                                        action="{% url 'reading:set_issue_status' issue.id %}"
+                                                        method="post"
+                                                        class="erc-track-form"
+                                                    >
+                                                        {% csrf_token %}
+                                                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                                        <button type="submit" class="btn btn-outline-light btn-sm erc-track-button">
+                                                            Follow
+                                                        </button>
+                                                    </form>
+                                                {% endif %}
+                                            </td>
+                                        </tr>
+                                    {% endwith %}
+                                {% empty %}
+                                    <tr>
+                                        <td colspan="4" class="text-center erc-muted py-4">
+                                            No individual issues have been linked for this run yet.
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                {% empty %}
+                    <div class="text-center erc-muted py-4 border border-secondary rounded-3">
+                        No runs or issues have been linked to this volume.
+                    </div>
+                {% endfor %}
             </div>
         </div>
     </section>
