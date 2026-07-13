@@ -39,7 +39,7 @@ NORMAL_RUN_TOKEN_RE = re.compile(
 
 PRE_YEAR_ISSUE_TOKEN_RE = re.compile(
     r"(?P<title_prefix>[A-Z][A-Z0-9 .:'’!?&/+,\-]*?)\s+"
-    r"#(?P<issue>[A-Z0-9.]+(?:\s*-\s*[A-Z0-9.]+)?)\s+"
+    r"#(?P<issue>[A-Z0-9.]+(?:\s*[-–—]\s*[A-Z0-9.]+)?)\s+"
     r"(?P<title_suffix>[A-Z][A-Z0-9 .:'’!?&/+,\-]*?)\s*"
     r"\((?P<year>\d{4})\)",
 )
@@ -94,6 +94,15 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument(
+            "--url",
+            action="append",
+            default=[],
+            help=(
+                "Direct Marvel collection URL to test. Can be passed multiple times. "
+                "When provided, the calendar page is skipped."
+            ),
+        )
+        parser.add_argument(
             "--date",
             help="Single calendar date to test, YYYY-MM-DD. Sets dateStart and dateEnd to the same date.",
         )
@@ -140,6 +149,11 @@ class Command(BaseCommand):
             help="Print rendered page text previews.",
         )
         parser.add_argument(
+            "--show-description",
+            action="store_true",
+            help="Print the parsed description candidate. Off by default to keep output readable.",
+        )
+        parser.add_argument(
             "--verbose",
             action="store_true",
             help="Print parsed collection rows and detailed parser notes.",
@@ -165,43 +179,62 @@ class Command(BaseCommand):
         if detail_timeout < 1000:
             raise CommandError("--detail-timeout must be at least 1000 milliseconds.")
 
-        start_date, end_date = resolve_date_range(options)
-        calendar_url = build_collection_calendar_url(
-            start_date=start_date,
-            end_date=end_date,
-        )
+        direct_urls = [
+            clean_text(url)
+            for url in options["url"]
+            if clean_text(url)
+        ]
 
         headed = options["headed"]
         raw = options["raw"]
         verbose = options["verbose"]
+        show_description = options["show_description"]
 
-        self.write_header(
-            start_date=start_date,
-            end_date=end_date,
-            calendar_url=calendar_url,
-            headed=headed,
-            limit=limit,
-            calendar_timeout=calendar_timeout,
-            detail_timeout=detail_timeout,
-        )
+        if direct_urls:
+            collections = build_direct_url_collections(direct_urls)
 
-        rendered_calendar = read_collection_calendar_with_playwright(
-            calendar_url=calendar_url,
-            headed=headed,
-            timeout_ms=calendar_timeout,
-        )
+            if limit is not None and len(collections) > limit:
+                collections = collections[:limit]
 
-        if raw:
-            self.print_raw_calendar(rendered_calendar)
+            self.write_direct_url_header(
+                collections=collections,
+                headed=headed,
+                detail_timeout=detail_timeout,
+            )
+        else:
+            start_date, end_date = resolve_date_range(options)
+            calendar_url = build_collection_calendar_url(
+                start_date=start_date,
+                end_date=end_date,
+            )
 
-        collections = extract_calendar_collections(rendered_calendar)
+            self.write_calendar_header(
+                start_date=start_date,
+                end_date=end_date,
+                calendar_url=calendar_url,
+                headed=headed,
+                limit=limit,
+                calendar_timeout=calendar_timeout,
+                detail_timeout=detail_timeout,
+            )
 
-        if limit is not None and len(collections) > limit:
-            collections = collections[:limit]
+            rendered_calendar = read_collection_calendar_with_playwright(
+                calendar_url=calendar_url,
+                headed=headed,
+                timeout_ms=calendar_timeout,
+            )
+
+            if raw:
+                self.print_raw_calendar(rendered_calendar)
+
+            collections = extract_calendar_collections(rendered_calendar)
+
+            if limit is not None and len(collections) > limit:
+                collections = collections[:limit]
 
         if verbose:
             self.stdout.write("")
-            self.stdout.write(self.style.SUCCESS("Calendar collections parsed"))
+            self.stdout.write(self.style.SUCCESS("Collections queued for detail parsing"))
 
             for collection in collections:
                 self.stdout.write(format_collection_row(collection))
@@ -212,47 +245,56 @@ class Command(BaseCommand):
             timeout_ms=detail_timeout,
         )
 
-        parsed_with_refs = 0
-        parsed_without_refs = 0
-        explicit_collecting_text_count = 0
-        assumed_one_shot_count = 0
-        material_from_count = 0
+        collections_with_collecting_text = 0
+        collections_with_run_links = 0
+        collections_with_one_shots = 0
+        collections_without_refs = 0
+        total_volume_run_links = 0
+        total_exact_issue_links = 0
+        total_one_shot_links = 0
 
         for collection in collections:
             detail = details.get(collection["detail_url"], empty_collection_detail())
 
             if detail["collecting_text"]:
-                explicit_collecting_text_count += 1
+                collections_with_collecting_text += 1
 
-            if detail["references"]:
-                parsed_with_refs += 1
-            else:
-                parsed_without_refs += 1
+            if detail["run_links"]:
+                collections_with_run_links += 1
 
-            for reference in detail["references"]:
-                if reference["assumed_one_shot"]:
-                    assumed_one_shot_count += 1
+            if detail["one_shots"]:
+                collections_with_one_shots += 1
 
-                if reference["material_from"]:
-                    material_from_count += 1
+            if not detail["run_links"] and not detail["one_shots"]:
+                collections_without_refs += 1
+
+            total_volume_run_links += len(detail["run_links"])
+            total_one_shot_links += len(detail["one_shots"])
+            total_exact_issue_links += sum(
+                len(reference["issue_numbers"])
+                for reference in detail["run_links"]
+            )
 
             self.print_collection_result(
                 collection=collection,
                 detail=detail,
                 raw=raw,
+                show_description=show_description,
             )
 
         self.stdout.write("")
         self.stdout.write(self.style.SUCCESS("Marvel collection parse test complete."))
-        self.stdout.write(f"Calendar collections found: {len(collections)}")
-        self.stdout.write(f"Collections with explicit Collecting text: {explicit_collecting_text_count}")
-        self.stdout.write(f"Collections with parsed issue references: {parsed_with_refs}")
-        self.stdout.write(f"Collections without parsed issue references: {parsed_without_refs}")
-        self.stdout.write(f"Parsed references assuming one-shot #1: {assumed_one_shot_count}")
-        self.stdout.write(f"Parsed material-from references: {material_from_count}")
+        self.stdout.write(f"Collections tested: {len(collections)}")
+        self.stdout.write(f"Collections with explicit Collecting text: {collections_with_collecting_text}")
+        self.stdout.write(f"Collections with parsed future ComicVolumeRun links: {collections_with_run_links}")
+        self.stdout.write(f"Collections with parsed future ComicOneShot links: {collections_with_one_shots}")
+        self.stdout.write(f"Collections without parsed references: {collections_without_refs}")
+        self.stdout.write(f"Future ComicVolumeRun links parsed: {total_volume_run_links}")
+        self.stdout.write(f"Future ComicVolumeIssue exact issue links parsed: {total_exact_issue_links}")
+        self.stdout.write(f"Future ComicVolumeOneShot links parsed: {total_one_shot_links}")
         self.stdout.write("Catalog writes: 0")
 
-    def write_header(
+    def write_calendar_header(
         self,
         *,
         start_date,
@@ -285,6 +327,25 @@ class Command(BaseCommand):
             + (str(limit) if limit is not None else "unlimited")
         )
 
+    def write_direct_url_header(
+        self,
+        *,
+        collections,
+        headed,
+        detail_timeout,
+    ):
+        self.stdout.write("")
+        self.stdout.write(self.style.SUCCESS("Marvel direct collection URL parse test"))
+        self.stdout.write(f"Collection URLs: {len(collections)}")
+        self.stdout.write(f"Calendar timezone: {MARVEL_CALENDAR_TIME_ZONE}")
+        self.stdout.write("Reader: Playwright Chromium")
+        self.stdout.write(f"Browser mode: {'headed' if headed else 'headless'}")
+        self.stdout.write(f"Detail timeout: {detail_timeout} ms")
+        self.stdout.write("Calendar reads: 0")
+        self.stdout.write("AI calls: 0")
+        self.stdout.write("Comic Vine calls: 0")
+        self.stdout.write("Catalog writes: 0")
+
     def print_raw_calendar(self, rendered_calendar):
         self.stdout.write("")
         self.stdout.write(self.style.WARNING("Rendered Marvel collection calendar page"))
@@ -302,7 +363,7 @@ class Command(BaseCommand):
             for link in rendered_calendar["links"][:50]:
                 self.stdout.write(f"- {link['text']} -> {link['href']}")
 
-    def print_collection_result(self, *, collection, detail, raw):
+    def print_collection_result(self, *, collection, detail, raw, show_description):
         self.stdout.write("")
         self.stdout.write(self.style.SUCCESS(format_collection_row(collection)))
         self.stdout.write(f"Detail URL: {collection['detail_url']}")
@@ -310,7 +371,7 @@ class Command(BaseCommand):
         self.stdout.write(f"Read error: {detail['error'] or 'none'}")
         self.stdout.write(f"Parse confidence: {detail['confidence']}")
 
-        if detail["description"]:
+        if show_description and detail["description"]:
             self.stdout.write("")
             self.stdout.write("Description candidate:")
             self.stdout.write(detail["description"])
@@ -323,31 +384,61 @@ class Command(BaseCommand):
             self.stdout.write("")
             self.stdout.write(self.style.WARNING("Collecting text: none found"))
 
-        if detail["references"]:
+        if detail["run_links"]:
             self.stdout.write("")
-            self.stdout.write("Parsed collected issue references:")
+            self.stdout.write("Future ComicVolumeRun / ComicVolumeIssue candidates:")
 
-            for reference in detail["references"]:
+            for reference in detail["run_links"]:
                 issue_summary = summarize_issue_numbers(reference["issue_numbers"])
-                one_shot_note = " [assumed one-shot #1]" if reference["assumed_one_shot"] else ""
-                material_note = " [material from]" if reference["material_from"] else ""
 
                 self.stdout.write(
                     f"- {reference['run_title']} "
                     f"({reference['start_year']}): "
                     f"{issue_summary}"
-                    f"{one_shot_note}"
-                    f"{material_note}"
+                )
+                self.stdout.write(
+                    "  ComicVolumeRun issue_numbers_text: "
+                    + reference["issue_numbers_text"]
                 )
 
-                if reference["issue_expressions"]:
+                if reference["first_issue_number"] or reference["last_issue_number"]:
                     self.stdout.write(
-                        "  source expressions: "
-                        + ", ".join(reference["issue_expressions"])
+                        "  ComicVolumeRun first/last: "
+                        + f"{reference['first_issue_number'] or 'blank'}"
+                        + " / "
+                        + f"{reference['last_issue_number'] or 'blank'}"
+                    )
+
+                if reference["issue_numbers"]:
+                    self.stdout.write(
+                        "  ComicVolumeIssue exact candidates: "
+                        + ", ".join(f"#{issue_number}" for issue_number in reference["issue_numbers"])
                     )
         else:
             self.stdout.write("")
-            self.stdout.write(self.style.WARNING("Parsed collected issue references: none"))
+            self.stdout.write(self.style.WARNING("Future ComicVolumeRun / ComicVolumeIssue candidates: none"))
+
+        if detail["one_shots"]:
+            self.stdout.write("")
+            self.stdout.write("Future ComicOneShot / ComicVolumeOneShot candidates:")
+
+            for one_shot in detail["one_shots"]:
+                reason_text = f" [{one_shot['reason']}]" if one_shot["reason"] else ""
+
+                self.stdout.write(
+                    f"- {one_shot['title']} "
+                    f"({one_shot['start_year']})"
+                    f"{reason_text}"
+                )
+
+                if one_shot["source_issue_expression"]:
+                    self.stdout.write(
+                        "  source issue expression ignored for one-shot storage: "
+                        + one_shot["source_issue_expression"]
+                    )
+        else:
+            self.stdout.write("")
+            self.stdout.write(self.style.WARNING("Future ComicOneShot / ComicVolumeOneShot candidates: none"))
 
         if detail["warnings"]:
             self.stdout.write("")
@@ -393,6 +484,24 @@ def parse_iso_date(value):
         return datetime.strptime(value, "%Y-%m-%d").date()
     except ValueError as exc:
         raise CommandError(f"Invalid date '{value}'. Use YYYY-MM-DD.") from exc
+
+
+def build_direct_url_collections(urls):
+    collections = []
+
+    for url in urls:
+        if not CALENDAR_COLLECTION_LINK_RE.search(url):
+            raise CommandError(f"Not a Marvel collection URL: {url}")
+
+        collections.append(
+            {
+                "title": title_from_collection_url(url) or "[direct collection URL]",
+                "published_date": None,
+                "detail_url": url,
+            }
+        )
+
+    return collections
 
 
 def read_collection_calendar_with_playwright(*, calendar_url, headed, timeout_ms):
@@ -693,7 +802,7 @@ def parse_collection_detail_text(*, text):
     if not collecting_text:
         collecting_text = extract_collecting_text(text)
 
-    references = parse_collected_issue_references(collecting_text)
+    run_links, one_shots = parse_collected_items(collecting_text)
     warnings = []
 
     if not description:
@@ -702,18 +811,13 @@ def parse_collection_detail_text(*, text):
     if not collecting_text:
         warnings.append("No explicit Collecting/Collects text was found.")
 
-    if collecting_text and not references:
+    if collecting_text and not run_links and not one_shots:
         warnings.append("Collecting text was found, but no run/year/issue references were parsed.")
-
-    for reference in references:
-        if reference["assumed_one_shot"]:
-            warnings.append(
-                f"{reference['run_title']} ({reference['start_year']}) had no issue number in the collecting text; assumed #1."
-            )
 
     confidence = determine_parse_confidence(
         collecting_text=collecting_text,
-        references=references,
+        run_links=run_links,
+        one_shots=one_shots,
     )
 
     return {
@@ -721,7 +825,8 @@ def parse_collection_detail_text(*, text):
         "error": "",
         "description": description,
         "collecting_text": collecting_text,
-        "references": references,
+        "run_links": run_links,
+        "one_shots": one_shots,
         "warnings": unique_list(warnings),
         "confidence": confidence,
         "text_preview": text[:2500],
@@ -878,80 +983,93 @@ def truncate_at_stop_marker(value):
     return value[:earliest_index]
 
 
-def parse_collected_issue_references(collecting_text):
+def parse_collected_items(collecting_text):
     collecting_text = normalize_collecting_text(collecting_text)
 
     if not collecting_text:
-        return []
+        return [], []
 
     collecting_body = COLLECTING_START_RE.sub("", collecting_text, count=1).strip()
     run_tokens = find_collected_run_tokens(collecting_body)
 
-    references = []
+    run_links = []
+    one_shots = []
 
     for index, token in enumerate(run_tokens):
         next_start = run_tokens[index + 1]["start"] if index + 1 < len(run_tokens) else len(collecting_body)
         tail = collecting_body[token["end"]:next_start]
-        material_from = token["material_from"]
 
         issue_expressions, issue_numbers = parse_issue_tokens(tail)
-        same_run_material_expressions = []
-        same_run_material_numbers = []
-
-        if "material from" in tail.casefold():
-            main_tail, material_tail = split_same_run_material_tail(tail)
-            issue_expressions, issue_numbers = parse_issue_tokens(main_tail)
-            same_run_material_expressions, same_run_material_numbers = parse_issue_tokens(material_tail)
-
-        assumed_one_shot = False
 
         if not issue_expressions and token["embedded_issue"]:
             issue_expressions = [token["embedded_issue"]]
             issue_numbers = expand_issue_expression(token["embedded_issue"])
 
-        if not issue_expressions:
-            issue_expressions = ["1"]
-            issue_numbers = ["1"]
-            assumed_one_shot = True
+        one_shot_reason = one_shot_reason_for_token(
+            token=token,
+            issue_expressions=issue_expressions,
+            issue_numbers=issue_numbers,
+            token_index=index,
+        )
 
-        references.append(
-            build_reference(
+        if one_shot_reason:
+            one_shots.append(
+                build_one_shot_candidate(
+                    title=token["title"],
+                    start_year=token["year"],
+                    source_issue_expression=issue_expressions[0] if issue_expressions else "",
+                    reason=one_shot_reason,
+                )
+            )
+            continue
+
+        if not issue_expressions:
+            one_shots.append(
+                build_one_shot_candidate(
+                    title=token["title"],
+                    start_year=token["year"],
+                    source_issue_expression="",
+                    reason="no issue number listed; treating as one-shot candidate",
+                )
+            )
+            continue
+
+        run_links.append(
+            build_run_link(
                 run_title=token["title"],
                 start_year=token["year"],
                 issue_expressions=issue_expressions,
                 issue_numbers=issue_numbers,
-                material_from=material_from,
-                assumed_one_shot=assumed_one_shot,
             )
         )
 
-        if same_run_material_expressions:
-            references.append(
-                build_reference(
-                    run_title=token["title"],
-                    start_year=token["year"],
-                    issue_expressions=same_run_material_expressions,
-                    issue_numbers=same_run_material_numbers,
-                    material_from=True,
-                    assumed_one_shot=False,
-                )
-            )
+    run_links = merge_run_link_duplicates(run_links)
+    one_shots = merge_one_shot_duplicates(one_shots)
 
-    references = merge_reference_duplicates(references)
-
-    for reference in references:
+    for reference in run_links:
         reference["issue_numbers"] = sorted(
             unique_list(reference["issue_numbers"]),
             key=issue_number_sort_key,
         )
         reference["issue_expressions"] = unique_list(reference["issue_expressions"])
+        reference["issue_numbers_text"] = ",".join(reference["issue_expressions"])
+        reference["first_issue_number"] = first_issue_number(reference["issue_numbers"])
+        reference["last_issue_number"] = last_issue_number(reference["issue_numbers"])
 
-    return sorted(
-        references,
-        key=lambda item: (
-            normalize_title(item["run_title"]),
-            item["start_year"],
-            item["material_from"],
+    return (
+        sorted(
+            run_links,
+            key=lambda item: (
+                normalize_title(item["run_title"]),
+                item["start_year"],
+            ),
+        ),
+        sorted(
+            one_shots,
+            key=lambda item: (
+                normalize_title(item["title"]),
+                item["start_year"],
+            ),
         ),
     )
 
@@ -959,7 +1077,6 @@ def parse_collected_issue_references(collecting_text):
 def normalize_collecting_text(value):
     value = normalize_text(value)
     value = value.replace("–", "-").replace("—", "-")
-    value = re.sub(r"\s+and\s+material\s+from\s+", ", material from ", value, flags=re.IGNORECASE)
     return value.strip(" .")
 
 
@@ -980,7 +1097,6 @@ def find_collected_run_tokens(collecting_body):
                 "title": title,
                 "year": clean_text(match.group("year")),
                 "embedded_issue": embedded_issue,
-                "material_from": starts_with_material_from(match.group("title_prefix")),
                 "priority": 2,
             }
         )
@@ -998,7 +1114,6 @@ def find_collected_run_tokens(collecting_body):
                 "title": title,
                 "year": clean_text(match.group("year")),
                 "embedded_issue": "",
-                "material_from": starts_with_material_from(match.group("title")),
                 "priority": 1,
             }
         )
@@ -1044,19 +1159,6 @@ def ranges_overlap(left_start, left_end, right_start, right_end):
     return left_start < right_end and right_start < left_end
 
 
-def starts_with_material_from(value):
-    return bool(re.match(r"^\s*material\s+from\s+", clean_text(value), flags=re.IGNORECASE))
-
-
-def split_same_run_material_tail(tail):
-    match = re.search(r"\bmaterial\s+from\b", tail, flags=re.IGNORECASE)
-
-    if not match:
-        return tail, ""
-
-    return tail[:match.start()], tail[match.end():]
-
-
 def parse_issue_tokens(value):
     expressions = []
     issue_numbers = []
@@ -1075,34 +1177,76 @@ def parse_issue_tokens(value):
     return unique_list(expressions), unique_list(issue_numbers)
 
 
-def build_reference(
-    *,
-    run_title,
-    start_year,
-    issue_expressions,
-    issue_numbers,
-    material_from,
-    assumed_one_shot,
-):
+def one_shot_reason_for_token(*, token, issue_expressions, issue_numbers, token_index):
+    if not issue_expressions:
+        return "no issue number listed; treating as one-shot candidate"
+
+    if len(issue_numbers) != 1:
+        return ""
+
+    only_issue_number = clean_text(issue_numbers[0])
+
+    if only_issue_number not in {"0", "1"}:
+        return ""
+
+    if token["embedded_issue"]:
+        return f"issue #{only_issue_number} appears inside title token"
+
+    if token_index > 0:
+        return f"single issue #{only_issue_number} after primary collected run"
+
+    if title_looks_like_one_shot(token["title"]):
+        return f"title looks like one-shot/special and only issue #{only_issue_number} is listed"
+
+    return ""
+
+
+def title_looks_like_one_shot(title):
+    normalized = normalize_title(title)
+
+    one_shot_markers = {
+        "special",
+        "one shot",
+        "wedding special",
+        "fallout",
+        "negative zone",
+        "grimm noir",
+        "yancy street",
+        "annual",
+        "zero",
+    }
+
+    return any(marker in normalized for marker in one_shot_markers)
+
+
+def build_run_link(*, run_title, start_year, issue_expressions, issue_numbers):
     return {
         "run_title": run_title,
         "start_year": start_year,
         "issue_expressions": unique_list(issue_expressions),
         "issue_numbers": unique_list(issue_numbers),
-        "material_from": material_from,
-        "assumed_one_shot": assumed_one_shot,
+        "issue_numbers_text": "",
+        "first_issue_number": "",
+        "last_issue_number": "",
     }
 
 
-def merge_reference_duplicates(references):
+def build_one_shot_candidate(*, title, start_year, source_issue_expression, reason):
+    return {
+        "title": title,
+        "start_year": start_year,
+        "source_issue_expression": clean_text(source_issue_expression),
+        "reason": clean_text(reason),
+    }
+
+
+def merge_run_link_duplicates(references):
     merged = {}
 
     for reference in references:
         key = (
             normalize_title(reference["run_title"]),
             reference["start_year"],
-            reference["material_from"],
-            reference["assumed_one_shot"],
         )
         existing = merged.setdefault(
             key,
@@ -1111,8 +1255,9 @@ def merge_reference_duplicates(references):
                 "start_year": reference["start_year"],
                 "issue_expressions": [],
                 "issue_numbers": [],
-                "material_from": reference["material_from"],
-                "assumed_one_shot": reference["assumed_one_shot"],
+                "issue_numbers_text": "",
+                "first_issue_number": "",
+                "last_issue_number": "",
             },
         )
 
@@ -1120,6 +1265,49 @@ def merge_reference_duplicates(references):
         existing["issue_numbers"].extend(reference["issue_numbers"])
 
     return list(merged.values())
+
+
+def merge_one_shot_duplicates(one_shots):
+    merged = {}
+
+    for one_shot in one_shots:
+        key = (
+            normalize_title(one_shot["title"]),
+            one_shot["start_year"],
+        )
+        existing = merged.setdefault(
+            key,
+            {
+                "title": one_shot["title"],
+                "start_year": one_shot["start_year"],
+                "source_issue_expression": "",
+                "reason": "",
+            },
+        )
+
+        if not existing["source_issue_expression"] and one_shot["source_issue_expression"]:
+            existing["source_issue_expression"] = one_shot["source_issue_expression"]
+
+        if not existing["reason"] and one_shot["reason"]:
+            existing["reason"] = one_shot["reason"]
+
+    return list(merged.values())
+
+
+def first_issue_number(issue_numbers):
+    if not issue_numbers:
+        return ""
+
+    sorted_numbers = sorted(issue_numbers, key=issue_number_sort_key)
+    return clean_text(sorted_numbers[0])
+
+
+def last_issue_number(issue_numbers):
+    if not issue_numbers:
+        return ""
+
+    sorted_numbers = sorted(issue_numbers, key=issue_number_sort_key)
+    return clean_text(sorted_numbers[-1])
 
 
 def clean_issue_expression(value):
@@ -1176,15 +1364,12 @@ def expand_issue_expression(expression):
     return [str(number) for number in range(start, end + 1)]
 
 
-def determine_parse_confidence(*, collecting_text, references):
+def determine_parse_confidence(*, collecting_text, run_links, one_shots):
     if not collecting_text:
         return "none"
 
-    if not references:
+    if not run_links and not one_shots:
         return "none"
-
-    if any(reference["assumed_one_shot"] for reference in references):
-        return "medium"
 
     return "high"
 
@@ -1195,7 +1380,8 @@ def empty_collection_detail():
         "error": "",
         "description": "",
         "collecting_text": "",
-        "references": [],
+        "run_links": [],
+        "one_shots": [],
         "warnings": [],
         "confidence": "none",
         "text_preview": "",
