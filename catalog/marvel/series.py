@@ -18,7 +18,7 @@ from catalog.marvel.urls import (
 
 
 ISSUE_TEXT_RE = re.compile(
-    r"(?P<title>[A-Z0-9][^\n\r#]{1,180}?)\s*"
+    r"(?P<title>[A-Z0-9][^\n\r]{1,220}?)\s*"
     r"\((?P<year>\d{4})\)\s*"
     r"#(?P<issue>[A-Z0-9][A-Z0-9.\-/]*)",
     re.IGNORECASE,
