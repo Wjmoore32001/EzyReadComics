@@ -287,59 +287,63 @@
         </div>
     </section>
 
-    {% if default_credits %}
-        <section class="card erc-panel erc-data-card">
-            <div class="card-body">
-                <div class="erc-section-header">
-                    <h2 class="h3 fw-bold mb-0 erc-section-title">Main credits</h2>
-                </div>
-
-                <div class="table-responsive">
-                    <table class="table table-dark align-middle mb-0 erc-data-table">
-                        <thead>
-                        <tr>
-                            <th scope="col">Role</th>
-                            <th scope="col">Person</th>
-                        </tr>
-                        </thead>
-                        <tbody>
-                        {% for credit in default_credits %}
-                            <tr>
-                                <td>{{ credit.role.name }}</td>
-                                <td class="fw-semibold">{{ credit.person.name }}</td>
-                            </tr>
-                        {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-
-                {% if all_credits|length > default_credits|length %}
-                    <details class="mt-3">
-                        <summary class="erc-muted">Show all credits</summary>
-
-                        <div class="table-responsive mt-3">
-                            <table class="table table-dark align-middle mb-0 erc-data-table">
-                                <thead>
-                                <tr>
-                                    <th scope="col">Role</th>
-                                    <th scope="col">Person</th>
-                                </tr>
-                                </thead>
-                                <tbody>
-                                {% for credit in all_credits %}
-                                    <tr>
-                                        <td>{{ credit.role.name }}</td>
-                                        <td class="fw-semibold">{{ credit.person.name }}</td>
-                                    </tr>
-                                {% endfor %}
-                                </tbody>
-                            </table>
-                        </div>
-                    </details>
-                {% endif %}
+    <section class="card erc-panel erc-data-card">
+        <div class="card-body">
+            <div class="erc-section-header">
+                <h2 class="h3 fw-bold mb-0 erc-section-title">Run credits</h2>
             </div>
-        </section>
-    {% endif %}
+
+            <div class="table-responsive">
+                <table class="table table-dark align-middle mb-0 erc-data-table">
+                    <thead>
+                    <tr>
+                        <th scope="col">Role</th>
+                        <th scope="col">Person</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    {% for credit in default_credits %}
+                        <tr>
+                            <td>{{ credit.role.name }}</td>
+                            <td class="fw-semibold">{{ credit.person.name }}</td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="2" class="text-center erc-muted py-4">
+                                No run credits have been added yet.
+                            </td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            {% if all_credits|length > default_credits|length %}
+                <details class="mt-3">
+                    <summary class="erc-muted">Show all credits</summary>
+
+                    <div class="table-responsive mt-3">
+                        <table class="table table-dark align-middle mb-0 erc-data-table">
+                            <thead>
+                            <tr>
+                                <th scope="col">Role</th>
+                                <th scope="col">Person</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            {% for credit in all_credits %}
+                                <tr>
+                                    <td>{{ credit.role.name }}</td>
+                                    <td class="fw-semibold">{{ credit.person.name }}</td>
+                                </tr>
+                            {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </details>
+            {% endif %}
+        </div>
+    </section>
 </div>
 
 <div class="modal fade" id="tracking-status-modal" tabindex="-1" aria-labelledby="tracking-status-modal-title" aria-hidden="true">

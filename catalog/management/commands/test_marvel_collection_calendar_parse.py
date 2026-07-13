@@ -28,56 +28,62 @@ ON_SALE_WORD_DATE_RE = re.compile(
     re.IGNORECASE,
 )
 
-RUN_TOKEN_RE = re.compile(
-    r"(?P<title>[A-Za-z0-9][A-Za-z0-9 .:'’!?&/+,\-]{1,160}?)"
-    r"\s*\((?P<year>\d{4})\)",
-    re.IGNORECASE,
-)
-
 COLLECTING_START_RE = re.compile(
-    r"\b(?P<label>COLLECTING|COLLECTS|Collecting|Collects)\b:?\s*",
+    r"\bCOLLECTING\b:?\s*|\bCOLLECTS\b:?\s*",
     re.IGNORECASE,
 )
 
-ISSUE_LIST_AFTER_HASH_RE = re.compile(
-    r"#\s*(?P<issue_list>[A-Za-z0-9.,#\s\-–—]+)",
+NORMAL_RUN_TOKEN_RE = re.compile(
+    r"(?P<title>[A-Z][A-Z0-9 .:'’!?&/+,\-]+?)\s*\((?P<year>\d{4})\)",
+)
+
+PRE_YEAR_ISSUE_TOKEN_RE = re.compile(
+    r"(?P<title_prefix>[A-Z][A-Z0-9 .:'’!?&/+,\-]*?)\s+"
+    r"#(?P<issue>[A-Z0-9.]+(?:\s*-\s*[A-Z0-9.]+)?)\s+"
+    r"(?P<title_suffix>[A-Z][A-Z0-9 .:'’!?&/+,\-]*?)\s*"
+    r"\((?P<year>\d{4})\)",
+)
+
+ISSUE_TOKEN_RE = re.compile(
+    r"#\s*(?P<issue>[A-Za-z0-9.]+(?:\s*[-–—]\s*[A-Za-z0-9.]+)?)",
+)
+
+CALENDAR_COLLECTION_LINK_RE = re.compile(
+    r"/comics/collection/\d+/",
     re.IGNORECASE,
 )
 
 STOP_TEXT_MARKERS = (
+    "DIGITAL ISSUE",
+    "MORE DETAILS",
+    "EXTENDED CREDITS",
+    "Rating:",
+    "Format:",
+    "FOC Date:",
+    "Price:",
     "ISBN",
-    "Rated",
-    "Rating",
-    "Format",
-    "Page Count",
-    "Pages",
-    "Price",
-    "Trim Size",
-    "FOC",
-    "See Variant Covers",
-    "Digital Issue",
-    "Read Online",
-    "More Details",
-    "About Marvel",
+    "STORIES",
+    "COVER INFORMATION",
+    "MORE ",
+    "RECOMMENDED SERIES",
+    "ABOUT MARVEL",
     "Terms of Use",
     "Privacy Policy",
     "©",
 )
 
-PARAGRAPH_SKIP_MARKERS = (
-    "Skip menu",
-    "Log in",
-    "Sign up",
-    "Marvel Unlimited",
-    "Subscribe",
-    "Follow Marvel",
-    "Terms of Use",
-    "Privacy Policy",
-    "Your Privacy Choices",
-    "Children's Online Privacy Policy",
-    "Interest-Based Ads",
-    "©",
-)
+DETAIL_ROLE_LABELS = {
+    "WRITER",
+    "WRITERS",
+    "ARTIST",
+    "ARTISTS",
+    "PENCILLER",
+    "PENCILLERS",
+    "PENCILER",
+    "PENCILERS",
+    "COVER ARTIST",
+    "COVER ARTISTS",
+}
 
 
 class Command(BaseCommand):
@@ -209,17 +215,26 @@ class Command(BaseCommand):
         parsed_with_refs = 0
         parsed_without_refs = 0
         explicit_collecting_text_count = 0
+        assumed_one_shot_count = 0
+        material_from_count = 0
 
         for collection in collections:
             detail = details.get(collection["detail_url"], empty_collection_detail())
 
-            if detail["collecting_texts"]:
+            if detail["collecting_text"]:
                 explicit_collecting_text_count += 1
 
             if detail["references"]:
                 parsed_with_refs += 1
             else:
                 parsed_without_refs += 1
+
+            for reference in detail["references"]:
+                if reference["assumed_one_shot"]:
+                    assumed_one_shot_count += 1
+
+                if reference["material_from"]:
+                    material_from_count += 1
 
             self.print_collection_result(
                 collection=collection,
@@ -230,9 +245,11 @@ class Command(BaseCommand):
         self.stdout.write("")
         self.stdout.write(self.style.SUCCESS("Marvel collection parse test complete."))
         self.stdout.write(f"Calendar collections found: {len(collections)}")
-        self.stdout.write(f"Collections with explicit collecting text: {explicit_collecting_text_count}")
+        self.stdout.write(f"Collections with explicit Collecting text: {explicit_collecting_text_count}")
         self.stdout.write(f"Collections with parsed issue references: {parsed_with_refs}")
         self.stdout.write(f"Collections without parsed issue references: {parsed_without_refs}")
+        self.stdout.write(f"Parsed references assuming one-shot #1: {assumed_one_shot_count}")
+        self.stdout.write(f"Parsed material-from references: {material_from_count}")
         self.stdout.write("Catalog writes: 0")
 
     def write_header(
@@ -298,15 +315,13 @@ class Command(BaseCommand):
             self.stdout.write("Description candidate:")
             self.stdout.write(detail["description"])
 
-        if detail["collecting_texts"]:
+        if detail["collecting_text"]:
             self.stdout.write("")
-            self.stdout.write("Collecting text candidate(s):")
-
-            for collecting_text in detail["collecting_texts"]:
-                self.stdout.write(f"- {collecting_text}")
+            self.stdout.write("Collecting text:")
+            self.stdout.write(detail["collecting_text"])
         else:
             self.stdout.write("")
-            self.stdout.write(self.style.WARNING("Collecting text candidate(s): none found"))
+            self.stdout.write(self.style.WARNING("Collecting text: none found"))
 
         if detail["references"]:
             self.stdout.write("")
@@ -314,10 +329,15 @@ class Command(BaseCommand):
 
             for reference in detail["references"]:
                 issue_summary = summarize_issue_numbers(reference["issue_numbers"])
+                one_shot_note = " [assumed one-shot #1]" if reference["assumed_one_shot"] else ""
+                material_note = " [material from]" if reference["material_from"] else ""
+
                 self.stdout.write(
                     f"- {reference['run_title']} "
                     f"({reference['start_year']}): "
                     f"{issue_summary}"
+                    f"{one_shot_note}"
+                    f"{material_note}"
                 )
 
                 if reference["issue_expressions"]:
@@ -460,7 +480,7 @@ def read_rendered_collection_calendar_page(*, context, calendar_url, timeout_ms)
                 """
                 () => {
                     const links = Array.from(document.querySelectorAll("a"));
-                    return links.some((link) => (link.href || "").includes("/comics/collection"));
+                    return links.some((link) => (link.href || "").includes("/comics/collection/"));
                 }
                 """,
                 timeout=timeout_ms,
@@ -485,40 +505,12 @@ def read_rendered_collection_calendar_page(*, context, calendar_url, timeout_ms)
                         .trim();
                 }
 
-                function cardTextFor(element) {
-                    let node = element;
-                    let bestText = normalizeText(element.innerText || element.textContent || "");
-
-                    for (let depth = 0; depth < 8 && node; depth += 1) {
-                        const text = normalizeText(node.innerText || node.textContent || "");
-
-                        if (
-                            text &&
-                            (
-                                text.includes("ON SALE") ||
-                                text.length > bestText.length
-                            )
-                        ) {
-                            bestText = text;
-                        }
-
-                        if (text.includes("ON SALE")) {
-                            break;
-                        }
-
-                        node = node.parentElement;
-                    }
-
-                    return bestText;
-                }
-
                 return elements
                     .map((element) => ({
                         text: normalizeText(element.innerText || element.textContent || ""),
-                        href: element.href || "",
-                        card_text: cardTextFor(element)
+                        href: element.href || ""
                     }))
-                    .filter((item) => item.href && item.href.includes("/comics/collection"));
+                    .filter((item) => item.href && item.href.includes("/comics/collection/"));
             }
             """,
         )
@@ -582,19 +574,7 @@ def read_collection_detail_page(*, context, collection, timeout_ms):
         page.wait_for_timeout(1000)
 
         text = page.locator("body").inner_text(timeout=timeout_ms)
-        paragraphs = page.eval_on_selector_all(
-            "p",
-            """
-            elements => elements
-                .map((element) => String(element.innerText || element.textContent || "").trim())
-                .filter(Boolean)
-            """,
-        )
-
-        detail = parse_collection_detail_text(
-            text=text,
-            paragraphs=paragraphs,
-        )
+        detail = parse_collection_detail_text(text=text)
         detail["read_attempted"] = True
         detail["error"] = ""
         detail["text_preview"] = text[:2500]
@@ -610,83 +590,129 @@ def read_collection_detail_page(*, context, collection, timeout_ms):
 
 
 def extract_calendar_collections(rendered_calendar):
-    collections = []
-    seen_urls = set()
+    grouped = {}
 
     for link in rendered_calendar.get("links") or []:
         detail_url = clean_text(link.get("href"))
 
-        if not detail_url or detail_url in seen_urls:
+        if not detail_url or not CALENDAR_COLLECTION_LINK_RE.search(detail_url):
             continue
 
-        title = clean_collection_title(link.get("text"))
+        grouped.setdefault(detail_url, []).append(clean_collection_title(link.get("text")))
+
+    collections = []
+
+    for detail_url, title_candidates in grouped.items():
+        title = best_collection_title_candidate(title_candidates)
 
         if not title:
-            title = extract_collection_title_from_card_text(link.get("card_text"))
+            title = title_from_collection_url(detail_url)
 
-        published_date = parse_calendar_date_from_text(link.get("card_text"))
-
-        if not published_date:
-            published_date = parse_calendar_date_from_text(rendered_calendar.get("text"))
+        published_date = parse_calendar_date_from_text(rendered_calendar.get("text"))
 
         collections.append(
             {
                 "title": title or "[unknown collection title]",
                 "published_date": published_date,
                 "detail_url": detail_url,
-                "card_text": clean_text(link.get("card_text")),
             }
         )
-        seen_urls.add(detail_url)
 
     return sorted(collections, key=collection_sort_key)
 
 
-def extract_collection_title_from_card_text(card_text):
-    lines = normalize_page_lines(card_text)
+def best_collection_title_candidate(title_candidates):
+    cleaned_candidates = []
 
-    for line in lines:
-        if normalize_text(line).startswith("ON SALE"):
+    for title in title_candidates:
+        title = clean_collection_title(title)
+
+        if not title:
             continue
 
-        if line.lower() in {"new this week", "collections", "comics"}:
+        if len(title) < 4:
             continue
 
-        if len(line) < 3:
+        if title.upper() in {"COMICS", "COLLECTIONS", "NEW COLLECTIONS"}:
             continue
 
-        return clean_collection_title(line)
+        cleaned_candidates.append(title)
 
-    return ""
+    if not cleaned_candidates:
+        return ""
 
-
-def parse_collection_detail_text(*, text, paragraphs):
-    description = extract_description_candidate(
-        text=text,
-        paragraphs=paragraphs,
+    cleaned_candidates = sorted(
+        cleaned_candidates,
+        key=lambda value: (
+            collection_title_score(value),
+            len(value),
+        ),
+        reverse=True,
     )
-    collecting_texts = extract_collecting_texts(description)
 
-    if not collecting_texts:
-        collecting_texts = extract_collecting_texts(text)
+    return cleaned_candidates[0]
 
-    references = parse_collected_issue_references(collecting_texts)
+
+def collection_title_score(title):
+    score = 0
+    upper_title = title.upper()
+
+    if "TRADE PAPERBACK" in upper_title:
+        score += 5
+
+    if "HARDCOVER" in upper_title:
+        score += 5
+
+    if "OMNIBUS" in upper_title:
+        score += 3
+
+    if "VOL." in upper_title or "VOL " in upper_title:
+        score += 2
+
+    if "(" in title and ")" in title:
+        score += 2
+
+    return score
+
+
+def title_from_collection_url(url):
+    match = re.search(r"/comics/collection/\d+/([^/?#]+)", clean_text(url))
+
+    if not match:
+        return ""
+
+    slug = match.group(1)
+    slug = slug.replace("_", " ")
+    return clean_collection_title(slug.title())
+
+
+def parse_collection_detail_text(*, text):
+    description = extract_description_from_detail_text(text)
+    collecting_text = extract_collecting_text(description)
+
+    if not collecting_text:
+        collecting_text = extract_collecting_text(text)
+
+    references = parse_collected_issue_references(collecting_text)
     warnings = []
 
     if not description:
-        warnings.append("No useful description paragraph was found.")
+        warnings.append("No useful description text was found.")
 
-    if not collecting_texts:
+    if not collecting_text:
         warnings.append("No explicit Collecting/Collects text was found.")
 
-    if collecting_texts and not references:
+    if collecting_text and not references:
         warnings.append("Collecting text was found, but no run/year/issue references were parsed.")
 
-    if not collecting_texts and references:
-        warnings.append("Issue references were parsed without explicit Collecting/Collects text.")
+    for reference in references:
+        if reference["assumed_one_shot"]:
+            warnings.append(
+                f"{reference['run_title']} ({reference['start_year']}) had no issue number in the collecting text; assumed #1."
+            )
 
     confidence = determine_parse_confidence(
-        collecting_texts=collecting_texts,
+        collecting_text=collecting_text,
         references=references,
     )
 
@@ -694,217 +720,406 @@ def parse_collection_detail_text(*, text, paragraphs):
         "read_attempted": False,
         "error": "",
         "description": description,
-        "collecting_texts": collecting_texts,
+        "collecting_text": collecting_text,
         "references": references,
-        "warnings": warnings,
+        "warnings": unique_list(warnings),
         "confidence": confidence,
         "text_preview": text[:2500],
     }
 
 
-def extract_description_candidate(*, text, paragraphs):
-    candidates = []
+def extract_description_from_detail_text(text):
+    lines = normalize_page_lines(text)
 
-    for paragraph in paragraphs or []:
-        paragraph = clean_description(paragraph)
+    if not lines:
+        return ""
 
-        if not paragraph:
+    start_index = find_description_start_index(lines)
+    end_index = find_description_end_index(lines, start_index)
+
+    if start_index is None or end_index is None or end_index <= start_index:
+        return ""
+
+    description_lines = []
+
+    for line in lines[start_index:end_index]:
+        if should_skip_description_line(line):
             continue
 
-        if should_skip_paragraph(paragraph):
-            continue
+        description_lines.append(line)
 
-        if len(paragraph) < 40:
-            continue
+    description = clean_description(" ".join(description_lines))
 
-        candidates.append(paragraph)
+    if description:
+        return description
 
-    collecting_candidates = [
-        paragraph
-        for paragraph in candidates
-        if COLLECTING_START_RE.search(paragraph)
-    ]
+    collecting_text = extract_collecting_text(normalize_text(text))
 
-    if collecting_candidates:
-        return "\n\n".join(collecting_candidates[:3])
-
-    issue_reference_candidates = [
-        paragraph
-        for paragraph in candidates
-        if RUN_TOKEN_RE.search(paragraph) and "#" in paragraph
-    ]
-
-    if issue_reference_candidates:
-        return "\n\n".join(issue_reference_candidates[:3])
-
-    if candidates:
-        return "\n\n".join(candidates[:2])
-
-    normalized_text = normalize_text(text)
-    collecting_texts = extract_collecting_texts(normalized_text)
-
-    if collecting_texts:
-        return "\n\n".join(collecting_texts[:3])
+    if collecting_text:
+        return collecting_text
 
     return ""
 
 
-def extract_collecting_texts(value):
+def find_description_start_index(lines):
+    label_indices = []
+
+    for index, line in enumerate(lines):
+        label = normalize_label(line)
+
+        if label in DETAIL_ROLE_LABELS:
+            label_indices.append(index)
+
+    if label_indices:
+        last_label_index = label_indices[-1]
+
+        if last_label_index + 2 < len(lines):
+            return last_label_index + 2
+
+    for index, line in enumerate(lines):
+        if "Collecting " in line or "COLLECTING " in line:
+            return index
+
+    return None
+
+
+def find_description_end_index(lines, start_index):
+    if start_index is None:
+        return None
+
+    for index in range(start_index, len(lines)):
+        if is_description_stop_line(lines[index]):
+            return index
+
+    return len(lines)
+
+
+def is_description_stop_line(line):
+    normalized = normalize_text(line)
+
+    for marker in STOP_TEXT_MARKERS:
+        if normalized.upper().startswith(marker.upper()):
+            return True
+
+    return False
+
+
+def should_skip_description_line(line):
+    normalized = normalize_text(line)
+
+    if not normalized:
+        return True
+
+    if normalized.upper() in {
+        "SKIP MENU",
+        "LOG IN",
+        "SIGN UP",
+        "MARVEL UNLIMITED",
+        "SUBSCRIBE",
+        "NEWS",
+        "COMICS",
+        "CHARACTERS",
+        "GAMES",
+        "MOVIES",
+        "TV SHOWS",
+        "VIDEOS",
+        "MORE",
+        "BACK TO SERIES",
+        "PREV",
+        "NEXT",
+    }:
+        return True
+
+    return False
+
+
+def extract_collecting_text(value):
     value = normalize_text(value)
 
     if not value:
+        return ""
+
+    match = COLLECTING_START_RE.search(value)
+
+    if not match:
+        return ""
+
+    chunk = value[match.start():]
+    chunk = truncate_at_stop_marker(chunk)
+    chunk = truncate_collecting_sentence(chunk)
+    return clean_description(chunk)
+
+
+def truncate_collecting_sentence(value):
+    value = normalize_text(value)
+    period_match = re.search(r"\.(?:\s|$)", value)
+
+    if period_match:
+        return value[:period_match.start()]
+
+    return value
+
+
+def truncate_at_stop_marker(value):
+    earliest_index = None
+
+    for marker in STOP_TEXT_MARKERS:
+        match = re.search(re.escape(marker), value, flags=re.IGNORECASE)
+
+        if not match:
+            continue
+
+        if earliest_index is None or match.start() < earliest_index:
+            earliest_index = match.start()
+
+    if earliest_index is None:
+        return value
+
+    return value[:earliest_index]
+
+
+def parse_collected_issue_references(collecting_text):
+    collecting_text = normalize_collecting_text(collecting_text)
+
+    if not collecting_text:
         return []
 
-    matches = list(COLLECTING_START_RE.finditer(value))
-    collecting_texts = []
+    collecting_body = COLLECTING_START_RE.sub("", collecting_text, count=1).strip()
+    run_tokens = find_collected_run_tokens(collecting_body)
 
-    if matches:
-        for index, match in enumerate(matches):
-            start = match.start()
-            next_start = matches[index + 1].start() if index + 1 < len(matches) else len(value)
-            chunk = value[start:next_start]
-            chunk = truncate_at_stop_marker(chunk)
-            chunk = clean_description(chunk)
+    references = []
 
-            if chunk:
-                collecting_texts.append(chunk)
+    for index, token in enumerate(run_tokens):
+        next_start = run_tokens[index + 1]["start"] if index + 1 < len(run_tokens) else len(collecting_body)
+        tail = collecting_body[token["end"]:next_start]
+        material_from = token["material_from"]
 
-    if collecting_texts:
-        return collecting_texts
+        issue_expressions, issue_numbers = parse_issue_tokens(tail)
+        same_run_material_expressions = []
+        same_run_material_numbers = []
 
-    fallback_chunks = []
+        if "material from" in tail.casefold():
+            main_tail, material_tail = split_same_run_material_tail(tail)
+            issue_expressions, issue_numbers = parse_issue_tokens(main_tail)
+            same_run_material_expressions, same_run_material_numbers = parse_issue_tokens(material_tail)
 
-    for paragraph in split_into_candidate_sentences(value):
-        if RUN_TOKEN_RE.search(paragraph) and "#" in paragraph:
-            fallback_chunks.append(paragraph)
+        assumed_one_shot = False
 
-    return fallback_chunks
+        if not issue_expressions and token["embedded_issue"]:
+            issue_expressions = [token["embedded_issue"]]
+            issue_numbers = expand_issue_expression(token["embedded_issue"])
 
+        if not issue_expressions:
+            issue_expressions = ["1"]
+            issue_numbers = ["1"]
+            assumed_one_shot = True
 
-def parse_collected_issue_references(collecting_texts):
-    reference_map = {}
+        references.append(
+            build_reference(
+                run_title=token["title"],
+                start_year=token["year"],
+                issue_expressions=issue_expressions,
+                issue_numbers=issue_numbers,
+                material_from=material_from,
+                assumed_one_shot=assumed_one_shot,
+            )
+        )
 
-    for collecting_text in collecting_texts:
-        text = normalize_text(collecting_text)
-        run_matches = list(RUN_TOKEN_RE.finditer(text))
-
-        for index, match in enumerate(run_matches):
-            run_title = clean_collected_run_title(match.group("title"))
-            start_year = clean_text(match.group("year"))
-
-            if not run_title or not start_year:
-                continue
-
-            next_start = run_matches[index + 1].start() if index + 1 < len(run_matches) else len(text)
-            tail = text[match.end():next_start]
-            issue_expressions, issue_numbers = parse_issue_references_from_tail(tail)
-
-            if not issue_expressions:
-                continue
-
-            key = (normalize_title(run_title), start_year)
-            existing = reference_map.setdefault(
-                key,
-                {
-                    "run_title": run_title,
-                    "start_year": start_year,
-                    "issue_expressions": [],
-                    "issue_numbers": [],
-                },
+        if same_run_material_expressions:
+            references.append(
+                build_reference(
+                    run_title=token["title"],
+                    start_year=token["year"],
+                    issue_expressions=same_run_material_expressions,
+                    issue_numbers=same_run_material_numbers,
+                    material_from=True,
+                    assumed_one_shot=False,
+                )
             )
 
-            for expression in issue_expressions:
-                if expression not in existing["issue_expressions"]:
-                    existing["issue_expressions"].append(expression)
-
-            for issue_number in issue_numbers:
-                if issue_number not in existing["issue_numbers"]:
-                    existing["issue_numbers"].append(issue_number)
-
-    references = list(reference_map.values())
+    references = merge_reference_duplicates(references)
 
     for reference in references:
         reference["issue_numbers"] = sorted(
-            reference["issue_numbers"],
+            unique_list(reference["issue_numbers"]),
             key=issue_number_sort_key,
         )
+        reference["issue_expressions"] = unique_list(reference["issue_expressions"])
 
     return sorted(
         references,
         key=lambda item: (
             normalize_title(item["run_title"]),
             item["start_year"],
+            item["material_from"],
         ),
     )
 
 
-def parse_issue_references_from_tail(tail):
-    tail = normalize_text(tail)
-    tail = tail.replace("–", "-").replace("—", "-")
+def normalize_collecting_text(value):
+    value = normalize_text(value)
+    value = value.replace("–", "-").replace("—", "-")
+    value = re.sub(r"\s+and\s+material\s+from\s+", ", material from ", value, flags=re.IGNORECASE)
+    return value.strip(" .")
 
-    hash_match = ISSUE_LIST_AFTER_HASH_RE.search(tail)
 
-    if not hash_match:
-        return [], []
+def find_collected_run_tokens(collecting_body):
+    candidates = []
 
-    issue_list_text = hash_match.group("issue_list")
-    issue_list_text = normalize_issue_list_text(issue_list_text)
+    for match in PRE_YEAR_ISSUE_TOKEN_RE.finditer(collecting_body):
+        title_prefix = clean_collected_run_title(match.group("title_prefix"))
+        title_suffix = clean_collected_run_title(match.group("title_suffix"))
+        title = f"{title_prefix}: {title_suffix}"
+        title = clean_collected_run_title(title)
+        embedded_issue = clean_issue_expression(match.group("issue"))
 
+        candidates.append(
+            {
+                "start": match.start(),
+                "end": match.end(),
+                "title": title,
+                "year": clean_text(match.group("year")),
+                "embedded_issue": embedded_issue,
+                "material_from": starts_with_material_from(match.group("title_prefix")),
+                "priority": 2,
+            }
+        )
+
+    for match in NORMAL_RUN_TOKEN_RE.finditer(collecting_body):
+        title = clean_collected_run_title(match.group("title"))
+
+        if not title:
+            continue
+
+        candidates.append(
+            {
+                "start": match.start(),
+                "end": match.end(),
+                "title": title,
+                "year": clean_text(match.group("year")),
+                "embedded_issue": "",
+                "material_from": starts_with_material_from(match.group("title")),
+                "priority": 1,
+            }
+        )
+
+    candidates = remove_overlapping_run_tokens(candidates)
+
+    return sorted(candidates, key=lambda token: token["start"])
+
+
+def remove_overlapping_run_tokens(candidates):
+    candidates = sorted(
+        candidates,
+        key=lambda token: (
+            token["start"],
+            -token["priority"],
+            -(token["end"] - token["start"]),
+        ),
+    )
+    kept = []
+
+    for candidate in candidates:
+        overlaps = False
+
+        for kept_token in kept:
+            if ranges_overlap(
+                candidate["start"],
+                candidate["end"],
+                kept_token["start"],
+                kept_token["end"],
+            ):
+                overlaps = True
+                break
+
+        if overlaps:
+            continue
+
+        kept.append(candidate)
+
+    return kept
+
+
+def ranges_overlap(left_start, left_end, right_start, right_end):
+    return left_start < right_end and right_start < left_end
+
+
+def starts_with_material_from(value):
+    return bool(re.match(r"^\s*material\s+from\s+", clean_text(value), flags=re.IGNORECASE))
+
+
+def split_same_run_material_tail(tail):
+    match = re.search(r"\bmaterial\s+from\b", tail, flags=re.IGNORECASE)
+
+    if not match:
+        return tail, ""
+
+    return tail[:match.start()], tail[match.end():]
+
+
+def parse_issue_tokens(value):
     expressions = []
     issue_numbers = []
 
-    for piece in issue_list_text.split(","):
-        piece = clean_issue_expression(piece)
+    for match in ISSUE_TOKEN_RE.finditer(value):
+        expression = clean_issue_expression(match.group("issue"))
 
-        if not piece:
+        if not is_valid_issue_expression(expression):
             continue
 
-        if not is_valid_issue_expression(piece):
-            continue
+        expressions.append(expression)
 
-        if piece not in expressions:
-            expressions.append(piece)
+        for issue_number in expand_issue_expression(expression):
+            issue_numbers.append(issue_number)
 
-        expanded_numbers = expand_issue_expression(piece)
-
-        for issue_number in expanded_numbers:
-            if issue_number not in issue_numbers:
-                issue_numbers.append(issue_number)
-
-    return expressions, issue_numbers
+    return unique_list(expressions), unique_list(issue_numbers)
 
 
-def normalize_issue_list_text(value):
-    value = clean_text(value)
-    value = value.replace("#", ",")
-    value = re.sub(r"\s+and\s+#", ", #", value, flags=re.IGNORECASE)
-    value = re.sub(r"\s+and\s+([A-Za-z0-9])", r", \1", value, flags=re.IGNORECASE)
+def build_reference(
+    *,
+    run_title,
+    start_year,
+    issue_expressions,
+    issue_numbers,
+    material_from,
+    assumed_one_shot,
+):
+    return {
+        "run_title": run_title,
+        "start_year": start_year,
+        "issue_expressions": unique_list(issue_expressions),
+        "issue_numbers": unique_list(issue_numbers),
+        "material_from": material_from,
+        "assumed_one_shot": assumed_one_shot,
+    }
 
-    stop_patterns = (
-        r"\bmaterial\s+from\b",
-        r"\bplus\b",
-        r"\bwith\b",
-        r"\bfeaturing\b",
-        r"\bincluding\b",
-        r"\balongside\b",
-        r"\bbonus\b",
-        r"\bvariant\b",
-        r"\bcovers?\b",
-        r"\bpages?\b",
-        r"\bby\b",
-    )
 
-    for pattern in stop_patterns:
-        match = re.search(pattern, value, flags=re.IGNORECASE)
+def merge_reference_duplicates(references):
+    merged = {}
 
-        if match:
-            value = value[:match.start()]
-            break
+    for reference in references:
+        key = (
+            normalize_title(reference["run_title"]),
+            reference["start_year"],
+            reference["material_from"],
+            reference["assumed_one_shot"],
+        )
+        existing = merged.setdefault(
+            key,
+            {
+                "run_title": reference["run_title"],
+                "start_year": reference["start_year"],
+                "issue_expressions": [],
+                "issue_numbers": [],
+                "material_from": reference["material_from"],
+                "assumed_one_shot": reference["assumed_one_shot"],
+            },
+        )
 
-    value = value.split(".")[0]
-    value = re.sub(r"\s+", " ", value)
-    value = re.sub(r"\s*,\s*", ",", value)
-    return value.strip(" ,;")
+        existing["issue_expressions"].extend(reference["issue_expressions"])
+        existing["issue_numbers"].extend(reference["issue_numbers"])
+
+    return list(merged.values())
 
 
 def clean_issue_expression(value):
@@ -923,7 +1138,7 @@ def is_valid_issue_expression(value):
     if not re.fullmatch(r"[A-Za-z0-9.]+(?:-[A-Za-z0-9.]+)?", value):
         return False
 
-    if value.lower() in {
+    if value.casefold() in {
         "and",
         "or",
         "the",
@@ -961,56 +1176,17 @@ def expand_issue_expression(expression):
     return [str(number) for number in range(start, end + 1)]
 
 
-def determine_parse_confidence(*, collecting_texts, references):
-    if collecting_texts and references:
-        return "high"
+def determine_parse_confidence(*, collecting_text, references):
+    if not collecting_text:
+        return "none"
 
-    if references:
+    if not references:
+        return "none"
+
+    if any(reference["assumed_one_shot"] for reference in references):
         return "medium"
 
-    return "none"
-
-
-def truncate_at_stop_marker(value):
-    earliest_index = None
-
-    for marker in STOP_TEXT_MARKERS:
-        index = value.find(marker)
-
-        if index == -1:
-            continue
-
-        if earliest_index is None or index < earliest_index:
-            earliest_index = index
-
-    if earliest_index is None:
-        return value
-
-    return value[:earliest_index]
-
-
-def split_into_candidate_sentences(value):
-    value = normalize_text(value)
-    pieces = re.split(r"(?<=[.!?])\s+", value)
-
-    return [
-        clean_description(piece)
-        for piece in pieces
-        if clean_description(piece)
-    ]
-
-
-def should_skip_paragraph(paragraph):
-    normalized = paragraph.lower()
-
-    for marker in PARAGRAPH_SKIP_MARKERS:
-        if marker.lower() in normalized:
-            return True
-
-    if len(paragraph) > 2000:
-        return True
-
-    return False
+    return "high"
 
 
 def empty_collection_detail():
@@ -1018,7 +1194,7 @@ def empty_collection_detail():
         "read_attempted": False,
         "error": "",
         "description": "",
-        "collecting_texts": [],
+        "collecting_text": "",
         "references": [],
         "warnings": [],
         "confidence": "none",
@@ -1098,6 +1274,12 @@ def normalize_page_lines(text):
     return lines
 
 
+def normalize_label(value):
+    value = clean_text(value)
+    value = re.sub(r"\s+", " ", value)
+    return value.strip(" :").upper()
+
+
 def clean_description(value):
     value = clean_text(value)
     value = re.sub(r"\s+", " ", value)
@@ -1136,6 +1318,7 @@ def collection_sort_key(collection):
     return (
         published_date,
         normalize_title(collection.get("title")),
+        collection.get("detail_url") or "",
     )
 
 
@@ -1186,6 +1369,22 @@ def summarize_issue_numbers(issue_numbers):
             parts.append(f"#{start_value}-{end_value}")
 
     return ", ".join(parts)
+
+
+def unique_list(values):
+    seen = set()
+    unique_values = []
+
+    for value in values:
+        key = clean_text(value).casefold()
+
+        if key in seen:
+            continue
+
+        seen.add(key)
+        unique_values.append(value)
+
+    return unique_values
 
 
 def format_collection_row(collection):

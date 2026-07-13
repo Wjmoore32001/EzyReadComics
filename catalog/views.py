@@ -253,8 +253,6 @@ def browse_items(request):
 def run_details(request, pk):
     run = get_object_or_404(
         ComicRun.objects.select_related("publisher").prefetch_related(
-            "credits__person",
-            "credits__role",
             "volumes",
         ),
         pk=pk,
@@ -281,10 +279,7 @@ def run_details(request, pk):
             "title",
         )
     )
-    default_credits = run.credits.select_related("person", "role").filter(
-        role__show_by_default=True,
-    )
-    all_credits = run.credits.select_related("person", "role")
+    default_credits, all_credits = get_unique_run_issue_credits(run)
 
     attach_run_tracking(request, [run])
 
@@ -942,6 +937,42 @@ def issue_credit_prefetch():
             "person__name",
         ),
     )
+
+
+def get_unique_run_issue_credits(run):
+    credits = ComicIssueCredit.objects.select_related(
+        "person",
+        "role",
+    ).filter(
+        issue__run=run,
+    ).order_by(
+        "role__display_order",
+        "credit_order",
+        "person__name",
+        "issue__published_date",
+        "issue__issue_number",
+        "issue__id",
+    )
+
+    unique_credits = []
+    seen_credit_keys = set()
+
+    for credit in credits:
+        credit_key = (credit.role_id, credit.person_id)
+
+        if credit_key in seen_credit_keys:
+            continue
+
+        seen_credit_keys.add(credit_key)
+        unique_credits.append(credit)
+
+    default_credits = [
+        credit
+        for credit in unique_credits
+        if credit.role.show_by_default
+    ]
+
+    return default_credits, unique_credits
 
 
 def attach_issue_credit_display(issues):
