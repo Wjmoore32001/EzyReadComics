@@ -1,5 +1,6 @@
 import re
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta
+from urllib.parse import unquote
 from zoneinfo import ZoneInfo
 
 from django.core.management.base import BaseCommand, CommandError
@@ -28,7 +29,8 @@ MARVEL_CALENDAR_BASE_URL = "https://www.marvel.com/comics/calendar"
 MARVEL_CALENDAR_TIME_ZONE = "America/New_York"
 MARVEL_PUBLISHER_NAME = "Marvel"
 
-DEFAULT_LIMIT = 50
+DEFAULT_LIMIT = None
+DEFAULT_MISSING_ISSUE_LIMIT = None
 DEFAULT_CALENDAR_TIMEOUT_MS = 45000
 DEFAULT_DETAIL_TIMEOUT_MS = 45000
 
@@ -108,6 +110,16 @@ ISSUE_TEXT_RE = re.compile(
     re.IGNORECASE,
 )
 
+MARVEL_ISSUE_URL_RE = re.compile(
+    r"/comics/issue/\d+/(?P<slug>[^/?#]+)",
+    re.IGNORECASE,
+)
+
+MARVEL_ISSUE_SLUG_RE = re.compile(
+    r"(?P<title>.+)_(?P<year>\d{4})_(?P<issue>[a-z0-9.\-]+)$",
+    re.IGNORECASE,
+)
+
 ON_SALE_NUMERIC_DATE_RE = re.compile(
     r"ON\s+SALE:?\s*(?P<date>\d{1,2}/\d{1,2}/\d{4})",
     re.IGNORECASE,
@@ -122,7 +134,8 @@ ON_SALE_WORD_DATE_RE = re.compile(
 class Command(BaseCommand):
     help = (
         "Sync current Marvel release calendar issues from Marvel.com. "
-        "Uses Playwright for the rendered calendar and issue detail pages. No AI calls."
+        "Uses Playwright for the rendered calendar, issue detail pages, and missing issue backfill. "
+        "No AI calls."
     )
 
     def add_arguments(self, parser):
@@ -130,7 +143,7 @@ class Command(BaseCommand):
             "--limit",
             type=int,
             default=DEFAULT_LIMIT,
-            help=f"Maximum kept calendar issues to process. Default: {DEFAULT_LIMIT}",
+            help="Maximum kept calendar issues to process. Default: unlimited.",
         )
         parser.add_argument(
             "--calendar-timeout",
@@ -151,6 +164,20 @@ class Command(BaseCommand):
             ),
         )
         parser.add_argument(
+            "--missing-issue-limit",
+            type=int,
+            default=DEFAULT_MISSING_ISSUE_LIMIT,
+            help=(
+                "Maximum previous issue pages to read while filling local missing issues. "
+                "Default: unlimited."
+            ),
+        )
+        parser.add_argument(
+            "--skip-missing-issues",
+            action="store_true",
+            help="Do not walk previous issue links to fill locally missing issues.",
+        )
+        parser.add_argument(
             "--headed",
             action="store_true",
             help="Open Chromium visibly instead of headless.",
@@ -158,7 +185,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "--skip-details",
             action="store_true",
-            help="Only read the calendar list. Do not open issue detail pages.",
+            help="Only read the calendar list. Do not open issue detail pages or backfill missing issues.",
         )
         parser.add_argument(
             "--dry-run",
@@ -186,15 +213,19 @@ class Command(BaseCommand):
         limit = options["limit"]
         calendar_timeout = options["calendar_timeout"]
         detail_timeout = options["detail_timeout"]
+        missing_issue_limit = options["missing_issue_limit"]
 
-        if limit < 1:
-            raise CommandError("--limit must be at least 1.")
+        if limit is not None and limit < 1:
+            raise CommandError("--limit must be at least 1 when provided.")
 
         if calendar_timeout < 1000:
             raise CommandError("--calendar-timeout must be at least 1000 milliseconds.")
 
         if detail_timeout < 1000:
             raise CommandError("--detail-timeout must be at least 1000 milliseconds.")
+
+        if missing_issue_limit is not None and missing_issue_limit < 0:
+            raise CommandError("--missing-issue-limit cannot be negative.")
 
         calendar_start_date = current_marvel_date()
         calendar_end_date = calendar_start_date + timedelta(days=6)
@@ -207,12 +238,15 @@ class Command(BaseCommand):
         raw = options["raw"]
         verbose = options["verbose"]
         skip_details = options["skip_details"]
+        skip_missing_issues = options["skip_missing_issues"] or skip_details
         headed = options["headed"]
 
         self.write_header(
             dry_run=dry_run,
             limit=limit,
             skip_details=skip_details,
+            skip_missing_issues=skip_missing_issues,
+            missing_issue_limit=missing_issue_limit,
             calendar_start_date=calendar_start_date,
             calendar_end_date=calendar_end_date,
             calendar_url=calendar_url,
@@ -224,11 +258,16 @@ class Command(BaseCommand):
         totals = {
             "calendar_browser_reads": 0,
             "detail_browser_reads": 0,
+            "missing_issue_browser_reads": 0,
             "detail_read_failures": 0,
             "calendar_found": 0,
             "calendar_incomplete_skipped": 0,
             "keyword_skipped": 0,
             "limit_skipped": 0,
+            "calendar_processed": 0,
+            "missing_issue_targets": 0,
+            "missing_issues_discovered": 0,
+            "missing_issue_limit_reached": 0,
             "processed": 0,
             "existing_detail_skipped": 0,
             "complete_details": 0,
@@ -277,11 +316,21 @@ class Command(BaseCommand):
             for issue in keyword_skipped_issues:
                 self.stdout.write(format_calendar_issue(issue))
 
-        if len(kept_issues) > limit:
+        if limit is not None and len(kept_issues) > limit:
             totals["limit_skipped"] = len(kept_issues) - limit
             kept_issues = kept_issues[:limit]
 
+        missing_issue_plan = {}
+
+        if not skip_missing_issues:
+            missing_issue_plan = build_missing_issue_plan(kept_issues)
+            totals["missing_issue_targets"] = sum(
+                len(numbers)
+                for numbers in missing_issue_plan.values()
+            )
+
         issue_records = []
+        detail_read_issues = []
 
         for calendar_issue in kept_issues:
             existing_run = find_existing_run(
@@ -292,54 +341,92 @@ class Command(BaseCommand):
                 run=existing_run,
                 issue_number=calendar_issue["issue_number"],
             )
+            series_key = issue_series_key(calendar_issue)
+            has_missing_issue_targets = bool(missing_issue_plan.get(series_key))
+
             existing_detail_skipped = bool(
-                existing_issue and issue_has_complete_details(existing_issue)
+                existing_issue
+                and issue_has_complete_details(existing_issue)
+                and not has_missing_issue_targets
+                and not skip_details
             )
 
             issue_records.append(
                 {
+                    "source": "calendar",
                     "calendar_issue": calendar_issue,
-                    "existing_issue": existing_issue,
                     "existing_detail_skipped": existing_detail_skipped,
                     "detail": empty_detail(),
                 }
             )
 
-            if existing_detail_skipped and not skip_details:
+            if existing_detail_skipped:
                 totals["existing_detail_skipped"] += 1
 
-        issues_needing_details = [
-            record["calendar_issue"]
-            for record in issue_records
-            if not skip_details and not record["existing_detail_skipped"]
-        ]
+            if not skip_details and not existing_detail_skipped:
+                detail_read_issues.append(calendar_issue)
 
-        detail_map = {}
-
-        if issues_needing_details:
-            detail_map = read_issue_details_with_playwright(
-                calendar_issues=issues_needing_details,
+        if detail_read_issues:
+            detail_result = read_current_and_missing_details_with_playwright(
+                calendar_issues=detail_read_issues,
+                missing_issue_plan=missing_issue_plan,
+                skip_missing_issues=skip_missing_issues,
+                missing_issue_limit=missing_issue_limit,
                 headed=headed,
                 timeout_ms=detail_timeout,
             )
 
+            for record in issue_records:
+                key = calendar_issue_key(record["calendar_issue"])
+                detail = detail_result["current_details"].get(key)
+
+                if detail:
+                    record["detail"] = detail
+
+            issue_records.extend(detail_result["missing_records"])
+            totals["missing_issues_discovered"] = len(detail_result["missing_records"])
+            totals["missing_issue_limit_reached"] = int(
+                detail_result["missing_issue_limit_reached"]
+            )
+
+        issue_records = sorted(
+            issue_records,
+            key=lambda record: (
+                normalize_title(record["calendar_issue"]["run_title"]),
+                issue_number_sort_key(record["calendar_issue"]["issue_number"]),
+                0 if record["source"] == "missing" else 1,
+            ),
+        )
+
         for record in issue_records:
             calendar_issue = record["calendar_issue"]
-            existing_issue = record["existing_issue"]
-            existing_detail_skipped = record["existing_detail_skipped"]
+            detail = record["detail"]
+            source = record["source"]
+
+            existing_run = find_existing_run(
+                title=calendar_issue["run_title"],
+                start_year=calendar_issue["start_year"],
+            )
+            existing_issue = find_existing_issue(
+                run=existing_run,
+                issue_number=calendar_issue["issue_number"],
+            )
 
             totals["processed"] += 1
 
-            if not skip_details and not existing_detail_skipped:
-                detail = detail_map.get(calendar_issue_key(calendar_issue), empty_detail())
-                record["detail"] = detail
+            if source == "calendar":
+                totals["calendar_processed"] += 1
 
-                if detail["read_attempted"]:
+            if detail.get("read_attempted"):
+                if source == "missing":
+                    totals["missing_issue_browser_reads"] += 1
+                else:
                     totals["detail_browser_reads"] += 1
 
-                if detail["error"]:
-                    totals["detail_read_failures"] += 1
+            if detail.get("error"):
+                totals["detail_read_failures"] += 1
 
+            if detail.get("checked"):
                 missing_fields = get_preview_missing_fields(
                     issue=existing_issue,
                     detail=detail,
@@ -364,7 +451,7 @@ class Command(BaseCommand):
 
             result = apply_calendar_issue(
                 calendar_issue=calendar_issue,
-                detail=record["detail"],
+                detail=detail,
                 dry_run=dry_run,
             )
 
@@ -376,12 +463,13 @@ class Command(BaseCommand):
 
             if verbose:
                 self.print_issue_result(
+                    source=source,
                     calendar_issue=calendar_issue,
-                    detail=record["detail"],
+                    detail=detail,
                     result=result,
                     dry_run=dry_run,
                     skip_details=skip_details,
-                    existing_detail_skipped=existing_detail_skipped,
+                    existing_detail_skipped=record["existing_detail_skipped"],
                 )
 
         self.print_summary(totals=totals, dry_run=dry_run)
@@ -392,6 +480,8 @@ class Command(BaseCommand):
         dry_run,
         limit,
         skip_details,
+        skip_missing_issues,
+        missing_issue_limit,
         calendar_start_date,
         calendar_end_date,
         calendar_url,
@@ -414,8 +504,18 @@ class Command(BaseCommand):
         self.stdout.write(f"Detail timeout: {detail_timeout} ms")
         self.stdout.write("AI calls: 0")
         self.stdout.write("Publisher: Marvel")
-        self.stdout.write(f"Calendar issue process limit: {limit}")
+        self.stdout.write(
+            "Calendar issue process limit: "
+            + (str(limit) if limit is not None else "unlimited")
+        )
         self.stdout.write(f"Detail lookup: {'off' if skip_details else 'on'}")
+        self.stdout.write(
+            f"Missing issue backfill: {'off' if skip_missing_issues else 'on'}"
+        )
+        self.stdout.write(
+            "Missing issue page read limit: "
+            + (str(missing_issue_limit) if missing_issue_limit is not None else "unlimited")
+        )
         self.stdout.write("Skip keywords: " + ", ".join(SKIP_KEYWORDS))
         self.stdout.write("Creates collections: no")
         self.stdout.write("Uses Comic Vine: no")
@@ -439,23 +539,47 @@ class Command(BaseCommand):
                 self.stdout.write(f"- {link['text']} -> {link['href']}")
 
     def print_raw_detail(self, *, calendar_issue, detail):
+        previous_candidate = select_previous_issue_candidate(
+            current_issue=calendar_issue,
+            detail=detail,
+        )
+
         self.stdout.write("")
         self.stdout.write(self.style.WARNING(f"Parsed detail: {format_calendar_issue(calendar_issue)}"))
         self.stdout.write(f"Detail URL: {calendar_issue.get('detail_url') or 'none'}")
         self.stdout.write(f"Read attempted: {detail['read_attempted']}")
         self.stdout.write(f"Read error: {detail['error'] or 'none'}")
+        self.stdout.write(
+            "Published date from detail: "
+            + (
+                detail["published_date"].isoformat()
+                if detail.get("published_date")
+                else "none"
+            )
+        )
         self.stdout.write(f"Description: {detail['description'] or '[blank]'}")
         self.stdout.write(f"Credits: {format_credits(detail['credits']) or 'none'}")
         self.stdout.write(
             "Missing fields: "
             + (",".join(get_detail_missing_fields(detail)) or "none")
         )
+
+        if previous_candidate:
+            self.stdout.write(
+                "Previous issue link: "
+                + format_calendar_issue_without_date(previous_candidate)
+                + f" -> {previous_candidate.get('detail_url')}"
+            )
+        else:
+            self.stdout.write("Previous issue link: none")
+
         self.stdout.write("Text preview:")
         self.stdout.write(detail["text_preview"])
 
     def print_issue_result(
         self,
         *,
+        source,
         calendar_issue,
         detail,
         result,
@@ -465,6 +589,9 @@ class Command(BaseCommand):
     ):
         self.stdout.write("")
         self.stdout.write(format_calendar_issue(calendar_issue))
+
+        if source == "missing":
+            self.stdout.write("  Source: missing issue backfill")
 
         if skip_details:
             self.stdout.write("  Detail lookup: skipped by flag")
@@ -512,7 +639,8 @@ class Command(BaseCommand):
         self.stdout.write("")
         self.stdout.write(self.style.SUCCESS("Marvel release calendar sync complete."))
         self.stdout.write(f"Calendar browser reads: {totals['calendar_browser_reads']}")
-        self.stdout.write(f"Issue detail browser reads: {totals['detail_browser_reads']}")
+        self.stdout.write(f"Current issue detail browser reads: {totals['detail_browser_reads']}")
+        self.stdout.write(f"Missing issue detail browser reads: {totals['missing_issue_browser_reads']}")
         self.stdout.write(f"Issue detail read failures: {totals['detail_read_failures']}")
         self.stdout.write("AI calls: 0")
         self.stdout.write(f"Calendar issues found: {totals['calendar_found']}")
@@ -521,7 +649,11 @@ class Command(BaseCommand):
         )
         self.stdout.write(f"Skipped by keyword: {totals['keyword_skipped']}")
         self.stdout.write(f"Skipped by limit: {totals['limit_skipped']}")
-        self.stdout.write(f"Issues processed: {totals['processed']}")
+        self.stdout.write(f"Calendar issues processed: {totals['calendar_processed']}")
+        self.stdout.write(f"Local missing issue targets: {totals['missing_issue_targets']}")
+        self.stdout.write(f"Missing issues discovered from Marvel links: {totals['missing_issues_discovered']}")
+        self.stdout.write(f"Missing issue limit reached: {'yes' if totals['missing_issue_limit_reached'] else 'no'}")
+        self.stdout.write(f"Total issues processed: {totals['processed']}")
         self.stdout.write(
             f"Detail reads skipped for complete existing issues: "
             f"{totals['existing_detail_skipped']}"
@@ -560,8 +692,26 @@ def read_calendar_with_playwright(*, calendar_url, headed, timeout_ms):
             browser.close()
 
 
-def read_issue_details_with_playwright(*, calendar_issues, headed, timeout_ms):
-    detail_map = {}
+def read_current_and_missing_details_with_playwright(
+    *,
+    calendar_issues,
+    missing_issue_plan,
+    skip_missing_issues,
+    missing_issue_limit,
+    headed,
+    timeout_ms,
+):
+    result = {
+        "current_details": {},
+        "missing_records": [],
+        "missing_issue_limit_reached": False,
+    }
+
+    seen_number_keys = {
+        issue_number_identity(calendar_issue)
+        for calendar_issue in calendar_issues
+    }
+    missing_pages_read = 0
 
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(
@@ -571,16 +721,141 @@ def read_issue_details_with_playwright(*, calendar_issues, headed, timeout_ms):
 
         try:
             for calendar_issue in calendar_issues:
-                detail_map[calendar_issue_key(calendar_issue)] = read_issue_detail_page(
+                detail = read_issue_detail_page(
                     context=context,
                     calendar_issue=calendar_issue,
                     timeout_ms=timeout_ms,
                 )
+                result["current_details"][calendar_issue_key(calendar_issue)] = detail
+
+                if skip_missing_issues:
+                    continue
+
+                planned_numbers = set(
+                    missing_issue_plan.get(issue_series_key(calendar_issue), set())
+                )
+
+                if not planned_numbers:
+                    continue
+
+                if missing_issue_limit is None:
+                    remaining_page_limit = None
+                else:
+                    remaining_page_limit = missing_issue_limit - missing_pages_read
+
+                    if remaining_page_limit <= 0:
+                        result["missing_issue_limit_reached"] = True
+                        continue
+
+                walk_result = walk_previous_missing_issues(
+                    context=context,
+                    starting_issue=calendar_issue,
+                    starting_detail=detail,
+                    wanted_issue_numbers=planned_numbers,
+                    seen_number_keys=seen_number_keys,
+                    page_limit=remaining_page_limit,
+                    timeout_ms=timeout_ms,
+                )
+
+                result["missing_records"].extend(walk_result["records"])
+                missing_pages_read += walk_result["pages_read"]
+
+                if walk_result["limit_reached"]:
+                    result["missing_issue_limit_reached"] = True
         finally:
             context.close()
             browser.close()
 
-    return detail_map
+    return result
+
+
+def walk_previous_missing_issues(
+    *,
+    context,
+    starting_issue,
+    starting_detail,
+    wanted_issue_numbers,
+    seen_number_keys,
+    page_limit,
+    timeout_ms,
+):
+    records = []
+    pages_read = 0
+    limit_reached = False
+
+    remaining_wanted = set(wanted_issue_numbers)
+    current_issue = starting_issue
+    current_detail = starting_detail
+    visited_urls = set()
+
+    if current_issue.get("detail_url"):
+        visited_urls.add(current_issue["detail_url"])
+
+    while remaining_wanted:
+        if page_limit is not None and pages_read >= page_limit:
+            limit_reached = True
+            break
+
+        previous_issue = select_previous_issue_candidate(
+            current_issue=current_issue,
+            detail=current_detail,
+        )
+
+        if not previous_issue:
+            break
+
+        previous_number = pure_integer_issue_number(previous_issue["issue_number"])
+
+        if previous_number is None:
+            break
+
+        if previous_number < min(remaining_wanted):
+            break
+
+        previous_url = clean_text(previous_issue.get("detail_url"))
+
+        if not previous_url:
+            break
+
+        if previous_url in visited_urls:
+            break
+
+        visited_urls.add(previous_url)
+
+        previous_detail = read_issue_detail_page(
+            context=context,
+            calendar_issue=previous_issue,
+            timeout_ms=timeout_ms,
+        )
+        pages_read += 1
+
+        if previous_detail.get("published_date"):
+            previous_issue["published_date"] = previous_detail["published_date"]
+
+        if previous_number in remaining_wanted and previous_issue.get("published_date"):
+            number_key = issue_number_identity(previous_issue)
+
+            if number_key not in seen_number_keys:
+                records.append(
+                    {
+                        "source": "missing",
+                        "calendar_issue": previous_issue,
+                        "existing_detail_skipped": False,
+                        "detail": previous_detail,
+                    }
+                )
+                seen_number_keys.add(number_key)
+
+            remaining_wanted.remove(previous_number)
+
+        current_issue = previous_issue
+        current_detail = previous_detail
+
+    return {
+        "records": records,
+        "pages_read": pages_read,
+        "limit_reached": limit_reached,
+    }
 
 
 def build_browser_context(browser):
@@ -709,6 +984,18 @@ def read_issue_detail_page(*, context, calendar_issue, timeout_ms):
         page.wait_for_timeout(1000)
 
         text = page.locator("body").inner_text(timeout=timeout_ms)
+        links = page.eval_on_selector_all(
+            "a",
+            """
+            elements => elements
+                .map((element) => ({
+                    text: (element.innerText || "").trim(),
+                    href: element.href || ""
+                }))
+                .filter((item) => item.href && item.href.includes("/comics/issue/"))
+            """,
+        )
+
         detail = parse_issue_detail_text(
             text=text,
             calendar_issue=calendar_issue,
@@ -716,6 +1003,7 @@ def read_issue_detail_page(*, context, calendar_issue, timeout_ms):
         detail["checked"] = True
         detail["read_attempted"] = True
         detail["error"] = ""
+        detail["issue_links"] = links
         detail["text_preview"] = text[:2000]
         return detail
 
@@ -735,6 +1023,7 @@ def parse_issue_detail_text(*, text, calendar_issue):
     end_index = find_detail_end_index(lines=lines, start_index=title_index)
 
     credits = []
+    published_date = None
     last_metadata_index = title_index
     index = title_index + 1
 
@@ -743,6 +1032,13 @@ def parse_issue_detail_text(*, text, calendar_issue):
         label, inline_value = parse_detail_label_line(line)
 
         if label == "PUBLISHED":
+            published_date = parse_detail_published_date(inline_value)
+
+            if published_date:
+                last_metadata_index = max(last_metadata_index, index)
+                index += 1
+                continue
+
             value_index = find_next_value_line_index(
                 lines=lines,
                 start_index=index + 1,
@@ -750,6 +1046,7 @@ def parse_issue_detail_text(*, text, calendar_issue):
             )
 
             if value_index is not None:
+                published_date = parse_detail_published_date(lines[value_index])
                 last_metadata_index = max(last_metadata_index, value_index)
                 index = value_index + 1
                 continue
@@ -808,12 +1105,17 @@ def parse_issue_detail_text(*, text, calendar_issue):
 
     description = clean_description(" ".join(description_lines))
 
+    if published_date is None:
+        published_date = calendar_issue.get("published_date")
+
     return {
         "checked": False,
         "read_attempted": False,
         "error": "",
+        "published_date": published_date,
         "description": description,
         "credits": normalize_credit_list(credits),
+        "issue_links": [],
         "text_preview": text[:2000],
     }
 
@@ -933,25 +1235,167 @@ def build_issue_link_map(links):
     link_map = {}
 
     for link in links or []:
-        text = clean_text(link.get("text"))
-        href = clean_text(link.get("href"))
-        match = ISSUE_TEXT_RE.search(text)
+        parsed_issue = parse_issue_link(link)
 
-        if not match or not href:
+        if not parsed_issue:
             continue
 
-        run_title = clean_calendar_title(match.group("title"))
-        start_year = clean_text(match.group("year"))
-        issue_number = canonical_issue_number(match.group("issue"))
-
         key = (
-            normalize_title(run_title),
-            start_year,
-            normalize_issue_number(issue_number),
+            normalize_title(parsed_issue["run_title"]),
+            clean_text(parsed_issue["start_year"]),
+            normalize_issue_number(parsed_issue["issue_number"]),
         )
-        link_map[key] = href
+        link_map[key] = parsed_issue["detail_url"]
 
     return link_map
+
+
+def select_previous_issue_candidate(*, current_issue, detail):
+    current_number = pure_integer_issue_number(current_issue["issue_number"])
+
+    if current_number is None:
+        return None
+
+    candidates = []
+
+    for link in detail.get("issue_links") or []:
+        parsed_issue = parse_issue_link(link)
+
+        if not parsed_issue:
+            continue
+
+        if not same_issue_series(parsed_issue, current_issue):
+            continue
+
+        parsed_number = pure_integer_issue_number(parsed_issue["issue_number"])
+
+        if parsed_number is None:
+            continue
+
+        if parsed_number >= current_number:
+            continue
+
+        parsed_issue["run_title"] = current_issue["run_title"]
+        parsed_issue["start_year"] = current_issue["start_year"]
+
+        candidates.append((parsed_number, parsed_issue))
+
+    if not candidates:
+        return None
+
+    candidates.sort(key=lambda item: item[0], reverse=True)
+    return candidates[0][1]
+
+
+def parse_issue_link(link):
+    text = clean_text(link.get("text"))
+    href = clean_text(link.get("href"))
+
+    if not href:
+        return None
+
+    match = ISSUE_TEXT_RE.search(text)
+
+    if match:
+        return {
+            "run_title": clean_calendar_title(match.group("title")),
+            "start_year": clean_text(match.group("year")),
+            "issue_number": canonical_issue_number(match.group("issue")),
+            "published_date": None,
+            "detail_url": href,
+        }
+
+    parsed_from_url = parse_issue_from_marvel_url(href)
+
+    if not parsed_from_url:
+        return None
+
+    parsed_from_url["detail_url"] = href
+    return parsed_from_url
+
+
+def parse_issue_from_marvel_url(url):
+    match = MARVEL_ISSUE_URL_RE.search(url)
+
+    if not match:
+        return None
+
+    slug = unquote(match.group("slug"))
+    slug_match = MARVEL_ISSUE_SLUG_RE.match(slug)
+
+    if not slug_match:
+        return None
+
+    title = title_from_slug(slug_match.group("title"))
+
+    return {
+        "run_title": title,
+        "start_year": clean_text(slug_match.group("year")),
+        "issue_number": canonical_issue_number(slug_match.group("issue")),
+        "published_date": None,
+        "detail_url": url,
+    }
+
+
+def title_from_slug(value):
+    value = clean_text(value)
+    value = value.replace("_", " ")
+    value = re.sub(r"\s+", " ", value)
+    return value.title()
+
+
+def same_issue_series(left_issue, right_issue):
+    return (
+        normalize_title(left_issue.get("run_title"))
+        == normalize_title(right_issue.get("run_title"))
+        and clean_text(left_issue.get("start_year"))
+        == clean_text(right_issue.get("start_year"))
+    )
+
+
+def build_missing_issue_plan(calendar_issues):
+    plan = {}
+
+    for calendar_issue in calendar_issues:
+        current_issue_number = pure_integer_issue_number(calendar_issue["issue_number"])
+
+        if current_issue_number is None or current_issue_number <= 1:
+            continue
+
+        existing_run = find_existing_run(
+            title=calendar_issue["run_title"],
+            start_year=calendar_issue["start_year"],
+        )
+        existing_issue_numbers = get_existing_integer_issue_numbers(existing_run)
+
+        missing_issue_numbers = {
+            issue_number
+            for issue_number in range(1, current_issue_number)
+            if issue_number not in existing_issue_numbers
+        }
+
+        if not missing_issue_numbers:
+            continue
+
+        key = issue_series_key(calendar_issue)
+        plan.setdefault(key, set()).update(missing_issue_numbers)
+
+    return plan
+
+
+def get_existing_integer_issue_numbers(run):
+    if run is None:
+        return set()
+
+    existing_issue_numbers = set()
+
+    for issue in run.issues.all():
+        issue_number = pure_integer_issue_number(issue.issue_number)
+
+        if issue_number is not None:
+            existing_issue_numbers.add(issue_number)
+
+    return existing_issue_numbers
 
 
 def calendar_issue_identity(issue):
@@ -977,6 +1421,21 @@ def calendar_issue_key(issue):
         clean_text(issue["start_year"]),
         normalize_issue_number(issue["issue_number"]),
         issue["published_date"],
+    )
+
+
+def issue_series_key(issue):
+    return (
+        normalize_title(issue["run_title"]),
+        clean_text(issue["start_year"]),
+    )
+
+
+def issue_number_identity(issue):
+    return (
+        normalize_title(issue["run_title"]),
+        clean_text(issue["start_year"]),
+        normalize_issue_number(issue["issue_number"]),
     )
 
 
@@ -1085,7 +1544,7 @@ def apply_calendar_issue(*, calendar_issue, detail, dry_run):
             credits=detail.get("credits") or [],
         )
 
-        if detail.get("checked"):
+        if detail.get("checked") or issue_has_complete_details(issue):
             tracking_changed = update_issue_official_detail_tracking(issue)
 
             if tracking_changed and not issue_was_created:
@@ -1347,6 +1806,13 @@ def issue_needs_release_update(issue, calendar_issue, detail):
             return True
 
         if issue.official_detail_missing_fields != missing_fields:
+            return True
+
+    if issue_has_complete_details(issue):
+        if issue.official_detail_status != ComicIssue.OFFICIAL_DETAIL_STATUS_COMPLETE:
+            return True
+
+        if issue.official_detail_missing_fields:
             return True
 
     return False
@@ -1629,8 +2095,10 @@ def empty_detail():
         "checked": False,
         "read_attempted": False,
         "error": "",
+        "published_date": None,
         "description": "",
         "credits": [],
+        "issue_links": [],
         "text_preview": "",
     }
 
@@ -1816,7 +2284,19 @@ def clean_credit_name(value):
 def parse_calendar_display_date(value):
     value = clean_text(value)
 
-    for date_format in ("%m/%d/%Y", "%B %d, %Y"):
+    for date_format in ("%m/%d/%Y", "%B %d, %Y", "%b %d, %Y"):
+        try:
+            return datetime.strptime(value, date_format).date()
+        except ValueError:
+            continue
+
+    return None
+
+
+def parse_detail_published_date(value):
+    value = clean_text(value)
+
+    for date_format in ("%B %d, %Y", "%b %d, %Y", "%m/%d/%Y"):
         try:
             return datetime.strptime(value, date_format).date()
         except ValueError:
@@ -1913,11 +2393,26 @@ def issue_number_sort_key(value):
 
 
 def format_calendar_issue(calendar_issue):
+    published_date = calendar_issue.get("published_date")
+
+    if published_date:
+        published_date_text = published_date.isoformat()
+    else:
+        published_date_text = "unknown-date"
+
     return (
         f"{calendar_issue['run_title']} "
         f"({calendar_issue['start_year']}) "
         f"#{calendar_issue['issue_number']} "
-        f"[{calendar_issue['published_date'].isoformat()}]"
+        f"[{published_date_text}]"
+    )
+
+
+def format_calendar_issue_without_date(calendar_issue):
+    return (
+        f"{calendar_issue['run_title']} "
+        f"({calendar_issue['start_year']}) "
+        f"#{calendar_issue['issue_number']}"
     )
 
 
