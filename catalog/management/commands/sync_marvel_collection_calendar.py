@@ -1,47 +1,62 @@
+from dataclasses import dataclass
 from datetime import timedelta
-from urllib.parse import quote
 
 from django.core.management.base import BaseCommand, CommandError
 from django.db import close_old_connections
-from django.utils.text import slugify
 
-from catalog.management.commands.sync_marvel_release_calendar_ai import (
-    apply_calendar_issue,
-    clean_text,
-    find_existing_issue,
-    find_existing_run,
-    normalize_issue_number,
-    normalize_title,
-    parse_issue_link,
-    read_issue_detail_page,
-)
-from catalog.management.commands.test_marvel_collection_calendar_parse import (
+from catalog.marvel.browser import (
     DEFAULT_CALENDAR_TIMEOUT_MS,
     DEFAULT_DETAIL_TIMEOUT_MS,
     MARVEL_CALENDAR_TIME_ZONE,
-    build_browser_context,
+    ensure_playwright,
+    marvel_browser_context,
+)
+from catalog.marvel.collection_writer import (
+    PreviewObject,
+    catalog_run_title,
+    create_or_update_volume_run,
+    create_volume_issue,
+    create_volume_one_shot,
+    get_or_create_collection_run,
+    get_or_create_one_shot,
+    get_or_create_volume,
+    is_preview,
+)
+from catalog.marvel.collections import (
     build_collection_calendar_url,
     current_marvel_date,
+    empty_collection_detail,
     extract_calendar_collections,
     format_collection_row,
+    parsed_collection_issue_links,
+    read_collection_calendar_page,
+    read_collection_detail_page,
+)
+from catalog.marvel.issues import (
+    get_detail_value,
+    get_issue_missing_fields,
+    read_issue_detail_page,
+)
+from catalog.marvel.series import (
+    MarvelSeriesIssue,
+    read_issue_page_series_url,
+    read_series_page,
+)
+from catalog.marvel.sync_planner import get_issue_detail_read_reason
+from catalog.marvel.text import (
+    clean_text,
     issue_number_sort_key,
-    read_collection_calendar_with_playwright,
-    read_collection_details_with_playwright,
-    sync_playwright,
+    normalize_issue_number,
+    normalize_title,
 )
-from catalog.models import (
-    ComicOneShot,
-    ComicPublisher,
-    ComicRun,
-    ComicVolume,
-    ComicVolumeIssue,
-    ComicVolumeOneShot,
-    ComicVolumeRun,
+from catalog.marvel.writer import (
+    find_existing_issue,
+    find_existing_run,
+    get_or_create_marvel_publisher,
+    upsert_issue_from_series_issue,
+    upsert_run_from_series,
 )
 
-
-MARVEL_PUBLISHER_NAME = "Marvel"
-MARVEL_SEARCH_URL = "https://www.marvel.com/search"
 
 DEFAULT_LIMIT = None
 
@@ -54,11 +69,25 @@ SKIP_COLLECTION_KEYWORDS = (
 )
 
 
+@dataclass
+class RunSeriesLookup:
+    run_key: tuple
+    run_link: dict
+    series_url: str = ""
+    series: object = None
+    error: str = ""
+
+
+@dataclass
+class CollectionDetailRecord:
+    collection: dict
+    detail: dict
+
+
 class Command(BaseCommand):
     help = (
         "Sync Marvel collected volumes from the official Marvel.com collection calendar. "
-        "Creates volumes, runs, issues, one-shots, and collection relationship rows. "
-        "No AI calls. No Comic Vine calls."
+        "Uses shared Marvel calendar/detail/series readers. No AI calls. No Comic Vine calls. No Marvel search."
     )
 
     def add_arguments(self, parser):
@@ -78,12 +107,12 @@ class Command(BaseCommand):
             "--detail-timeout",
             type=int,
             default=DEFAULT_DETAIL_TIMEOUT_MS,
-            help=f"Collection/issue detail timeout in milliseconds. Default: {DEFAULT_DETAIL_TIMEOUT_MS}.",
+            help=f"Collection/series/issue detail timeout in milliseconds. Default: {DEFAULT_DETAIL_TIMEOUT_MS}.",
         )
         parser.add_argument(
             "--skip-details",
             action="store_true",
-            help="Do not search/read missing issue detail pages.",
+            help="Do not read missing/incomplete issue detail pages.",
         )
         parser.add_argument(
             "--dry-run",
@@ -102,11 +131,7 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        if sync_playwright is None:
-            raise CommandError(
-                "Playwright is not installed. Run: "
-                "pip install playwright && python -m playwright install chromium"
-            )
+        ensure_playwright()
 
         limit = options["limit"]
         calendar_timeout = options["calendar_timeout"]
@@ -146,22 +171,25 @@ class Command(BaseCommand):
             detail_timeout=detail_timeout,
         )
 
-        rendered_calendar = read_collection_calendar_with_playwright(
+        read_result = read_calendar_and_collection_details(
             calendar_url=calendar_url,
+            limit=limit,
             headed=headed,
-            timeout_ms=calendar_timeout,
+            calendar_timeout=calendar_timeout,
+            detail_timeout=detail_timeout,
         )
-        totals["calendar_reads"] += 1
 
-        collections = extract_calendar_collections(rendered_calendar)
+        rendered_calendar = read_result["rendered_calendar"]
+        collections = read_result["collections"]
+        kept_collections = read_result["kept_collections"]
+        skipped_collections = read_result["skipped_collections"]
+        records = read_result["records"]
+
+        totals["calendar_reads"] = 1
+        totals["collection_detail_reads"] = len(kept_collections)
         totals["calendar_rows"] = len(collections)
-
-        kept_collections, skipped_collections = split_skipped_collections(collections)
         totals["skipped_collections"] = len(skipped_collections)
-
-        if limit is not None and len(kept_collections) > limit:
-            totals["limit_skipped"] = len(kept_collections) - limit
-            kept_collections = kept_collections[:limit]
+        totals["limit_skipped"] = read_result["limit_skipped"]
 
         if verbose and skipped_collections:
             self.stdout.write("")
@@ -170,31 +198,65 @@ class Command(BaseCommand):
             for collection in skipped_collections:
                 self.stdout.write(format_collection_row(collection))
 
-        details = read_collection_details_with_playwright(
-            collections=kept_collections,
+        close_old_connections()
+
+        series_lookups = build_series_lookups(
+            records=records,
             headed=headed,
             timeout_ms=detail_timeout,
         )
-        totals["collection_detail_reads"] += len(kept_collections)
+        totals["series_page_reads"] = count_series_reads(series_lookups)
+        totals["series_url_missing"] = count_missing_series_urls(series_lookups)
+        totals["series_read_failures"] = count_series_failures(series_lookups)
 
-        for collection in kept_collections:
+        issue_detail_plans = []
+
+        if not skip_details:
+            issue_detail_plans = build_issue_detail_plans(
+                records=records,
+                series_lookups=series_lookups,
+            )
+
+        totals["planned_issue_detail_reads"] = len(issue_detail_plans)
+
+        detail_map = {}
+
+        if issue_detail_plans:
+            detail_map = read_issue_details(
+                issue_detail_plans=issue_detail_plans,
+                headed=headed,
+                timeout_ms=detail_timeout,
+            )
+
+        totals["issue_detail_reads"] = len(detail_map)
+
+        for detail in detail_map.values():
+            if get_detail_value(detail, "error"):
+                totals["issue_detail_failures"] += 1
+
+            missing_fields = get_issue_missing_fields(detail)
+
+            if "description" in missing_fields:
+                totals["missing_description"] += 1
+
+            if "writer" in missing_fields:
+                totals["missing_writer"] += 1
+
+        for record in records:
             close_old_connections()
 
-            detail = details.get(collection["detail_url"]) or empty_detail()
-
             result = sync_collection(
-                collection=collection,
-                detail=detail,
-                detail_timeout=detail_timeout,
+                record=record,
+                series_lookups=series_lookups,
+                detail_map=detail_map,
                 skip_details=skip_details,
                 dry_run=dry_run,
-                headed=headed,
             )
             merge_totals(totals, result)
 
             if verbose:
                 self.print_result(
-                    collection=collection,
+                    record=record,
                     result=result,
                     dry_run=dry_run,
                 )
@@ -225,9 +287,10 @@ class Command(BaseCommand):
         self.stdout.write("Reader: Playwright Chromium")
         self.stdout.write(f"Browser mode: {'headed' if headed else 'headless'}")
         self.stdout.write(f"Calendar timeout: {calendar_timeout} ms")
-        self.stdout.write(f"Detail timeout: {detail_timeout} ms")
+        self.stdout.write(f"Detail/series timeout: {detail_timeout} ms")
         self.stdout.write("AI calls: 0")
         self.stdout.write("Comic Vine calls: 0")
+        self.stdout.write("Marvel search calls: 0")
         self.stdout.write("Publisher: Marvel")
         self.stdout.write(
             "Collection process limit: "
@@ -236,23 +299,31 @@ class Command(BaseCommand):
         self.stdout.write(f"Issue detail lookup: {'off' if skip_details else 'on'}")
         self.stdout.write("Skip collection keywords: " + ", ".join(SKIP_COLLECTION_KEYWORDS))
 
-    def print_result(self, *, collection, result, dry_run):
+    def print_result(self, *, record, result, dry_run):
         prefix = "Would" if dry_run else "Did"
 
         self.stdout.write("")
-        self.stdout.write(self.style.SUCCESS(format_collection_row(collection)))
+        self.stdout.write(self.style.SUCCESS(format_collection_row(record.collection)))
 
         if result["skipped"]:
             self.stdout.write(f"  Skipped: {result['skipped']}")
             return
 
+        self.stdout.write(f"  Collection confidence: {record.detail.get('confidence') or 'none'}")
+        self.stdout.write(f"  Parsed run links: {len(record.detail.get('run_links') or [])}")
+        self.stdout.write(f"  Parsed one-shots: {len(record.detail.get('one_shots') or [])}")
+        self.stdout.write(f"  Series page reads: {result['series_page_reads']}")
+        self.stdout.write(f"  Series URLs missing: {result['series_url_missing']}")
+        self.stdout.write(f"  Series read failures: {result['series_read_failures']}")
+        self.stdout.write(f"  Issue URLs found: {result['issue_urls_found']}")
+        self.stdout.write(f"  Issue URLs missing: {result['issue_urls_missing']}")
+        self.stdout.write(f"  Issue detail reads: {result['issue_detail_reads']}")
         self.stdout.write(f"  {prefix} create volume: {result['volumes_created']}")
         self.stdout.write(f"  {prefix} update volume: {result['volumes_updated']}")
         self.stdout.write(f"  {prefix} create runs: {result['runs_created']}")
+        self.stdout.write(f"  {prefix} update runs: {result['runs_updated']}")
         self.stdout.write(f"  {prefix} create volume-run links: {result['volume_runs_created']}")
         self.stdout.write(f"  {prefix} update volume-run links: {result['volume_runs_updated']}")
-        self.stdout.write(f"  Issue URLs found: {result['issue_urls_found']}")
-        self.stdout.write(f"  Issue URLs missing: {result['issue_urls_missing']}")
         self.stdout.write(f"  {prefix} create issues: {result['issues_created']}")
         self.stdout.write(f"  {prefix} update issues: {result['issues_updated']}")
         self.stdout.write(f"  {prefix} create volume-issue links: {result['volume_issues_created']}")
@@ -268,22 +339,30 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS("Marvel collection calendar sync complete."))
         self.stdout.write(f"Calendar browser reads: {totals['calendar_reads']}")
         self.stdout.write(f"Collection detail browser reads: {totals['collection_detail_reads']}")
-        self.stdout.write(f"Issue search browser reads: {totals['issue_search_reads']}")
+        self.stdout.write(f"Series page reads: {totals['series_page_reads']}")
         self.stdout.write(f"Issue detail browser reads: {totals['issue_detail_reads']}")
+        self.stdout.write(f"Issue detail failures: {totals['issue_detail_failures']}")
         self.stdout.write("AI calls: 0")
         self.stdout.write("Comic Vine calls: 0")
+        self.stdout.write("Marvel search calls: 0")
         self.stdout.write(f"Collection rows found: {totals['calendar_rows']}")
         self.stdout.write(f"Skipped DM/variant collection rows: {totals['skipped_collections']}")
         self.stdout.write(f"Skipped by limit: {totals['limit_skipped']}")
         self.stdout.write(f"Collections processed: {totals['collections_processed']}")
         self.stdout.write(f"Collections skipped: {totals['collections_skipped']}")
+        self.stdout.write(f"Series URLs missing: {totals['series_url_missing']}")
+        self.stdout.write(f"Series read failures: {totals['series_read_failures']}")
+        self.stdout.write(f"Planned issue detail reads: {totals['planned_issue_detail_reads']}")
+        self.stdout.write(f"Issues missing description: {totals['missing_description']}")
+        self.stdout.write(f"Issues missing Writer: {totals['missing_writer']}")
+        self.stdout.write(f"Issue URLs found: {totals['issue_urls_found']}")
+        self.stdout.write(f"Issue URLs missing: {totals['issue_urls_missing']}")
         self.stdout.write(f"{prefix_created} volumes: {totals['volumes_created']}")
         self.stdout.write(f"{prefix_updated} volumes: {totals['volumes_updated']}")
         self.stdout.write(f"{prefix_created} runs: {totals['runs_created']}")
+        self.stdout.write(f"{prefix_updated} runs: {totals['runs_updated']}")
         self.stdout.write(f"{prefix_created} volume-run links: {totals['volume_runs_created']}")
         self.stdout.write(f"{prefix_updated} volume-run links: {totals['volume_runs_updated']}")
-        self.stdout.write(f"Issue URLs found: {totals['issue_urls_found']}")
-        self.stdout.write(f"Issue URLs missing: {totals['issue_urls_missing']}")
         self.stdout.write(f"{prefix_created} issues: {totals['issues_created']}")
         self.stdout.write(f"{prefix_updated} issues: {totals['issues_updated']}")
         self.stdout.write(f"{prefix_created} volume-issue links: {totals['volume_issues_created']}")
@@ -295,16 +374,238 @@ class Command(BaseCommand):
             self.stdout.write("Dry run only. No catalog data was created or updated.")
 
 
-def sync_collection(*, collection, detail, detail_timeout, skip_details, dry_run, headed):
+def read_calendar_and_collection_details(
+    *,
+    calendar_url,
+    limit,
+    headed,
+    calendar_timeout,
+    detail_timeout,
+):
+    with marvel_browser_context(headed=headed) as context:
+        rendered_calendar = read_collection_calendar_page(
+            context=context,
+            calendar_url=calendar_url,
+            timeout_ms=calendar_timeout,
+        )
+        collections = extract_calendar_collections(rendered_calendar)
+        kept_collections, skipped_collections = split_skipped_collections(collections)
+
+        limit_skipped = 0
+
+        if limit is not None and len(kept_collections) > limit:
+            limit_skipped = len(kept_collections) - limit
+            kept_collections = kept_collections[:limit]
+
+        records = []
+
+        for collection in kept_collections:
+            detail = read_collection_detail_page(
+                context=context,
+                collection=collection,
+                timeout_ms=detail_timeout,
+            )
+            records.append(
+                CollectionDetailRecord(
+                    collection=collection,
+                    detail=detail,
+                )
+            )
+
+    return {
+        "rendered_calendar": rendered_calendar,
+        "collections": collections,
+        "kept_collections": kept_collections,
+        "skipped_collections": skipped_collections,
+        "records": records,
+        "limit_skipped": limit_skipped,
+    }
+
+
+def build_series_lookups(*, records, headed, timeout_ms):
+    run_refs = collect_unique_run_refs(records)
+    known_series_urls = load_known_series_urls(run_refs)
+    issue_seed_urls = collect_issue_seed_urls(records)
+
+    lookups = {}
+
+    with marvel_browser_context(headed=headed) as context:
+        for run_key, run_link in run_refs.items():
+            series_url = known_series_urls.get(run_key) or ""
+            error = ""
+
+            if not series_url:
+                seed_issue_url = issue_seed_urls.get(run_key)
+
+                if seed_issue_url:
+                    series_url = read_issue_page_series_url(
+                        context=context,
+                        issue_url=seed_issue_url,
+                        timeout_ms=timeout_ms,
+                    )
+
+            if not series_url:
+                lookups[run_key] = RunSeriesLookup(
+                    run_key=run_key,
+                    run_link=run_link,
+                    series_url="",
+                    series=None,
+                    error="no local Marvel series URL and no collection issue URL seed",
+                )
+                continue
+
+            series = read_series_page(
+                context=context,
+                series_url=series_url,
+                timeout_ms=timeout_ms,
+            )
+
+            if series.errors:
+                error = "; ".join(series.errors)
+
+            lookups[run_key] = RunSeriesLookup(
+                run_key=run_key,
+                run_link=run_link,
+                series_url=series_url,
+                series=series,
+                error=error,
+            )
+
+    return lookups
+
+
+def collect_unique_run_refs(records):
+    refs = {}
+
+    for record in records:
+        for run_link in normalized_run_links(record.detail.get("run_links") or []):
+            refs.setdefault(run_key_from_run_link(run_link), run_link)
+
+    return refs
+
+
+def load_known_series_urls(run_refs):
+    close_old_connections()
+    urls = {}
+
+    for run_key, run_link in run_refs.items():
+        existing_run = find_existing_run(
+            title=run_link["catalog_run_title"],
+            start_year=run_link["start_year"],
+        )
+
+        if existing_run and clean_text(existing_run.marvel_series_url):
+            urls[run_key] = clean_text(existing_run.marvel_series_url)
+
+    close_old_connections()
+    return urls
+
+
+def collect_issue_seed_urls(records):
+    seeds = {}
+
+    for record in records:
+        parsed_links = parsed_collection_issue_links(record.detail)
+
+        for run_link in normalized_run_links(record.detail.get("run_links") or []):
+            run_key = run_key_from_run_link(run_link)
+
+            if run_key in seeds:
+                continue
+
+            for issue_number in run_link.get("issue_numbers") or []:
+                matched = find_matching_collection_issue_link(
+                    parsed_links=parsed_links,
+                    run_link=run_link,
+                    issue_number=issue_number,
+                )
+
+                if matched:
+                    seeds[run_key] = matched["href"]
+                    break
+
+    return seeds
+
+
+def build_issue_detail_plans(*, records, series_lookups):
+    plans = {}
+    close_old_connections()
+
+    for record in records:
+        for run_link in normalized_run_links(record.detail.get("run_links") or []):
+            lookup = series_lookups.get(run_key_from_run_link(run_link))
+            series = lookup.series if lookup else None
+
+            if not series:
+                continue
+
+            existing_run = find_existing_run(
+                title=series.title,
+                start_year=series.start_year,
+                marvel_series_id=series.marvel_series_id,
+            )
+            issue_lookup = series_issue_lookup(series)
+
+            for issue_number in run_link.get("issue_numbers") or []:
+                series_issue = issue_lookup.get(normalize_issue_number(issue_number))
+
+                if not series_issue:
+                    continue
+
+                existing_issue = find_existing_issue(
+                    run=existing_run,
+                    issue_number=series_issue.issue_number,
+                    marvel_issue_id=series_issue.marvel_issue_id,
+                )
+                reason = get_issue_detail_read_reason(
+                    existing_issue=existing_issue,
+                    series_issue=series_issue,
+                )
+
+                if not reason:
+                    continue
+
+                plans.setdefault(
+                    series_issue_key(series_issue),
+                    {
+                        "series_issue": series_issue,
+                        "reason": reason,
+                    },
+                )
+
+    close_old_connections()
+    return list(plans.values())
+
+
+def read_issue_details(*, issue_detail_plans, headed, timeout_ms):
+    detail_map = {}
+
+    with marvel_browser_context(headed=headed) as context:
+        for plan in issue_detail_plans:
+            series_issue = plan["series_issue"]
+            detail = read_issue_detail_page(
+                context=context,
+                issue=series_issue,
+                timeout_ms=timeout_ms,
+            )
+            detail_map[series_issue_key(series_issue)] = detail
+
+    return detail_map
+
+
+def sync_collection(*, record, series_lookups, detail_map, skip_details, dry_run):
     totals = new_totals()
     totals["collections_processed"] = 1
+
+    collection = record.collection
+    detail = record.detail or empty_collection_detail()
 
     if detail.get("error"):
         totals["collections_skipped"] = 1
         totals["skipped"] = detail["error"]
         return totals
 
-    run_links = normalize_run_links(detail.get("run_links") or [])
+    run_links = normalized_run_links(detail.get("run_links") or [])
     one_shots = clean_one_shot_candidates(detail.get("one_shots") or [])
 
     if not run_links:
@@ -312,12 +613,12 @@ def sync_collection(*, collection, detail, detail_timeout, skip_details, dry_run
         totals["skipped"] = "no parsed run links for ComicVolume.run"
         return totals
 
-    publisher = get_marvel_publisher(dry_run=dry_run)
+    publisher = get_or_create_marvel_publisher()
 
-    primary_run = get_or_create_run(
+    primary_run = resolve_or_create_run(
         publisher=publisher,
-        run_title=run_links[0]["catalog_run_title"],
-        start_year=run_links[0]["start_year"],
+        run_link=run_links[0],
+        series_lookups=series_lookups,
         dry_run=dry_run,
         totals=totals,
     )
@@ -336,10 +637,21 @@ def sync_collection(*, collection, detail, detail_timeout, skip_details, dry_run
     item_order = 1
 
     for run_link in run_links:
-        run = get_or_create_run(
+        lookup = series_lookups.get(run_key_from_run_link(run_link))
+        series = lookup.series if lookup else None
+
+        if lookup:
+            if lookup.series_url:
+                totals["series_page_reads"] += 1
+            if lookup.error:
+                totals["series_read_failures"] += 1
+            if not lookup.series_url:
+                totals["series_url_missing"] += 1
+
+        run = resolve_or_create_run(
             publisher=publisher,
-            run_title=run_link["catalog_run_title"],
-            start_year=run_link["start_year"],
+            run_link=run_link,
+            series_lookups=series_lookups,
             dry_run=dry_run,
             totals=totals,
         )
@@ -353,21 +665,30 @@ def sync_collection(*, collection, detail, detail_timeout, skip_details, dry_run
             totals=totals,
         )
 
+        issue_lookup = series_issue_lookup(series) if series else {}
+
         for issue_number in sorted(run_link["issue_numbers"], key=issue_number_sort_key):
+            series_issue = issue_lookup.get(normalize_issue_number(issue_number))
             issue = None
 
-            if not is_preview(run):
-                issue = find_existing_issue(run=run, issue_number=issue_number)
-
-            if issue is None and not skip_details:
-                issue = create_missing_issue_from_marvel(
-                    run_link=run_link,
-                    issue_number=issue_number,
-                    detail_timeout=detail_timeout,
+            if series_issue:
+                totals["issue_urls_found"] += 1
+                issue = resolve_or_create_issue(
+                    run=run,
+                    series_issue=series_issue,
+                    detail_map=detail_map,
+                    skip_details=skip_details,
                     dry_run=dry_run,
-                    headed=headed,
                     totals=totals,
                 )
+            else:
+                totals["issue_urls_missing"] += 1
+
+                if not is_preview(run):
+                    issue = find_existing_issue(
+                        run=run,
+                        issue_number=issue_number,
+                    )
 
             create_volume_issue(
                 volume=volume,
@@ -398,7 +719,81 @@ def sync_collection(*, collection, detail, detail_timeout, skip_details, dry_run
     return totals
 
 
-def normalize_run_links(run_links):
+def resolve_or_create_run(*, publisher, run_link, series_lookups, dry_run, totals):
+    lookup = series_lookups.get(run_key_from_run_link(run_link))
+    series = lookup.series if lookup else None
+
+    if series:
+        run, result = upsert_run_from_series(
+            series=series,
+            dry_run=dry_run,
+        )
+        totals["runs_created"] += result.run_created
+        totals["runs_updated"] += result.run_updated
+
+        if dry_run and run is None and result.run_created:
+            return PreviewObject(
+                title=series.title,
+                start_year=series.start_year,
+            )
+
+        if run:
+            return run
+
+    return get_or_create_collection_run(
+        publisher=publisher,
+        run_title=run_link["catalog_run_title"],
+        start_year=run_link["start_year"],
+        dry_run=dry_run,
+        totals=totals,
+    )
+
+
+def resolve_or_create_issue(*, run, series_issue, detail_map, skip_details, dry_run, totals):
+    existing_issue = None
+
+    if not is_preview(run):
+        existing_issue = find_existing_issue(
+            run=run,
+            issue_number=series_issue.issue_number,
+            marvel_issue_id=series_issue.marvel_issue_id,
+        )
+
+    detail = detail_map.get(series_issue_key(series_issue))
+
+    if detail is None:
+        return existing_issue
+
+    totals["issue_detail_reads"] += 1
+
+    if get_detail_value(detail, "error"):
+        totals["issue_detail_failures"] += 1
+
+        if existing_issue:
+            return existing_issue
+
+        return None
+
+    if not get_detail_value(detail, "published_date") and existing_issue is None:
+        return None
+
+    issue, result = upsert_issue_from_series_issue(
+        run=None if is_preview(run) else run,
+        series_issue=series_issue,
+        detail=detail,
+        dry_run=dry_run,
+    )
+    totals["issues_created"] += result.issue_created
+    totals["issues_updated"] += result.issue_updated
+    totals["credits_added"] += result.credits_added
+
+    if dry_run and issue is None and result.issue_created:
+        return PreviewObject(issue_number=series_issue.issue_number)
+
+    return issue or existing_issue
+
+
+def normalized_run_links(run_links):
     normalized = []
 
     for run_link in run_links:
@@ -410,442 +805,37 @@ def normalize_run_links(run_links):
     return normalized
 
 
-def catalog_run_title(title):
-    title = clean_text(title)
-
-    if normalize_title(title) == "amazing spider man":
-        return "THE AMAZING SPIDER-MAN"
-
-    return title
-
-
-def get_marvel_publisher(*, dry_run):
-    existing = ComicPublisher.objects.filter(name__iexact=MARVEL_PUBLISHER_NAME).first()
-
-    if existing:
-        return existing
-
-    if dry_run:
-        return PreviewObject(name=MARVEL_PUBLISHER_NAME, slug="marvel")
-
-    base_slug = slugify(MARVEL_PUBLISHER_NAME) or "marvel"
-    slug = base_slug
-    suffix = 2
-
-    while ComicPublisher.objects.filter(slug=slug).exists():
-        slug = f"{base_slug}-{suffix}"
-        suffix += 1
-
-    return ComicPublisher.objects.create(
-        name=MARVEL_PUBLISHER_NAME,
-        slug=slug,
+def run_key_from_run_link(run_link):
+    return (
+        normalize_title(run_link["catalog_run_title"]),
+        clean_text(run_link["start_year"]),
     )
 
 
-def get_or_create_run(*, publisher, run_title, start_year, dry_run, totals):
-    existing = find_existing_run(title=run_title, start_year=start_year)
+def series_issue_lookup(series):
+    if not series:
+        return {}
 
-    if existing:
-        update_spider_man_run_title(existing, run_title, dry_run=dry_run)
-        return existing
-
-    totals["runs_created"] += 1
-
-    if dry_run:
-        return PreviewObject(title=run_title, start_year=start_year)
-
-    return ComicRun.objects.create(
-        publisher=publisher,
-        title=run_title,
-        start_year=start_year,
-        status=ComicRun.STATUS_UNKNOWN,
-    )
-
-
-def update_spider_man_run_title(run, desired_title, *, dry_run):
-    if dry_run:
-        return
-
-    if normalize_title(run.title) != "amazing spider man":
-        return
-
-    if normalize_title(desired_title) != "the amazing spider man":
-        return
-
-    duplicate = (
-        ComicRun.objects.filter(
-            title__iexact=desired_title,
-            start_year=run.start_year,
-        )
-        .exclude(id=run.id)
-        .exists()
-    )
-
-    if duplicate:
-        return
-
-    run.title = desired_title
-    run.save(update_fields=["title", "updated_at"])
-
-
-def get_or_create_volume(*, publisher, primary_run, collection, detail, run_link, one_shots, dry_run, totals):
-    existing = find_existing_volume(
-        publisher=publisher,
-        title=collection["title"],
-        release_date=collection.get("published_date"),
-    )
-
-    first_issue = first_issue_number(run_link["issue_numbers"])
-    last_issue = last_issue_number(run_link["issue_numbers"])
-    issue_count = collected_item_count(detail=detail, one_shots=one_shots)
-    description = clean_text(detail.get("description"))
-
-    if existing:
-        changed = volume_needs_update(
-            volume=existing,
-            primary_run=primary_run,
-            release_date=collection.get("published_date"),
-            first_issue=first_issue,
-            last_issue=last_issue,
-            issue_count=issue_count,
-            description=description,
-        )
-
-        if changed:
-            totals["volumes_updated"] += 1
-
-            if not dry_run:
-                existing.run = primary_run
-                existing.release_date = collection.get("published_date")
-                existing.first_issue_number = first_issue
-                existing.last_issue_number = last_issue
-                existing.issue_count = issue_count
-
-                if description and not existing.description:
-                    existing.description = description
-
-                existing.save()
-
-        return existing
-
-    totals["volumes_created"] += 1
-
-    if dry_run:
-        return PreviewObject(title=collection["title"])
-
-    return ComicVolume.objects.create(
-        publisher=publisher,
-        run=primary_run,
-        title=collection["title"],
-        volume_number=extract_volume_number(collection["title"]),
-        first_issue_number=first_issue,
-        last_issue_number=last_issue,
-        release_date=collection.get("published_date"),
-        issue_count=issue_count,
-        description=description,
-    )
-
-
-def collected_item_count(*, detail, one_shots):
-    issue_total = 0
-
-    for run_link in detail.get("run_links", []) or []:
-        issue_total += len(run_link.get("issue_numbers") or [])
-
-    return issue_total + len(one_shots)
-
-
-def find_existing_volume(*, publisher, title, release_date):
-    if is_preview(publisher):
-        return None
-
-    queryset = ComicVolume.objects.filter(
-        publisher=publisher,
-        title__iexact=title,
-    )
-
-    if release_date:
-        match = queryset.filter(release_date=release_date).order_by("id").first()
-
-        if match:
-            return match
-
-    return queryset.order_by("id").first()
-
-
-def volume_needs_update(*, volume, primary_run, release_date, first_issue, last_issue, issue_count, description):
-    if not is_preview(primary_run) and volume.run_id != primary_run.id:
-        return True
-
-    if release_date and volume.release_date != release_date:
-        return True
-
-    if volume.first_issue_number != first_issue:
-        return True
-
-    if volume.last_issue_number != last_issue:
-        return True
-
-    if issue_count is not None and volume.issue_count != issue_count:
-        return True
-
-    if description and not volume.description:
-        return True
-
-    return False
-
-
-def create_or_update_volume_run(*, volume, run, run_link, item_order, dry_run, totals):
-    if is_preview(volume) or is_preview(run):
-        totals["volume_runs_created"] += 1
-        return
-
-    issue_numbers_text = compact_issue_numbers(run_link["issue_numbers"])
-    first_issue = first_issue_number(run_link["issue_numbers"])
-    last_issue = last_issue_number(run_link["issue_numbers"])
-
-    existing = ComicVolumeRun.objects.filter(volume=volume, run=run).first()
-
-    if existing:
-        changed = (
-            existing.issue_numbers_text != issue_numbers_text
-            or existing.first_issue_number != first_issue
-            or existing.last_issue_number != last_issue
-            or existing.item_order != item_order
-        )
-
-        if changed:
-            totals["volume_runs_updated"] += 1
-
-            if not dry_run:
-                existing.issue_numbers_text = issue_numbers_text
-                existing.first_issue_number = first_issue
-                existing.last_issue_number = last_issue
-                existing.item_order = item_order
-                existing.save()
-
-        return
-
-    totals["volume_runs_created"] += 1
-
-    if dry_run:
-        return
-
-    ComicVolumeRun.objects.create(
-        volume=volume,
-        run=run,
-        first_issue_number=first_issue,
-        last_issue_number=last_issue,
-        issue_numbers_text=issue_numbers_text,
-        item_order=item_order,
-    )
-
-
-def create_missing_issue_from_marvel(*, run_link, issue_number, detail_timeout, dry_run, headed, totals):
-    issue_url = find_issue_url(
-        headed=headed,
-        source_run_title=run_link["source_run_title"],
-        catalog_run_title=run_link["catalog_run_title"],
-        start_year=run_link["start_year"],
-        issue_number=issue_number,
-        timeout_ms=detail_timeout,
-    )
-    totals["issue_search_reads"] += 1
-
-    if not issue_url:
-        totals["issue_urls_missing"] += 1
-        return None
-
-    totals["issue_urls_found"] += 1
-
-    calendar_issue = {
-        "run_title": run_link["catalog_run_title"],
-        "start_year": run_link["start_year"],
-        "issue_number": issue_number,
-        "published_date": None,
-        "detail_url": issue_url,
+    return {
+        normalize_issue_number(issue.issue_number): issue
+        for issue in series.issues
     }
 
-    detail = read_issue_detail_without_orm_context(
-        headed=headed,
-        calendar_issue=calendar_issue,
-        timeout_ms=detail_timeout,
-    )
-    totals["issue_detail_reads"] += 1
 
-    if not detail.get("published_date"):
-        totals["issue_urls_missing"] += 1
-        return None
+def find_matching_collection_issue_link(*, parsed_links, run_link, issue_number):
+    for parsed_link in parsed_links:
+        if clean_text(parsed_link.get("start_year")) != clean_text(run_link["start_year"]):
+            continue
 
-    calendar_issue["published_date"] = detail["published_date"]
+        if normalize_issue_number(parsed_link.get("issue_number")) != normalize_issue_number(issue_number):
+            continue
 
-    close_old_connections()
+        if not title_matches(parsed_link.get("run_title"), run_link["catalog_run_title"], run_link["source_run_title"]):
+            continue
 
-    result = apply_calendar_issue(
-        calendar_issue=calendar_issue,
-        detail=detail,
-        dry_run=dry_run,
-    )
-    totals["runs_created"] += result["run_created"]
-    totals["issues_created"] += result["issue_created"]
-    totals["issues_updated"] += result["issue_updated"]
-    totals["credits_added"] += result["credits_added"]
+        return parsed_link
 
-    if dry_run:
-        return PreviewObject(issue_number=issue_number)
-
-    close_old_connections()
-
-    run = find_existing_run(
-        title=run_link["catalog_run_title"],
-        start_year=run_link["start_year"],
-    )
-    return find_existing_issue(run=run, issue_number=issue_number)
-
-
-def read_issue_detail_without_orm_context(*, headed, calendar_issue, timeout_ms):
-    with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=not headed)
-        context = build_browser_context(browser)
-
-        try:
-            return read_issue_detail_page(
-                context=context,
-                calendar_issue=calendar_issue,
-                timeout_ms=timeout_ms,
-            )
-        finally:
-            context.close()
-            browser.close()
-
-
-def find_issue_url(*, headed, source_run_title, catalog_run_title, start_year, issue_number, timeout_ms):
-    queries = issue_search_queries(
-        source_run_title=source_run_title,
-        catalog_run_title=catalog_run_title,
-        start_year=start_year,
-        issue_number=issue_number,
-    )
-
-    with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=not headed)
-        context = build_browser_context(browser)
-
-        try:
-            for query in queries:
-                url = search_marvel_issue_url(
-                    context=context,
-                    query=query,
-                    source_run_title=source_run_title,
-                    catalog_run_title=catalog_run_title,
-                    start_year=start_year,
-                    issue_number=issue_number,
-                    timeout_ms=timeout_ms,
-                )
-
-                if url:
-                    return url
-        finally:
-            context.close()
-            browser.close()
-
-    return ""
-
-
-def issue_search_queries(*, source_run_title, catalog_run_title, start_year, issue_number):
-    source_run_title = clean_text(source_run_title)
-    catalog_run_title = clean_text(catalog_run_title)
-
-    titles = []
-
-    if source_run_title:
-        titles.append(source_run_title)
-
-    if (
-        normalize_title(source_run_title) == "amazing spider man"
-        and catalog_run_title
-        and catalog_run_title not in titles
-    ):
-        titles.append(catalog_run_title)
-
-    queries = []
-
-    for title in titles:
-        queries.extend(
-            [
-                f"{title} ({start_year}) #{issue_number}",
-                f"{title} {start_year} #{issue_number}",
-                f"{title} #{issue_number}",
-            ]
-        )
-
-    return queries
-
-
-def search_marvel_issue_url(
-    *,
-    context,
-    query,
-    source_run_title,
-    catalog_run_title,
-    start_year,
-    issue_number,
-    timeout_ms,
-):
-    page = context.new_page()
-
-    try:
-        page.goto(
-            f"{MARVEL_SEARCH_URL}?query={quote(query)}",
-            wait_until="domcontentloaded",
-            timeout=timeout_ms,
-        )
-
-        try:
-            page.wait_for_load_state("networkidle", timeout=timeout_ms)
-        except Exception:
-            pass
-
-        links = page.eval_on_selector_all(
-            "a",
-            """
-            elements => elements
-                .map((element) => ({
-                    text: (element.innerText || element.textContent || "").trim(),
-                    href: element.href || ""
-                }))
-                .filter((item) => item.href.includes("/comics/issue/"))
-            """,
-        )
-
-        for link in links:
-            parsed = parse_issue_link(link)
-
-            if issue_matches(
-                parsed=parsed,
-                source_run_title=source_run_title,
-                catalog_run_title=catalog_run_title,
-                start_year=start_year,
-                issue_number=issue_number,
-            ):
-                return parsed["detail_url"]
-
-        return ""
-    finally:
-        page.close()
-
-
-def issue_matches(*, parsed, source_run_title, catalog_run_title, start_year, issue_number):
-    if not parsed:
-        return False
-
-    parsed_title = parsed.get("run_title")
-
-    return (
-        title_matches(parsed_title, catalog_run_title, source_run_title)
-        and clean_text(parsed.get("start_year")) == clean_text(start_year)
-        and normalize_issue_number(parsed.get("issue_number")) == normalize_issue_number(issue_number)
-    )
+    return None
 
 
 def title_matches(candidate, *targets):
@@ -879,86 +869,44 @@ def strip_leading_the(value):
     return value
 
 
-def create_volume_issue(*, volume, issue, issue_order, dry_run, totals):
-    if issue is None:
-        return
+def clean_one_shot_candidates(one_shots):
+    cleaned = []
 
-    if is_preview(volume) or is_preview(issue):
-        totals["volume_issues_created"] += 1
-        return
+    for one_shot in one_shots:
+        reason = clean_text(one_shot.get("reason"))
 
-    existing = ComicVolumeIssue.objects.filter(volume=volume, issue=issue).first()
+        if reason.startswith("title looks like"):
+            continue
 
-    if existing:
-        if not dry_run and existing.issue_order != issue_order:
-            existing.issue_order = issue_order
-            existing.save(update_fields=["issue_order"])
-        return
+        cleaned.append(one_shot)
 
-    totals["volume_issues_created"] += 1
+    return cleaned
 
-    if dry_run:
-        return
 
-    ComicVolumeIssue.objects.create(
-        volume=volume,
-        issue=issue,
-        issue_order=issue_order,
+def series_issue_key(series_issue):
+    marvel_issue_id = clean_text(get_object_value(series_issue, "marvel_issue_id"))
+
+    if marvel_issue_id:
+        return ("id", marvel_issue_id)
+
+    detail_url = clean_text(get_object_value(series_issue, "detail_url"))
+
+    if detail_url:
+        return ("url", detail_url)
+
+    return (
+        "number",
+        normalize_title(get_object_value(series_issue, "run_title")),
+        clean_text(get_object_value(series_issue, "start_year")),
+        normalize_issue_number(get_object_value(series_issue, "issue_number")),
     )
 
 
-def get_or_create_one_shot(*, publisher, one_shot_data, dry_run, totals):
-    if is_preview(publisher):
-        totals["one_shots_created"] += 1
-        return PreviewObject(title=one_shot_data["title"])
+def get_object_value(value, name):
+    if isinstance(value, dict):
+        return value.get(name)
 
-    existing = ComicOneShot.objects.filter(
-        publisher=publisher,
-        title__iexact=one_shot_data["title"],
-        start_year=one_shot_data["start_year"],
-    ).order_by("id").first()
-
-    if existing:
-        return existing
-
-    totals["one_shots_created"] += 1
-
-    if dry_run:
-        return PreviewObject(title=one_shot_data["title"])
-
-    return ComicOneShot.objects.create(
-        publisher=publisher,
-        title=one_shot_data["title"],
-        start_year=one_shot_data["start_year"],
-    )
-
-
-def create_volume_one_shot(*, volume, one_shot, item_order, dry_run, totals):
-    if is_preview(volume) or is_preview(one_shot):
-        totals["volume_one_shots_created"] += 1
-        return
-
-    existing = ComicVolumeOneShot.objects.filter(
-        volume=volume,
-        one_shot=one_shot,
-    ).first()
-
-    if existing:
-        if not dry_run and existing.item_order != item_order:
-            existing.item_order = item_order
-            existing.save(update_fields=["item_order"])
-        return
-
-    totals["volume_one_shots_created"] += 1
-
-    if dry_run:
-        return
-
-    ComicVolumeOneShot.objects.create(
-        volume=volume,
-        one_shot=one_shot,
-        item_order=item_order,
-    )
+    return getattr(value, name, None)
 
 
 def split_skipped_collections(collections):
@@ -979,107 +927,57 @@ def collection_should_be_skipped(collection):
     return any(keyword in text for keyword in SKIP_COLLECTION_KEYWORDS)
 
 
-def clean_one_shot_candidates(one_shots):
-    cleaned = []
-
-    for one_shot in one_shots:
-        reason = clean_text(one_shot.get("reason"))
-
-        if reason.startswith("title looks like"):
-            continue
-
-        cleaned.append(one_shot)
-
-    return cleaned
+def count_series_reads(series_lookups):
+    return len(
+        [
+            lookup
+            for lookup in series_lookups.values()
+            if lookup.series_url
+        ]
+    )
 
 
-def compact_issue_numbers(issue_numbers):
-    values = sorted(issue_numbers, key=issue_number_sort_key)
-    numeric = []
-
-    for value in values:
-        if not str(value).isdigit():
-            return ",".join(clean_text(item) for item in values)
-
-        numeric.append(int(value))
-
-    if not numeric:
-        return ""
-
-    parts = []
-    start = numeric[0]
-    previous = numeric[0]
-
-    for value in numeric[1:]:
-        if value == previous + 1:
-            previous = value
-            continue
-
-        parts.append(format_range(start, previous))
-        start = value
-        previous = value
-
-    parts.append(format_range(start, previous))
-    return ",".join(parts)
+def count_missing_series_urls(series_lookups):
+    return len(
+        [
+            lookup
+            for lookup in series_lookups.values()
+            if not lookup.series_url
+        ]
+    )
 
 
-def format_range(start, end):
-    if start == end:
-        return str(start)
-
-    return f"{start}-{end}"
-
-
-def first_issue_number(issue_numbers):
-    if not issue_numbers:
-        return ""
-
-    return clean_text(sorted(issue_numbers, key=issue_number_sort_key)[0])
-
-
-def last_issue_number(issue_numbers):
-    if not issue_numbers:
-        return ""
-
-    return clean_text(sorted(issue_numbers, key=issue_number_sort_key)[-1])
-
-
-def extract_volume_number(title):
-    title = clean_text(title)
-    marker = "VOL."
-
-    if marker not in title.upper():
-        return ""
-
-    after_marker = title.upper().split(marker, 1)[1].strip()
-    value = after_marker.split(" ", 1)[0].strip(" :,-")
-
-    return value if value.isdigit() else ""
-
-
-def empty_detail():
-    return {
-        "error": "missing parsed collection detail",
-        "run_links": [],
-        "one_shots": [],
-        "description": "",
-    }
+def count_series_failures(series_lookups):
+    return len(
+        [
+            lookup
+            for lookup in series_lookups.values()
+            if lookup.error and lookup.series_url
+        ]
+    )
 
 
 def new_totals():
     return {
         "calendar_reads": 0,
         "collection_detail_reads": 0,
-        "issue_search_reads": 0,
+        "series_page_reads": 0,
         "issue_detail_reads": 0,
+        "issue_detail_failures": 0,
         "calendar_rows": 0,
         "skipped_collections": 0,
         "limit_skipped": 0,
         "collections_processed": 0,
         "collections_skipped": 0,
+        "series_url_missing": 0,
+        "series_read_failures": 0,
+        "planned_issue_detail_reads": 0,
+        "missing_description": 0,
+        "missing_writer": 0,
         "volumes_created": 0,
         "volumes_updated": 0,
         "runs_created": 0,
+        "runs_updated": 0,
         "volume_runs_created": 0,
         "volume_runs_updated": 0,
         "issue_urls_found": 0,
@@ -1098,14 +996,3 @@ def merge_totals(target, source):
     for key, value in source.items():
         if isinstance(value, int):
             target[key] += value
-
-
-class PreviewObject:
-    def __init__(self, **values):
-        self.__dict__.update(values)
-        self.id = None
-        self.pk = None
-
-
-def is_preview(value):
-    return isinstance(value, PreviewObject)
