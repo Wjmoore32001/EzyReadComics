@@ -6,11 +6,50 @@ document.addEventListener("DOMContentLoaded", function () {
     const statusModalCopy = document.getElementById("tracking-status-modal-copy");
     const statusModalSelect = document.getElementById("tracking-status-select");
     const statusModalConfirm = document.querySelector("[data-status-modal-confirm]");
-    const statusModal = statusModalElement ? bootstrap.Modal.getOrCreateInstance(statusModalElement) : null;
+    const statusModal = statusModalElement && window.bootstrap
+        ? window.bootstrap.Modal.getOrCreateInstance(statusModalElement)
+        : null;
 
     let statusModalResolve = null;
     let statusModalContext = null;
     let statusModalControls = null;
+
+    function applySectionVisibilityToggle(toggle) {
+        const targetSection = toggle.dataset.targetSection;
+
+        if (!targetSection) {
+            return;
+        }
+
+        const section = document.querySelector(`[data-load-section="${targetSection}"]`);
+
+        if (!section) {
+            return;
+        }
+
+        const shouldShow = toggle.checked;
+
+        section.classList.toggle("d-none", !shouldShow);
+        section.hidden = !shouldShow;
+    }
+
+    function applyAllSectionVisibilityToggles() {
+        document.querySelectorAll("[data-section-visibility-toggle]").forEach(function (toggle) {
+            applySectionVisibilityToggle(toggle);
+        });
+    }
+
+    document.addEventListener("change", function (event) {
+        const toggle = event.target.closest("[data-section-visibility-toggle]");
+
+        if (!toggle) {
+            return;
+        }
+
+        applySectionVisibilityToggle(toggle);
+    });
+
+    applyAllSectionVisibilityToggles();
 
     function getCsrfToken() {
         const csrfInput = document.querySelector("input[name='csrfmiddlewaretoken']");
@@ -158,25 +197,6 @@ document.addEventListener("DOMContentLoaded", function () {
             searchInput.select();
         });
     });
-
-    function bindSectionVisibilityToggle(toggle) {
-        function applyToggle() {
-            const section = document.querySelector(
-                "[data-load-section='" + toggle.dataset.targetSection + "']"
-            );
-
-            if (!section) {
-                return;
-            }
-
-            section.classList.toggle("d-none", !toggle.checked);
-        }
-
-        toggle.addEventListener("change", applyToggle);
-        applyToggle();
-    }
-
-    document.querySelectorAll("[data-section-visibility-toggle]").forEach(bindSectionVisibilityToggle);
 
     function getCountFromDataset(source, name) {
         const value = Number(source.dataset[name] || "0");
