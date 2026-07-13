@@ -20,26 +20,70 @@ Current project areas:
 - The main user-facing pages share the same dark comic-library UI direction.
 - Browse is being kept mobile-friendly by limiting initial catalog rows and loading more rows only when requested.
 - Browse supports inline logged-in tracking actions for runs, volumes, and issues.
+- Browse and My Comics default to showing run sections only, with issue and volume sections toggled off by default.
 - Run follow uses a modal flow for run status, optional issue following, and optional per-issue status selection.
-- My Comics supports filtering followed items by publisher, run, and status.
+- My Comics supports filtering followed items by publisher, run, issue, and status.
+- Admin-facing UI links are hidden unless the logged-in user is staff/admin.
 - Account username and password forms are hidden behind expand buttons by default.
 - Comic Vine backfill/import work is ongoing.
 - Comic Vine run and issue ingestion supports confirmed source-to-catalog promotion.
 - Official Marvel.com release calendar sync and backfill commands support no-AI Marvel issue ingestion.
 - Official Marvel.com collection calendar sync and backfill commands support no-AI collected-volume ingestion.
-- Official Marvel.com sync commands now use a shared series-first flow.
+- Official Marvel.com sync commands use a shared series-first flow.
 - Catalog records can store official Marvel series IDs, issue IDs, and collection IDs.
 - Issue display has shifted away from issue titles and cover dates.
 - Published date is the main issue date used by the catalog UI.
 - Official issue detail completeness is tracked on catalog issues.
 - Collected-volume detail pages group collected issues by run.
 - Page JavaScript is being kept in static JS files instead of large inline template scripts.
+- Production deployment is running through Render, Neon/PostgreSQL, Gunicorn, WhiteNoise, and Cloudflare DNS.
+- OpenAI is intentionally not part of the current production requirements.
 - Recommendation logic, reading-order algorithms, character features, creator features, event features, and story-arc features are not built yet.
 
 ## Timeline
 
 ### 2026-07-13
 
+- Deployed EzyReadComics to production.
+- Added production deployment support for Render:
+  - Added `gunicorn`.
+  - Added WhiteNoise static file serving.
+  - Added production static file storage behavior.
+  - Added `build.sh` for Render builds.
+  - Configured Render build command as `./build.sh`.
+  - Configured Render start command as `gunicorn config.wsgi:application`.
+  - Confirmed Render builds install requirements, collect static files, run migrations, and start Gunicorn.
+- Connected production deployment to the existing Neon/PostgreSQL database through `DATABASE_URL`.
+- Configured Cloudflare DNS for:
+  - `ezyreadcomics.com`
+  - `www.ezyreadcomics.com`
+- Verified Render custom domains and SSL certificates.
+- Confirmed Cloudflare SSL/TLS encryption mode is Full.
+- Added production environment variable guidance:
+  - `DEBUG=False`
+  - `DATABASE_URL`
+  - `SECRET_KEY`
+  - `DB_CONN_MAX_AGE`
+  - `ALLOWED_HOSTS`
+  - `CSRF_TRUSTED_ORIGINS`
+- Kept the Render fallback domain available at `ezyreadcomics.onrender.com`.
+- Confirmed that pushing or merging to `main` should auto-build and redeploy through Render when Auto-Deploy is enabled.
+- Removed OpenAI from production requirements so the live website does not require OpenAI dependencies.
+- Clarified that AI-assisted catalog commands are optional local/dev helpers, not production website requirements.
+- Updated admin-facing UI visibility:
+  - Main navbar Admin link now only shows to logged-in staff/admin users.
+  - Browse Add data button now only shows to logged-in staff/admin users.
+  - Run detail Edit in admin button now only shows to logged-in staff/admin users.
+  - Issue detail Edit in admin button now only shows to logged-in staff/admin users.
+  - Volume detail Edit in admin button now only shows to logged-in staff/admin users.
+- Updated Browse default section visibility:
+  - Runs are on by default.
+  - Issues are off by default unless an issue filter is selected.
+  - Volumes are off by default unless a volume filter is selected.
+- Updated My Comics default section visibility:
+  - Runs are on by default.
+  - Issues are off by default unless an issue filter is selected.
+  - Volumes are off by default.
 - Added official Marvel.com release calendar syncing through `sync_marvel_release_calendar_ai`.
 - Kept the command name `sync_marvel_release_calendar_ai` even though the current implementation makes no AI calls.
 - Reworked the Marvel release calendar sync into a series-first flow:
@@ -254,9 +298,8 @@ Current project areas:
 - Updated issue display direction:
   - Browse issue rows show issue number and published date.
   - Issue detail pages focus on issue number, published date, description, and credits.
-  - Penciller is no longer a dedicated browse column.
-- Added official Marvel.com issue metadata filling through `fill_missing_marvel_issues_ai`.
-- The Marvel issue filler:
+  - Penciller is collected when available, but no longer drives the main browse UI.
+- Updated `fill_missing_marvel_issues_ai`:
   - Uses official Marvel.com issue pages only.
   - Ignores issue titles.
   - Ignores cover dates.
@@ -428,6 +471,8 @@ Current project areas:
 
 ## Next Major Goals
 
+- Keep production deployment stable through Render, Neon, and Cloudflare.
+- Keep testing auto-deploy behavior from `main`.
 - Keep testing the no-AI official Marvel release calendar sync against real weekly release pages.
 - Keep testing official Marvel release calendar backfill across wider historical date ranges.
 - Keep testing official Marvel collection calendar sync and backfill across wider historical date ranges.
@@ -436,6 +481,7 @@ Current project areas:
 - Add a future command for marking stale runs as ended after their latest issue date is far enough in the past.
 - Keep testing the run follow modal with real runs that have different issue counts.
 - Continue verifying issue status behavior from Browse, Run Details, Issue Details, Volume Details, and My Comics.
+- Continue verifying admin-only UI visibility for public pages.
 - Continue verifying confirmed run candidates for obvious source mistakes.
 - Keep Comic Vine source-data backfills running.
 - Keep collected-volume catalog work separate from Comic Vine run ingestion.

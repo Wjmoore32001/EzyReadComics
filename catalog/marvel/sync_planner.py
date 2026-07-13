@@ -65,10 +65,10 @@ def get_issue_detail_read_reason(*, existing_issue, series_issue):
     if existing_issue is None:
         return "missing local issue"
 
-    if not clean_text(existing_issue.marvel_issue_id) and clean_text(series_issue.marvel_issue_id):
+    if not clean_text(existing_issue.official_source_key) and clean_text(series_issue.marvel_issue_id):
         return "missing Marvel issue ID"
 
-    if not clean_text(existing_issue.marvel_issue_url) and clean_text(series_issue.detail_url):
+    if not clean_text(existing_issue.official_source_url) and clean_text(series_issue.detail_url):
         return "missing Marvel issue URL"
 
     if issue_has_suspicious_credits(existing_issue):

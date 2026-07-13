@@ -64,19 +64,20 @@ def get_or_create_volume(
     dry_run,
     totals,
 ):
+    official_source_key = clean_text(collection.get("marvel_collection_id"))
+    official_source_url = clean_text(collection.get("detail_url"))
+
     existing = find_existing_volume(
         publisher=publisher,
         title=collection["title"],
         release_date=collection.get("published_date"),
-        marvel_collection_id=collection.get("marvel_collection_id"),
+        official_source_key=official_source_key,
     )
 
     first_issue = first_issue_number(run_link["issue_numbers"])
     last_issue = last_issue_number(run_link["issue_numbers"])
     issue_count = collected_item_count(detail=detail, one_shots=one_shots)
     description = clean_text(detail.get("description"))
-    marvel_collection_id = clean_text(collection.get("marvel_collection_id"))
-    marvel_collection_url = clean_text(collection.get("detail_url"))
 
     if existing:
         changed = volume_needs_update(
@@ -87,8 +88,8 @@ def get_or_create_volume(
             last_issue=last_issue,
             issue_count=issue_count,
             description=description,
-            marvel_collection_id=marvel_collection_id,
-            marvel_collection_url=marvel_collection_url,
+            official_source_key=official_source_key,
+            official_source_url=official_source_url,
         )
 
         if changed:
@@ -103,11 +104,11 @@ def get_or_create_volume(
                 existing.last_issue_number = last_issue
                 existing.issue_count = issue_count
 
-                if marvel_collection_id:
-                    existing.marvel_collection_id = marvel_collection_id
+                if official_source_key:
+                    existing.official_source_key = official_source_key
 
-                if marvel_collection_url:
-                    existing.marvel_collection_url = marvel_collection_url
+                if official_source_url:
+                    existing.official_source_url = official_source_url
 
                 if description and not existing.description:
                     existing.description = description
@@ -121,8 +122,8 @@ def get_or_create_volume(
     if dry_run:
         return PreviewObject(
             title=collection["title"],
-            marvel_collection_id=marvel_collection_id,
-            marvel_collection_url=marvel_collection_url,
+            official_source_key=official_source_key,
+            official_source_url=official_source_url,
         )
 
     return ComicVolume.objects.create(
@@ -130,8 +131,8 @@ def get_or_create_volume(
         run=primary_run,
         title=collection["title"],
         volume_number=extract_volume_number(collection["title"]),
-        marvel_collection_id=marvel_collection_id,
-        marvel_collection_url=marvel_collection_url,
+        official_source_key=official_source_key,
+        official_source_url=official_source_url,
         first_issue_number=first_issue,
         last_issue_number=last_issue,
         release_date=collection.get("published_date"),
@@ -140,17 +141,17 @@ def get_or_create_volume(
     )
 
 
-def find_existing_volume(*, publisher, title, release_date, marvel_collection_id=""):
+def find_existing_volume(*, publisher, title, release_date, official_source_key=""):
     if is_preview(publisher):
         return None
 
-    marvel_collection_id = clean_text(marvel_collection_id)
+    official_source_key = clean_text(official_source_key)
 
-    if marvel_collection_id:
+    if official_source_key:
         existing = (
             ComicVolume.objects.filter(
                 publisher=publisher,
-                marvel_collection_id=marvel_collection_id,
+                official_source_key=official_source_key,
             )
             .order_by("id")
             .first()
@@ -182,8 +183,8 @@ def volume_needs_update(
     last_issue,
     issue_count,
     description,
-    marvel_collection_id,
-    marvel_collection_url,
+    official_source_key,
+    official_source_url,
 ):
     if not is_preview(primary_run) and volume.run_id != primary_run.id:
         return True
@@ -200,10 +201,10 @@ def volume_needs_update(
     if issue_count is not None and volume.issue_count != issue_count:
         return True
 
-    if marvel_collection_id and volume.marvel_collection_id != marvel_collection_id:
+    if official_source_key and volume.official_source_key != official_source_key:
         return True
 
-    if marvel_collection_url and volume.marvel_collection_url != marvel_collection_url:
+    if official_source_url and volume.official_source_url != official_source_url:
         return True
 
     if description and not volume.description:
@@ -313,15 +314,15 @@ def get_or_create_one_shot(*, publisher, one_shot_data, dry_run, totals):
     if existing:
         changed = False
 
-        marvel_issue_id = clean_text(one_shot_data.get("marvel_issue_id"))
-        marvel_issue_url = clean_text(one_shot_data.get("marvel_issue_url"))
+        official_source_key = clean_text(one_shot_data.get("marvel_issue_id"))
+        official_source_url = clean_text(one_shot_data.get("marvel_issue_url"))
 
-        if marvel_issue_id and existing.marvel_issue_id != marvel_issue_id:
-            existing.marvel_issue_id = marvel_issue_id
+        if official_source_key and existing.official_source_key != official_source_key:
+            existing.official_source_key = official_source_key
             changed = True
 
-        if marvel_issue_url and existing.marvel_issue_url != marvel_issue_url:
-            existing.marvel_issue_url = marvel_issue_url
+        if official_source_url and existing.official_source_url != official_source_url:
+            existing.official_source_url = official_source_url
             changed = True
 
         if changed and not dry_run:
@@ -338,8 +339,8 @@ def get_or_create_one_shot(*, publisher, one_shot_data, dry_run, totals):
         publisher=publisher,
         title=one_shot_data["title"],
         start_year=one_shot_data["start_year"],
-        marvel_issue_id=clean_text(one_shot_data.get("marvel_issue_id")),
-        marvel_issue_url=clean_text(one_shot_data.get("marvel_issue_url")),
+        official_source_key=clean_text(one_shot_data.get("marvel_issue_id")),
+        official_source_url=clean_text(one_shot_data.get("marvel_issue_url")),
     )
 
 

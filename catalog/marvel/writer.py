@@ -70,7 +70,9 @@ def find_existing_run(*, title="", start_year="", marvel_series_id=""):
     marvel_series_id = clean_text(marvel_series_id)
 
     if marvel_series_id:
-        match = ComicRun.objects.filter(marvel_series_id=marvel_series_id).order_by("id").first()
+        match = ComicRun.objects.filter(
+            official_source_key=marvel_series_id,
+        ).order_by("id").first()
 
         if match:
             return match
@@ -105,7 +107,10 @@ def find_existing_issue(*, run=None, issue_number="", marvel_issue_id=""):
 
     if run is not None and marvel_issue_id:
         match = (
-            ComicIssue.objects.filter(run=run, marvel_issue_id=marvel_issue_id)
+            ComicIssue.objects.filter(
+                run=run,
+                official_source_key=marvel_issue_id,
+            )
             .order_by("id")
             .first()
         )
@@ -153,8 +158,8 @@ def upsert_run_from_series(*, series, dry_run=False):
                 publisher=publisher,
                 title=series.title,
                 start_year=series.start_year,
-                marvel_series_id=series.marvel_series_id,
-                marvel_series_url=series.url,
+                official_source_key=series.marvel_series_id,
+                official_source_url=series.url,
                 status=series.status or ComicRun.STATUS_UNKNOWN,
                 issue_count=len(series.issues) or None,
                 description="",
@@ -171,10 +176,10 @@ def upsert_run_from_series(*, series, dry_run=False):
 
 
 def run_needs_series_update(run, series):
-    if clean_text(series.marvel_series_id) and run.marvel_series_id != clean_text(series.marvel_series_id):
+    if clean_text(series.marvel_series_id) and run.official_source_key != clean_text(series.marvel_series_id):
         return True
 
-    if clean_text(series.url) and run.marvel_series_url != clean_text(series.url):
+    if clean_text(series.url) and run.official_source_url != clean_text(series.url):
         return True
 
     if clean_text(series.title) and run.title != clean_text(series.title):
@@ -195,12 +200,12 @@ def run_needs_series_update(run, series):
 def update_run_from_series(*, run, series):
     changed = False
 
-    if clean_text(series.marvel_series_id) and run.marvel_series_id != clean_text(series.marvel_series_id):
-        run.marvel_series_id = clean_text(series.marvel_series_id)
+    if clean_text(series.marvel_series_id) and run.official_source_key != clean_text(series.marvel_series_id):
+        run.official_source_key = clean_text(series.marvel_series_id)
         changed = True
 
-    if clean_text(series.url) and run.marvel_series_url != clean_text(series.url):
-        run.marvel_series_url = clean_text(series.url)
+    if clean_text(series.url) and run.official_source_url != clean_text(series.url):
+        run.official_source_url = clean_text(series.url)
         changed = True
 
     if clean_text(series.title) and run.title != clean_text(series.title):
@@ -289,8 +294,8 @@ def create_issue_from_series_issue(*, run, series_issue, detail=None):
     return ComicIssue.objects.create(
         run=run,
         issue_number=series_issue.issue_number,
-        marvel_issue_id=series_issue.marvel_issue_id,
-        marvel_issue_url=series_issue.detail_url,
+        official_source_key=series_issue.marvel_issue_id,
+        official_source_url=series_issue.detail_url,
         title="",
         cover_date=None,
         published_date=published_date,
@@ -316,12 +321,12 @@ def update_issue_from_series_issue(*, issue, series_issue, detail=None):
             issue.issue_number = series_issue.issue_number
             changed = True
 
-    if clean_text(series_issue.marvel_issue_id) and issue.marvel_issue_id != clean_text(series_issue.marvel_issue_id):
-        issue.marvel_issue_id = clean_text(series_issue.marvel_issue_id)
+    if clean_text(series_issue.marvel_issue_id) and issue.official_source_key != clean_text(series_issue.marvel_issue_id):
+        issue.official_source_key = clean_text(series_issue.marvel_issue_id)
         changed = True
 
-    if clean_text(series_issue.detail_url) and issue.marvel_issue_url != clean_text(series_issue.detail_url):
-        issue.marvel_issue_url = clean_text(series_issue.detail_url)
+    if clean_text(series_issue.detail_url) and issue.official_source_url != clean_text(series_issue.detail_url):
+        issue.official_source_url = clean_text(series_issue.detail_url)
         changed = True
 
     published_date = get_detail_value(detail, "published_date")
@@ -357,10 +362,10 @@ def issue_needs_series_or_detail_update(issue, series_issue, detail=None):
     if issue.issue_number != series_issue.issue_number:
         return True
 
-    if clean_text(series_issue.marvel_issue_id) and issue.marvel_issue_id != clean_text(series_issue.marvel_issue_id):
+    if clean_text(series_issue.marvel_issue_id) and issue.official_source_key != clean_text(series_issue.marvel_issue_id):
         return True
 
-    if clean_text(series_issue.detail_url) and issue.marvel_issue_url != clean_text(series_issue.detail_url):
+    if clean_text(series_issue.detail_url) and issue.official_source_url != clean_text(series_issue.detail_url):
         return True
 
     published_date = get_detail_value(detail, "published_date")
