@@ -1,0 +1,99 @@
+python manage.py shell <<'PY'
+from django.db import transaction
+from django.db.models import Q
+
+from catalog.models import (
+    ComicIssue,
+    ComicIssueCredit,
+    ComicOneShot,
+    ComicPublisher,
+    ComicRun,
+    ComicRunCredit,
+    ComicVolume,
+    ComicVolumeCredit,
+    ComicVolumeIssue,
+    ComicVolumeOneShot,
+    ComicVolumeRun,
+)
+
+try:
+    from catalog.models import ComicOneShotCredit
+except ImportError:
+    ComicOneShotCredit = None
+
+
+SOURCE_SLUG = "poison-ivy-2022"
+
+with transaction.atomic():
+    dc = ComicPublisher.objects.filter(name__iexact="DC").first()
+
+    if not dc:
+        print("No DC publisher found. Nothing deleted.")
+        raise SystemExit
+
+    runs = ComicRun.objects.filter(
+        Q(publisher=dc),
+        (
+            Q(title__iexact="POISON IVY", start_year="2022")
+            | Q(title__iexact="POISON IVY 2022")
+            | Q(official_source_key__icontains=SOURCE_SLUG)
+            | Q(official_source_url__icontains=SOURCE_SLUG)
+        ),
+    )
+
+    volumes = ComicVolume.objects.filter(
+        Q(publisher=dc),
+        (
+            Q(run__in=runs)
+            | Q(official_source_key__icontains=SOURCE_SLUG)
+            | Q(official_source_url__icontains=SOURCE_SLUG)
+        ),
+    )
+
+    issues = ComicIssue.objects.filter(
+        Q(run__in=runs)
+        | Q(official_source_key__icontains=SOURCE_SLUG)
+        | Q(official_source_url__icontains=SOURCE_SLUG)
+    )
+
+    one_shots = ComicOneShot.objects.filter(
+        Q(publisher=dc),
+        (
+            Q(official_source_key__icontains=SOURCE_SLUG)
+            | Q(official_source_url__icontains=SOURCE_SLUG)
+            | Q(title__icontains="POISON IVY")
+        ),
+    )
+
+    print("Deleting DC Poison Ivy 2022 test data...")
+    print(f"Runs: {runs.count()}")
+    print(f"Issues: {issues.count()}")
+    print(f"Volumes: {volumes.count()}")
+    print(f"One-shots: {one_shots.count()}")
+    print(f"Issue credits: {ComicIssueCredit.objects.filter(issue__in=issues).count()}")
+    print(f"Run credits: {ComicRunCredit.objects.filter(run__in=runs).count()}")
+    print(f"Volume credits: {ComicVolumeCredit.objects.filter(volume__in=volumes).count()}")
+    if ComicOneShotCredit:
+        print(f"One-shot credits: {ComicOneShotCredit.objects.filter(one_shot__in=one_shots).count()}")
+    print(f"Volume issue links: {ComicVolumeIssue.objects.filter(Q(volume__in=volumes) | Q(issue__in=issues)).count()}")
+    print(f"Volume run links: {ComicVolumeRun.objects.filter(Q(volume__in=volumes) | Q(run__in=runs)).count()}")
+    print(f"Volume one-shot links: {ComicVolumeOneShot.objects.filter(Q(volume__in=volumes) | Q(one_shot__in=one_shots)).count()}")
+
+    ComicIssueCredit.objects.filter(issue__in=issues).delete()
+    ComicRunCredit.objects.filter(run__in=runs).delete()
+    ComicVolumeCredit.objects.filter(volume__in=volumes).delete()
+
+    if ComicOneShotCredit:
+        ComicOneShotCredit.objects.filter(one_shot__in=one_shots).delete()
+
+    ComicVolumeIssue.objects.filter(Q(volume__in=volumes) | Q(issue__in=issues)).delete()
+    ComicVolumeRun.objects.filter(Q(volume__in=volumes) | Q(run__in=runs)).delete()
+    ComicVolumeOneShot.objects.filter(Q(volume__in=volumes) | Q(one_shot__in=one_shots)).delete()
+
+    issues.delete()
+    volumes.delete()
+    one_shots.delete()
+    runs.delete()
+
+print("Done. DC Poison Ivy 2022 test data deleted.")
+PY
