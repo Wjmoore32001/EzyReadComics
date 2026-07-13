@@ -100,6 +100,16 @@ class ComicRun(ImageUrlFields):
 
 
 class ComicIssue(ImageUrlFields):
+    OFFICIAL_DETAIL_STATUS_UNKNOWN = "unknown"
+    OFFICIAL_DETAIL_STATUS_COMPLETE = "complete"
+    OFFICIAL_DETAIL_STATUS_INCOMPLETE = "incomplete"
+
+    OFFICIAL_DETAIL_STATUS_CHOICES = [
+        (OFFICIAL_DETAIL_STATUS_UNKNOWN, "Unknown"),
+        (OFFICIAL_DETAIL_STATUS_COMPLETE, "Complete"),
+        (OFFICIAL_DETAIL_STATUS_INCOMPLETE, "Incomplete"),
+    ]
+
     run = models.ForeignKey(
         ComicRun,
         on_delete=models.CASCADE,
@@ -119,6 +129,15 @@ class ComicIssue(ImageUrlFields):
     is_released = models.BooleanField(default=True, db_index=True)
 
     description = models.TextField(blank=True)
+
+    official_detail_status = models.CharField(
+        max_length=20,
+        choices=OFFICIAL_DETAIL_STATUS_CHOICES,
+        default=OFFICIAL_DETAIL_STATUS_UNKNOWN,
+        db_index=True,
+    )
+    official_detail_checked_at = models.DateTimeField(null=True, blank=True)
+    official_detail_missing_fields = models.CharField(max_length=255, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
