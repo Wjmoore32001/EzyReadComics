@@ -17,6 +17,10 @@ from catalog.marvel.urls import (
 )
 
 
+ISSUE_PAGE_SERIES_URL_ATTEMPTS = 3
+SERIES_PAGE_READ_ATTEMPTS = 3
+RETRY_SETTLE_MS = 500
+
 ISSUE_TEXT_RE = re.compile(
     r"(?P<title>[A-Z0-9][^\n\r]{1,220}?)\s*"
     r"\((?P<year>\d{4})\)\s*"
@@ -90,9 +94,28 @@ def read_issue_page_series_url(*, context, issue_url, timeout_ms):
     if not issue_url:
         return ""
 
-    page = context.new_page()
+    for attempt in range(ISSUE_PAGE_SERIES_URL_ATTEMPTS):
+        series_url = read_issue_page_series_url_once(
+            context=context,
+            issue_url=issue_url,
+            timeout_ms=timeout_ms,
+        )
+
+        if series_url:
+            return series_url
+
+        if attempt < ISSUE_PAGE_SERIES_URL_ATTEMPTS - 1:
+            settle_browser_context(context=context)
+
+    return ""
+
+
+def read_issue_page_series_url_once(*, context, issue_url, timeout_ms):
+    page = None
 
     try:
+        page = context.new_page()
+
         response = page.goto(
             issue_url,
             wait_until="domcontentloaded",
@@ -121,8 +144,12 @@ def read_issue_page_series_url(*, context, issue_url, timeout_ms):
         page.wait_for_timeout(500)
 
         return extract_back_to_series_url(page)
+
+    except Exception:
+        return ""
+
     finally:
-        page.close()
+        safe_close_page(page)
 
 
 def extract_back_to_series_url(page):
@@ -145,6 +172,7 @@ def extract_back_to_series_url(page):
 
         if "back to series" in text.casefold() or "back to series" in aria.casefold():
             return clean_text(link.get("href"))
+
     if links:
         return clean_text(links[0].get("href"))
 
@@ -165,9 +193,35 @@ def read_series_page(*, context, series_url, timeout_ms):
         series.errors.append("Missing series URL.")
         return series
 
-    page = context.new_page()
+    last_error = ""
+
+    for attempt in range(SERIES_PAGE_READ_ATTEMPTS):
+        read_series_page_once(
+            context=context,
+            series=series,
+            series_url=series_url,
+            timeout_ms=timeout_ms,
+        )
+
+        if not series.errors:
+            return series
+
+        last_error = series.errors[-1]
+        series.errors.clear()
+
+        if attempt < SERIES_PAGE_READ_ATTEMPTS - 1:
+            settle_browser_context(context=context)
+
+    series.errors.append(last_error or "Series page read failed.")
+    return series
+
+
+def read_series_page_once(*, context, series, series_url, timeout_ms):
+    page = None
 
     try:
+        page = context.new_page()
+
         response = page.goto(
             series_url,
             wait_until="domcontentloaded",
@@ -177,7 +231,7 @@ def read_series_page(*, context, series_url, timeout_ms):
 
         if status and status >= 400:
             series.errors.append(f"Series page returned HTTP {status}.")
-            return series
+            return
 
         safe_wait_for_networkidle(page=page, timeout_ms=timeout_ms)
 
@@ -214,14 +268,11 @@ def read_series_page(*, context, series_url, timeout_ms):
         series.raw_issue_link_count = count_issue_links(page)
         series.issues = extract_series_issues_from_page(page)
 
-        return series
-
     except Exception as exc:
         series.errors.append(f"Series page read failed: {exc}")
-        return series
 
     finally:
-        page.close()
+        safe_close_page(page)
 
 
 def click_load_more_until_exhausted(*, page, timeout_ms):
@@ -252,7 +303,11 @@ def click_load_more_until_exhausted(*, page, timeout_ms):
             pass
 
         safe_wait_for_networkidle(page=page, timeout_ms=min(timeout_ms, 15000))
-        page.wait_for_timeout(750)
+
+        try:
+            page.wait_for_timeout(750)
+        except Exception:
+            break
 
         current_count = count_issue_links(page)
 
@@ -434,6 +489,28 @@ def derive_status_from_series_end_value(end_value):
         return "ongoing"
 
     if clean_text(end_value):
-        return "completed"
+        return "ended"
 
     return "unknown"
+
+
+def settle_browser_context(*, context):
+    page = None
+
+    try:
+        page = context.new_page()
+        page.wait_for_timeout(RETRY_SETTLE_MS)
+    except Exception:
+        pass
+    finally:
+        safe_close_page(page)
+
+
+def safe_close_page(page):
+    if page is None:
+        return
+
+    try:
+        page.close()
+    except Exception:
+        pass
