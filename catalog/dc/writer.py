@@ -23,6 +23,7 @@ from catalog.models import (
 
 
 DC_PUBLISHER_NAME = "DC"
+MAX_ISSUE_NUMBER_LENGTH = 50
 
 SERIES_WITH_YEAR_RE = re.compile(
     r"^(?P<title>.+?)\s*\((?P<start_year>\d{4})(?P<ongoing>\s*-\s*)?(?P<end_year>\d{4})?\)\s*$",
@@ -309,7 +310,7 @@ def get_or_create_issue_from_detail(*, run, detail, dry_run=False):
         result.skipped = 1
         return None, result
 
-    issue_number = detail.issue_key or detail.issue_number
+    issue_number = issue_number_from_detail(detail)
 
     if not issue_number:
         result.skipped = 1
@@ -404,7 +405,7 @@ def get_or_create_volume_from_detail(*, publisher, run, detail, dry_run=False):
         result.volumes_updated = 1
 
         if not dry_run:
-            existing.save()
+            volume.save()
 
     return existing, result
 
@@ -811,7 +812,6 @@ def sync_run_stats(*, run, dry_run=False):
         first_issue_date=Min("published_date"),
         last_issue_date=Max("published_date"),
     )
-
     issue_count = stats["issue_count"] or None
     first_issue_date = stats["first_issue_date"]
     last_issue_date = stats["last_issue_date"]
@@ -1105,6 +1105,59 @@ def source_key(url):
         return path
 
     return url
+
+
+def issue_number_from_detail(detail):
+    issue_number = clean_text(getattr(detail, "issue_number", ""))
+    issue_key = clean_text(getattr(detail, "issue_key", ""))
+    value = issue_key or issue_number
+
+    if not value:
+        return ""
+
+    if len(value) <= MAX_ISSUE_NUMBER_LENGTH:
+        return value
+
+    if issue_key and issue_number and issue_key != issue_number:
+        return shortened_issue_key(
+            issue_key=issue_key,
+            issue_number=issue_number,
+        )
+
+    if issue_number:
+        return issue_number[:MAX_ISSUE_NUMBER_LENGTH]
+
+    return value[:MAX_ISSUE_NUMBER_LENGTH]
+
+
+def shortened_issue_key(*, issue_key, issue_number):
+    issue_key = clean_text(issue_key)
+    issue_number = clean_text(issue_number)
+
+    if not issue_number:
+        return issue_key[:MAX_ISSUE_NUMBER_LENGTH]
+
+    suffix = f"#{issue_number}"
+
+    if len(suffix) >= MAX_ISSUE_NUMBER_LENGTH:
+        return issue_number[:MAX_ISSUE_NUMBER_LENGTH]
+
+    base = issue_key
+
+    if base.casefold().endswith(suffix.casefold()):
+        base = base[: -len(suffix)]
+
+    base = clean_text(base).strip(" #:,-")
+    base_slug = slugify(base) or "special"
+    max_base_length = MAX_ISSUE_NUMBER_LENGTH - len(suffix)
+
+    shortened = f"{base_slug[:max_base_length].strip('-')}{suffix}"
+    shortened = shortened.strip("-")
+
+    if not shortened:
+        return issue_number[:MAX_ISSUE_NUMBER_LENGTH]
+
+    return shortened[:MAX_ISSUE_NUMBER_LENGTH]
 
 
 def parse_dc_date(value):

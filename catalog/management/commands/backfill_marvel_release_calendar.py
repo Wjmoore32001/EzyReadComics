@@ -1,6 +1,8 @@
+import re
+import sys
 from collections import Counter
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 from django.core.management.base import BaseCommand, CommandError
 from django.db import OperationalError, close_old_connections
@@ -42,6 +44,7 @@ from catalog.marvel.writer import (
 
 WEDNESDAY_WEEKDAY = 2
 WINDOW_DAYS = 7
+YEAR_FLAG_RE = re.compile(r"^--(?P<year>\d{4})$")
 
 DEFAULT_LIMIT = None
 DEFAULT_MISSING_ISSUE_LIMIT = None
@@ -66,13 +69,24 @@ class Command(BaseCommand):
     )
 
     def add_arguments(self, parser):
+        add_detected_year_flags(parser)
+
+        parser.add_argument(
+            "--year",
+            type=int,
+            default=None,
+            help=(
+                "Backfill one calendar year. Example: --year 2025. "
+                "Shorthand year flags like --2025 are also supported."
+            ),
+        )
         parser.add_argument(
             "--start-date",
-            help="Oldest date in the backfill range, YYYY-MM-DD. Prompted if omitted.",
+            help="Oldest date in the backfill range, YYYY-MM-DD. Prompted if omitted and no year is provided.",
         )
         parser.add_argument(
             "--end-date",
-            help="Newest date in the backfill range, YYYY-MM-DD. Prompted if omitted.",
+            help="Newest date in the backfill range, YYYY-MM-DD. Prompted if omitted and no year is provided.",
         )
         parser.add_argument(
             "--limit",
@@ -151,14 +165,23 @@ class Command(BaseCommand):
         ensure_playwright()
         close_old_connections()
 
-        start_date = get_range_date(
-            value=options.get("start_date"),
-            prompt_label="Oldest date in range",
-        )
-        end_date = get_range_date(
-            value=options.get("end_date"),
-            prompt_label="Newest date in range",
-        )
+        requested_year = resolve_requested_year(options)
+
+        if requested_year is not None:
+            start_date, end_date = year_date_range(
+                year=requested_year,
+                start_date_value=options.get("start_date"),
+                end_date_value=options.get("end_date"),
+            )
+        else:
+            start_date = get_range_date(
+                value=options.get("start_date"),
+                prompt_label="Oldest date in range",
+            )
+            end_date = get_range_date(
+                value=options.get("end_date"),
+                prompt_label="Newest date in range",
+            )
 
         if start_date > end_date:
             raise CommandError("--start-date must be earlier than or equal to --end-date.")
@@ -209,6 +232,7 @@ class Command(BaseCommand):
 
         self.write_header(
             dry_run=dry_run,
+            requested_year=requested_year,
             start_date=start_date,
             end_date=end_date,
             week_start_dates=week_start_dates,
@@ -507,6 +531,7 @@ class Command(BaseCommand):
         self,
         *,
         dry_run,
+        requested_year,
         start_date,
         end_date,
         week_start_dates,
@@ -525,6 +550,10 @@ class Command(BaseCommand):
         self.stdout.write("")
         self.stdout.write(self.style.SUCCESS("Marvel release calendar backfill"))
         self.stdout.write(f"Mode: {'dry run' if dry_run else 'apply'}")
+
+        if requested_year is not None:
+            self.stdout.write(f"Requested year: {requested_year}")
+
         self.stdout.write(f"Requested range oldest date: {start_date.isoformat()}")
         self.stdout.write(f"Requested range newest date: {end_date.isoformat()}")
         self.stdout.write(f"Weekly windows to process: {len(week_start_dates)}")
@@ -877,6 +906,65 @@ def db_call(function, *args, retry=True, **kwargs):
         return function(*args, **kwargs)
     finally:
         close_old_connections()
+
+
+def add_detected_year_flags(parser):
+    detected_years = []
+
+    for value in sys.argv[2:]:
+        match = YEAR_FLAG_RE.match(value)
+
+        if not match:
+            continue
+
+        year = int(match.group("year"))
+
+        if year in detected_years:
+            continue
+
+        detected_years.append(year)
+
+    for year in detected_years:
+        parser.add_argument(
+            f"--{year}",
+            action="append_const",
+            const=year,
+            dest="year_flags",
+            help=f"Backfill all Marvel release calendar windows for {year}.",
+        )
+
+
+def resolve_requested_year(options):
+    years = []
+
+    if options.get("year") is not None:
+        years.append(options["year"])
+
+    years.extend(options.get("year_flags") or [])
+
+    unique_years = sorted(set(years))
+
+    if len(unique_years) > 1:
+        raise CommandError("Use only one year value per backfill run.")
+
+    if not unique_years:
+        return None
+
+    year = unique_years[0]
+    validate_year(year)
+    return year
+
+
+def validate_year(year):
+    if year < 1 or year > 9999:
+        raise CommandError("Year must be between 1 and 9999.")
+
+
+def year_date_range(*, year, start_date_value, end_date_value):
+    if start_date_value or end_date_value:
+        raise CommandError("Use either a year flag/--year or --start-date/--end-date, not both.")
+
+    return date(year, 1, 1), date(year, 12, 31)
 
 
 def get_range_date(*, value, prompt_label):

@@ -1,6 +1,7 @@
 from collections import deque
 
 from django.core.management.base import BaseCommand, CommandError
+from django.db import close_old_connections
 
 from catalog.dc.browser import (
     DEFAULT_TIMEOUT_MS,
@@ -341,10 +342,17 @@ class Command(BaseCommand):
         total = DcWriteResult()
 
         for detail in sort_details_for_writing(details):
-            result = write_dc_detail(
-                detail=detail,
-                dry_run=dry_run,
-            )
+            try:
+                result = write_dc_detail(
+                    detail=detail,
+                    dry_run=dry_run,
+                )
+            except Exception as exc:
+                result = DcWriteResult()
+                result.skipped = 1
+                self.mark_detail_write_error(detail=detail, error=exc)
+                close_old_connections()
+
             add_results(total, result)
 
             if result.skipped:
@@ -354,6 +362,15 @@ class Command(BaseCommand):
                 self.print_detail_result(detail=detail, result=result)
 
         return total
+
+    def mark_detail_write_error(self, *, detail, error):
+        message = clean_text(error)
+
+        if not message:
+            message = error.__class__.__name__
+
+        if hasattr(detail, "read_error"):
+            detail.read_error = f"Write failed: {message}"
 
     def print_header(
         self,

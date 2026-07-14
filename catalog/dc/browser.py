@@ -41,6 +41,7 @@ DETAIL_URL_RE = re.compile(
     re.IGNORECASE,
 )
 ISSUE_NUMBER_RE = re.compile(r"#\s*(?P<number>\d+[A-Za-z]?)(?=\b|[^A-Za-z0-9])")
+EMPTY_ISSUE_MARKER_RE = re.compile(r"#\s*$")
 COLLECTED_RANGE_RE = re.compile(
     r"#\s*(?P<start>\d+)\s*(?:-|–|—|to|through)\s*#?\s*(?P<end>\d+)",
     re.IGNORECASE,
@@ -359,6 +360,7 @@ def read_detail_page_once(
             item_type=item_type,
             issue_number=issue_number,
             series=series,
+            collection_parse=collection_parse,
         )
 
         return DcDetail(
@@ -1045,7 +1047,10 @@ def link_issue_number(link):
     return ""
 
 
-def classify_detail(*, item_type, issue_number, series):
+def classify_detail(*, item_type, issue_number, series, collection_parse):
+    if collection_parse and collection_parse.issue_numbers:
+        return "collected_volume"
+
     if item_type == "COMIC BOOK":
         if issue_number:
             return "issue"
@@ -1126,12 +1131,16 @@ def extract_detail_title(*, lines, item_type):
 
 
 def extract_issue_number(title):
-    match = ISSUE_NUMBER_RE.search(clean_text(title))
+    title = clean_text(title)
+    match = ISSUE_NUMBER_RE.search(title)
 
-    if not match:
-        return ""
+    if match:
+        return clean_text(match.group("number"))
 
-    return clean_text(match.group("number"))
+    if EMPTY_ISSUE_MARKER_RE.search(title):
+        return "0"
+
+    return ""
 
 
 def build_dc_issue_key(*, title, issue_number):
@@ -1141,7 +1150,11 @@ def build_dc_issue_key(*, title, issue_number):
     if not title or not issue_number:
         return issue_number
 
-    base = remove_issue_marker_from_label(label=title, issue_number=issue_number)
+    if issue_number == "0" and EMPTY_ISSUE_MARKER_RE.search(title):
+        base = EMPTY_ISSUE_MARKER_RE.sub("", title)
+    else:
+        base = remove_issue_marker_from_label(label=title, issue_number=issue_number)
+
     base = re.sub(r"\(\d{4}\s*-?\s*\)", "", base)
     base = clean_text(base).strip(" :-")
 
