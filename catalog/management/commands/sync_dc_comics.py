@@ -18,9 +18,6 @@ from catalog.dc.writer import (
 )
 
 
-DETAIL_READ_ATTEMPTS = 3
-
-
 class Command(BaseCommand):
     help = "Sync DC.com browse/detail comic data into the catalog."
 
@@ -80,6 +77,7 @@ class Command(BaseCommand):
         headed = options["headed"]
         timeout_ms = options["timeout"]
         verbose = options["verbose"]
+        self.skipped_details = []
 
         if start_page < 1:
             raise CommandError("--page must be at least 1.")
@@ -120,6 +118,7 @@ class Command(BaseCommand):
                 verbose=verbose,
             )
 
+        self.print_skipped_details()
         self.print_totals(total)
 
     def sync_direct_detail_url(
@@ -256,7 +255,7 @@ class Command(BaseCommand):
 
             scanned_seed_urls.add(seed_key)
 
-            seed_detail = self.read_detail_with_retries(
+            seed_detail = read_detail_page(
                 context=context,
                 url=seed_url,
                 timeout_ms=timeout_ms,
@@ -270,7 +269,7 @@ class Command(BaseCommand):
                 detail=seed_detail,
             )
 
-            if not stored_seed or seed_detail.classification == "read_error":
+            if not stored_seed:
                 continue
 
             series_map_links = seed_detail.more_from_series_links
@@ -293,7 +292,7 @@ class Command(BaseCommand):
                 if key in processed_detail_keys or key in detail_by_url:
                     continue
 
-                detail = self.read_detail_with_retries(
+                detail = read_detail_page(
                     context=context,
                     url=url,
                     timeout_ms=timeout_ms,
@@ -310,68 +309,18 @@ class Command(BaseCommand):
 
         return details
 
-    def read_detail_with_retries(
-        self,
-        *,
-        context,
-        url,
-        timeout_ms,
-        scan_more_from_series,
-        known_more_from_series_links=None,
-    ):
-        last_detail = None
-
-        for attempt in range(1, DETAIL_READ_ATTEMPTS + 1):
-            detail = read_detail_page(
-                context=context,
-                url=url,
-                timeout_ms=timeout_ms,
-                scan_more_from_series=scan_more_from_series,
-                known_more_from_series_links=known_more_from_series_links,
-            )
-            last_detail = detail
-
-            if detail.classification != "read_error":
-                if attempt > 1:
-                    self.stdout.write(
-                        self.style.SUCCESS(
-                            f"Detail read recovered on attempt {attempt}: {detail.final_url}"
-                        )
-                    )
-                return detail
-
-            if attempt < DETAIL_READ_ATTEMPTS:
-                self.stdout.write(
-                    self.style.WARNING(
-                        f"Detail read failed attempt {attempt}/{DETAIL_READ_ATTEMPTS}: "
-                        f"{detail.final_url or url}"
-                    )
-                )
-                continue
-
-            self.stdout.write(
-                self.style.WARNING(
-                    f"Detail read failed final attempt: {detail.final_url or url}"
-                )
-            )
-
-        return last_detail
-
     def store_detail(self, *, details, detail_by_url, processed_detail_keys, detail):
         key = normalize_url_for_compare(detail.final_url)
 
         if not key:
             return False
 
-        if key in detail_by_url:
+        if key in detail_by_url or key in processed_detail_keys:
             return False
 
         detail_by_url[key] = detail
+        processed_detail_keys.add(key)
         details.append(detail)
-
-        if detail.classification != "read_error":
-            processed_detail_keys.add(key)
-
         return True
 
     def enqueue_url(self, *, queue, queued_keys, processed_detail_keys, url):
@@ -392,15 +341,14 @@ class Command(BaseCommand):
         total = DcWriteResult()
 
         for detail in sort_details_for_writing(details):
-            if detail.classification == "read_error":
-                result = DcWriteResult(skipped=1)
-            else:
-                result = write_dc_detail(
-                    detail=detail,
-                    dry_run=dry_run,
-                )
-
+            result = write_dc_detail(
+                detail=detail,
+                dry_run=dry_run,
+            )
             add_results(total, result)
+
+            if result.skipped:
+                self.record_skipped_detail(detail=detail, result=result)
 
             if verbose or result.skipped:
                 self.print_detail_result(detail=detail, result=result)
@@ -442,9 +390,7 @@ class Command(BaseCommand):
         self.stdout.write("Series map behavior: scan More From This Series once per seed")
         self.stdout.write("Discovered detail behavior: read item details only, no carousel rescan")
         self.stdout.write("Volume matching: use explicit collected issue ranges only")
-        self.stdout.write(f"Detail retry behavior: retry failed detail reads up to {DETAIL_READ_ATTEMPTS} times")
-        self.stdout.write("Duplicate behavior: keep a small URL set to avoid repeat successful reads across pages")
-        self.stdout.write("Failed read behavior: read_error URLs are not permanently marked processed")
+        self.stdout.write("Duplicate behavior: keep a small URL set to avoid repeat detail reads across pages")
         self.stdout.write("")
 
     def print_detail_result(self, *, detail, result):
@@ -483,9 +429,6 @@ class Command(BaseCommand):
         )
         self.stdout.write(f"  Source URL: {detail.final_url}")
 
-        if detail.read_error:
-            self.stdout.write(f"  Read error: {detail.read_error}")
-
         if detail.candidate_issue_links:
             self.stdout.write(f"  Series issue links available: {len(detail.candidate_issue_links)}")
 
@@ -518,6 +461,48 @@ class Command(BaseCommand):
                 + ", ".join(detail.collection_parse.unmatched_issue_numbers)
             )
 
+    def record_skipped_detail(self, *, detail, result):
+        identity = run_identity_from_detail(detail)
+        skip_reason = detail_skip_reason(detail) or "Write skipped this detail page."
+
+        if identity.title:
+            run_text = identity.title
+
+            if identity.start_year:
+                run_text = f"{run_text} ({identity.start_year})"
+        else:
+            run_text = "none"
+
+        self.skipped_details.append(
+            {
+                "title": detail.title or detail.final_url,
+                "type": detail.item_type or "unknown",
+                "classification": detail.classification or "unknown",
+                "reason": skip_reason,
+                "run": run_text,
+                "issue": detail.issue_key or detail.issue_number or "none",
+                "url": detail.final_url,
+            }
+        )
+
+    def print_skipped_details(self):
+        skipped_details = getattr(self, "skipped_details", [])
+
+        if not skipped_details:
+            return
+
+        self.stdout.write("")
+        self.stdout.write(self.style.WARNING("Skipped DC detail pages"))
+
+        for index, item in enumerate(skipped_details, start=1):
+            self.stdout.write(f"{index}. {item['title']}")
+            self.stdout.write(f"   Type: {item['type']}")
+            self.stdout.write(f"   Classification: {item['classification']}")
+            self.stdout.write(f"   Reason: {item['reason']}")
+            self.stdout.write(f"   Run: {item['run']}")
+            self.stdout.write(f"   Issue number: {item['issue']}")
+            self.stdout.write(f"   Source URL: {item['url']}")
+
     def print_totals(self, total):
         self.stdout.write("")
         self.stdout.write(self.style.SUCCESS("DC sync totals"))
@@ -548,9 +533,8 @@ def detail_write_priority(detail):
         "issue": 10,
         "collected_volume": 20,
         "standalone_graphic_novel_or_one_shot": 30,
-        "read_error": 90,
     }
-    return priorities.get(detail.classification, 80)
+    return priorities.get(detail.classification, 90)
 
 
 def is_graphic_novel_link(link):
