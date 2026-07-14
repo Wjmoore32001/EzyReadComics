@@ -47,6 +47,12 @@ document.addEventListener("DOMContentLoaded", function () {
     return button;
   }
 
+  function delay(milliseconds) {
+    return new Promise(function (resolve) {
+      window.setTimeout(resolve, milliseconds);
+    });
+  }
+
   function insertControlsAfterTable(tbody, controls) {
     const table = tbody.closest("table");
     const wrapper = table ? table.closest(".table-responsive") : null;
@@ -181,52 +187,34 @@ document.addEventListener("DOMContentLoaded", function () {
     return Boolean(loadButton.dataset.filterRunId);
   }
 
-  function waitForBrowseLoadCycle(loadButton, target, previousRowCount) {
-    return new Promise(function (resolve) {
-      let resolved = false;
+  async function waitUntilButtonSettles(loadButton, target, previousRowCount) {
+    const startedAt = Date.now();
 
-      function finish(changed) {
-        if (resolved) {
-          return;
-        }
+    while (Date.now() - startedAt < 15000) {
+      await delay(50);
 
-        resolved = true;
-        observer.disconnect();
-        window.clearInterval(interval);
-        window.clearTimeout(timeout);
-        resolve(changed);
+      const currentRowCount = target.querySelectorAll(":scope > tr").length;
+
+      if (!loadButton.disabled) {
+        return currentRowCount > previousRowCount;
       }
+    }
 
-      const observer = new MutationObserver(function () {
-        const currentRowCount = target.querySelectorAll(":scope > tr").length;
+    return target.querySelectorAll(":scope > tr").length > previousRowCount;
+  }
 
-        if (currentRowCount !== previousRowCount) {
-          finish(true);
-        }
-      });
+  async function loadOneBrowsePage(loadButton, target) {
+    if (loadButton.disabled || loadButton.classList.contains("d-none")) {
+      return false;
+    }
 
-      const interval = window.setInterval(function () {
-        const currentRowCount = target.querySelectorAll(":scope > tr").length;
+    const previousRowCount = target.querySelectorAll(":scope > tr").length;
 
-        if (currentRowCount !== previousRowCount) {
-          finish(true);
-          return;
-        }
+    loadButton.click();
 
-        if (!loadButton.disabled && loadButton.classList.contains("d-none")) {
-          finish(false);
-        }
-      }, 50);
+    await delay(25);
 
-      const timeout = window.setTimeout(function () {
-        const currentRowCount = target.querySelectorAll(":scope > tr").length;
-        finish(currentRowCount !== previousRowCount);
-      }, 10000);
-
-      observer.observe(target, {
-        childList: true,
-      });
-    });
+    return waitUntilButtonSettles(loadButton, target, previousRowCount);
   }
 
   async function loadAllBrowseRows(section, showAllButton) {
@@ -242,21 +230,15 @@ document.addEventListener("DOMContentLoaded", function () {
     showAllButton.textContent = "Loading...";
 
     while (!loadButton.classList.contains("d-none")) {
-      const previousRowCount = target.querySelectorAll(":scope > tr").length;
+      const loadedNextPage = await loadOneBrowsePage(loadButton, target);
 
-      loadButton.click();
+      updateBrowseLoadedCount(section);
 
-      const changed = await waitForBrowseLoadCycle(
-        loadButton,
-        target,
-        previousRowCount,
-      );
-
-      const currentRowCount = target.querySelectorAll(":scope > tr").length;
-
-      if (!changed || currentRowCount === previousRowCount) {
+      if (!loadedNextPage) {
         break;
       }
+
+      await delay(25);
     }
 
     loadButton.classList.add("d-none");
