@@ -78,7 +78,14 @@
                         Publisher
                     </label>
 
-                    <div class="dropdown searchable-dropdown" data-my-comics-filter-dropdown>
+                    <div
+                        class="dropdown searchable-dropdown"
+                        data-my-comics-filter-dropdown
+                        data-options-kind="publisher"
+                        data-options-url="{% url 'reading:my_comics_options' %}"
+                        data-selected-id="{{ selected_publisher_id|default_if_none:'' }}"
+                        data-selected-status="{{ selected_status }}"
+                    >
                         <button
                             class="btn erc-filter-button dropdown-toggle text-start w-100"
                             type="button"
@@ -107,7 +114,6 @@
                             <a
                                 href="{{ all_publishers_url }}"
                                 class="dropdown-item rounded {% if not selected_publisher_id %}active{% endif %}"
-                                data-dropdown-option
                                 data-search-label="All publishers"
                             >
                                 All publishers
@@ -154,7 +160,15 @@
                         Run
                     </label>
 
-                    <div class="dropdown searchable-dropdown" data-my-comics-filter-dropdown>
+                    <div
+                        class="dropdown searchable-dropdown"
+                        data-my-comics-filter-dropdown
+                        data-options-kind="run"
+                        data-options-url="{% url 'reading:my_comics_options' %}"
+                        data-selected-id="{{ selected_run_id|default_if_none:'' }}"
+                        data-selected-status="{{ selected_status }}"
+                        data-filter-publisher-id="{{ selected_publisher_id|default_if_none:'' }}"
+                    >
                         <button
                             class="btn erc-filter-button dropdown-toggle text-start w-100"
                             type="button"
@@ -183,7 +197,6 @@
                             <a
                                 href="{{ all_runs_url }}"
                                 class="dropdown-item rounded {% if not selected_run_id %}active{% endif %}"
-                                data-dropdown-option
                                 data-search-label="All runs"
                             >
                                 All runs
@@ -241,7 +254,16 @@
                         Issues
                     </label>
 
-                    <div class="dropdown searchable-dropdown" data-my-comics-filter-dropdown>
+                    <div
+                        class="dropdown searchable-dropdown"
+                        data-my-comics-filter-dropdown
+                        data-options-kind="issue"
+                        data-options-url="{% url 'reading:my_comics_options' %}"
+                        data-selected-id="{{ selected_issue_id|default_if_none:'' }}"
+                        data-selected-status="{{ selected_status }}"
+                        data-filter-publisher-id="{{ selected_publisher_id|default_if_none:'' }}"
+                        data-filter-run-id="{{ selected_run_id|default_if_none:'' }}"
+                    >
                         <button
                             class="btn erc-filter-button dropdown-toggle text-start w-100"
                             type="button"
@@ -272,7 +294,6 @@
                             <a
                                 href="{{ all_issues_url }}"
                                 class="dropdown-item rounded {% if not selected_issue_id %}active{% endif %}"
-                                data-dropdown-option
                                 data-search-label="All issues"
                             >
                                 {% if selected_run %}
@@ -330,7 +351,17 @@
                         Status
                     </label>
 
-                    <div class="dropdown searchable-dropdown" data-my-comics-filter-dropdown>
+                    <div
+                        class="dropdown searchable-dropdown"
+                        data-my-comics-filter-dropdown
+                        data-options-kind="status"
+                        data-options-url="{% url 'reading:my_comics_options' %}"
+                        data-selected-status="{{ selected_status }}"
+                        data-filter-publisher-id="{{ selected_publisher_id|default_if_none:'' }}"
+                        data-filter-run-id="{{ selected_run_id|default_if_none:'' }}"
+                        data-filter-issue-id="{{ selected_issue_id|default_if_none:'' }}"
+                        data-filter-one-shot-id="{{ selected_one_shot_id|default_if_none:'' }}"
+                    >
                         <button
                             class="btn erc-filter-button dropdown-toggle text-start w-100"
                             type="button"
@@ -363,7 +394,6 @@
                             <a
                                 href="{{ all_statuses_url }}"
                                 class="dropdown-item rounded {% if not selected_status %}active{% endif %}"
-                                data-dropdown-option
                                 data-search-label="All statuses"
                             >
                                 All statuses
@@ -410,7 +440,15 @@
                         One-shot
                     </label>
 
-                    <div class="dropdown searchable-dropdown" data-my-comics-filter-dropdown>
+                    <div
+                        class="dropdown searchable-dropdown"
+                        data-my-comics-filter-dropdown
+                        data-options-kind="one_shot"
+                        data-options-url="{% url 'reading:my_comics_options' %}"
+                        data-selected-id="{{ selected_one_shot_id|default_if_none:'' }}"
+                        data-selected-status="{{ selected_status }}"
+                        data-filter-publisher-id="{{ selected_publisher_id|default_if_none:'' }}"
+                    >
                         <button
                             class="btn erc-filter-button dropdown-toggle text-start w-100"
                             type="button"
@@ -441,7 +479,6 @@
                             <a
                                 href="{{ all_one_shots_url }}"
                                 class="dropdown-item rounded {% if not selected_one_shot_id %}active{% endif %}"
-                                data-dropdown-option
                                 data-search-label="All one-shots"
                             >
                                 {% if selected_publisher %}
@@ -863,5 +900,5 @@
 {% endblock %}
 
 {% block extra_scripts %}
-<script src="{% static 'js/reading/my-comics.js' %}?v=one-shots-20260713"></script>
+<script src="{% static 'js/reading/my-comics.js' %}?v=dropdown-scroll-20260713"></script>
 {% endblock %}

@@ -4,7 +4,7 @@ from urllib.parse import urlencode
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
-from django.db.models import Count, Q
+from django.db.models import Case, Count, IntegerField, Q, Value, When
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -30,6 +30,7 @@ from reading.models import FollowedRun, IssueProgress, OneShotProgress, VolumePr
 
 
 UNFOLLOW_STATUS_VALUE = "__unfollow__"
+MY_COMICS_OPTION_LIMIT = 10
 
 
 def signup_required(view_func):
@@ -138,20 +139,34 @@ def my_comics(request):
         else None
     )
 
-    publisher_options = get_my_comics_publisher_options(tracked_publisher_ids)
-    run_options = get_my_comics_run_options(
-        tracked_run_ids=tracked_run_ids,
-        selected_publisher_id=filters["publisher_id"],
-    )
-    issue_options = get_my_comics_issue_options(
-        tracked_issue_ids=tracked_issue_ids,
-        selected_publisher_id=filters["publisher_id"],
-        selected_run_id=filters["run_id"],
-    )
-    one_shot_options = get_my_comics_one_shot_options(
-        tracked_one_shot_ids=tracked_one_shot_ids,
-        selected_publisher_id=filters["publisher_id"],
-    )
+    publisher_options = get_my_comics_option_page(
+        get_my_comics_publisher_options(
+            tracked_publisher_ids=tracked_publisher_ids,
+            search_value="",
+        )
+    )[0]
+    run_options = get_my_comics_option_page(
+        get_my_comics_run_options(
+            tracked_run_ids=tracked_run_ids,
+            selected_publisher_id=filters["publisher_id"],
+            search_value="",
+        )
+    )[0]
+    issue_options = get_my_comics_option_page(
+        get_my_comics_issue_options(
+            tracked_issue_ids=tracked_issue_ids,
+            selected_publisher_id=filters["publisher_id"],
+            selected_run_id=filters["run_id"],
+            search_value="",
+        )
+    )[0]
+    one_shot_options = get_my_comics_option_page(
+        get_my_comics_one_shot_options(
+            tracked_one_shot_ids=tracked_one_shot_ids,
+            selected_publisher_id=filters["publisher_id"],
+            search_value="",
+        )
+    )[0]
 
     context = {
         "followed_runs": followed_runs,
@@ -238,9 +253,135 @@ def my_comics(request):
         "selected_status": filters["status"],
         "filters_active": my_comics_filters_active(filters),
         "unfollow_status_value": UNFOLLOW_STATUS_VALUE,
+        "my_comics_option_limit": MY_COMICS_OPTION_LIMIT,
     }
 
     return render(request, "reading/my_comics.html", context)
+
+
+@login_required
+@require_GET
+def my_comics_options(request):
+    option_kind = (request.GET.get("kind") or "").strip()
+    search_value = (request.GET.get("q") or "").strip()
+    option_offset = get_nonnegative_int_query_param(request, "offset")
+    selected_option_id = get_int_query_param(request, "selected")
+    selected_status = get_valid_status_filter(request.GET.get("status") or "")
+    selected_publisher_id = get_int_query_param(request, "publisher")
+    selected_run_id = get_int_query_param(request, "run")
+
+    tracked_publisher_ids = get_user_tracked_publisher_ids(request.user)
+    tracked_run_ids = get_user_tracked_run_ids(request.user)
+    tracked_issue_ids = get_user_tracked_issue_ids(request.user)
+    tracked_one_shot_ids = get_user_tracked_one_shot_ids(request.user)
+
+    if option_kind == "publisher":
+        option_rows, has_more = get_my_comics_option_page(
+            get_my_comics_publisher_options(
+                tracked_publisher_ids=tracked_publisher_ids,
+                search_value=search_value,
+            ),
+            offset=option_offset,
+        )
+        options = [
+            build_my_comics_publisher_json_option(
+                publisher,
+                selected_option_id=selected_option_id,
+                selected_status=selected_status,
+            )
+            for publisher in option_rows
+        ]
+    elif option_kind == "run":
+        option_rows, has_more = get_my_comics_option_page(
+            get_my_comics_run_options(
+                tracked_run_ids=tracked_run_ids,
+                selected_publisher_id=selected_publisher_id,
+                search_value=search_value,
+            ),
+            offset=option_offset,
+        )
+        options = [
+            build_my_comics_run_json_option(
+                run,
+                selected_option_id=selected_option_id,
+                selected_publisher_id=selected_publisher_id,
+                selected_status=selected_status,
+            )
+            for run in option_rows
+        ]
+    elif option_kind == "issue":
+        option_rows, has_more = get_my_comics_option_page(
+            get_my_comics_issue_options(
+                tracked_issue_ids=tracked_issue_ids,
+                selected_publisher_id=selected_publisher_id,
+                selected_run_id=selected_run_id,
+                search_value=search_value,
+            ),
+            offset=option_offset,
+        )
+        options = [
+            build_my_comics_issue_json_option(
+                issue,
+                selected_option_id=selected_option_id,
+                selected_publisher_id=selected_publisher_id,
+                selected_run_id=selected_run_id,
+                selected_status=selected_status,
+            )
+            for issue in option_rows
+        ]
+    elif option_kind == "one_shot":
+        option_rows, has_more = get_my_comics_option_page(
+            get_my_comics_one_shot_options(
+                tracked_one_shot_ids=tracked_one_shot_ids,
+                selected_publisher_id=selected_publisher_id,
+                search_value=search_value,
+            ),
+            offset=option_offset,
+        )
+        options = [
+            build_my_comics_one_shot_json_option(
+                one_shot,
+                selected_option_id=selected_option_id,
+                selected_publisher_id=selected_publisher_id,
+                selected_status=selected_status,
+            )
+            for one_shot in option_rows
+        ]
+    elif option_kind == "status":
+        option_rows, has_more = get_my_comics_option_page(
+            get_my_comics_status_options(search_value),
+            offset=option_offset,
+        )
+        options = [
+            build_my_comics_status_json_option(
+                option,
+                filters={
+                    "publisher_id": selected_publisher_id,
+                    "run_id": selected_run_id,
+                    "issue_id": get_int_query_param(request, "issue"),
+                    "one_shot_id": get_int_query_param(request, "one_shot"),
+                    "status": selected_status,
+                },
+            )
+            for option in option_rows
+        ]
+    else:
+        return JsonResponse(
+            {
+                "options": [],
+                "has_more": False,
+                "next_offset": option_offset,
+            },
+            status=400,
+        )
+
+    return JsonResponse(
+        {
+            "options": options,
+            "has_more": has_more,
+            "next_offset": option_offset + len(option_rows),
+        }
+    )
 
 
 @require_GET
@@ -1034,19 +1175,22 @@ def build_run_follow_issue_option(issue, issue_progress):
 
 
 def get_my_comics_filters(request):
-    status = request.GET.get("status") or ""
-    valid_statuses = {value for value, _label in FollowedRun.STATUS_CHOICES}
-
-    if status not in valid_statuses:
-        status = ""
-
     return {
         "publisher_id": get_int_query_param(request, "publisher"),
         "run_id": get_int_query_param(request, "run"),
         "issue_id": get_int_query_param(request, "issue"),
         "one_shot_id": get_int_query_param(request, "one_shot"),
-        "status": status,
+        "status": get_valid_status_filter(request.GET.get("status") or ""),
     }
+
+
+def get_valid_status_filter(status):
+    valid_statuses = {value for value, _label in FollowedRun.STATUS_CHOICES}
+
+    if status not in valid_statuses:
+        return ""
+
+    return status
 
 
 def apply_my_comics_filters(
@@ -1234,15 +1378,39 @@ def get_user_tracked_one_shot_ids(user):
     )
 
 
-def get_my_comics_publisher_options(tracked_publisher_ids):
-    return ComicPublisher.objects.filter(
+def get_my_comics_option_page(queryset, *, offset=0):
+    items = list(queryset[offset : offset + MY_COMICS_OPTION_LIMIT + 1])
+    return items[:MY_COMICS_OPTION_LIMIT], len(items) > MY_COMICS_OPTION_LIMIT
+
+
+def get_my_comics_publisher_options(*, tracked_publisher_ids, search_value):
+    publishers = ComicPublisher.objects.filter(
         id__in=tracked_publisher_ids,
-    ).distinct().order_by(
-        "name",
-    )
+    ).distinct()
+
+    if search_value:
+        publishers = publishers.filter(
+            name__icontains=search_value,
+        ).annotate(
+            search_rank=Case(
+                When(name__iexact=search_value, then=Value(0)),
+                When(name__istartswith=search_value, then=Value(1)),
+                default=Value(2),
+                output_field=IntegerField(),
+            )
+        ).order_by(
+            "search_rank",
+            "name",
+        )
+    else:
+        publishers = publishers.order_by(
+            "name",
+        )
+
+    return publishers
 
 
-def get_my_comics_run_options(*, tracked_run_ids, selected_publisher_id):
+def get_my_comics_run_options(*, tracked_run_ids, selected_publisher_id, search_value):
     runs = ComicRun.objects.filter(
         id__in=tracked_run_ids,
     ).select_related(
@@ -1252,15 +1420,45 @@ def get_my_comics_run_options(*, tracked_run_ids, selected_publisher_id):
     if selected_publisher_id:
         runs = runs.filter(publisher_id=selected_publisher_id)
 
-    return runs.order_by(
-        "-start_year",
-        "-first_issue_date",
-        "publisher__name",
-        "title",
-    )
+    if search_value:
+        runs = runs.filter(
+            Q(title__icontains=search_value)
+            | Q(start_year__icontains=search_value)
+            | Q(publisher__name__icontains=search_value)
+        ).annotate(
+            search_rank=Case(
+                When(title__iexact=search_value, then=Value(0)),
+                When(title__istartswith=search_value, then=Value(1)),
+                When(publisher__name__istartswith=search_value, then=Value(2)),
+                When(title__icontains=search_value, then=Value(3)),
+                default=Value(4),
+                output_field=IntegerField(),
+            )
+        ).order_by(
+            "search_rank",
+            "-start_year",
+            "-first_issue_date",
+            "publisher__name",
+            "title",
+        )
+    else:
+        runs = runs.order_by(
+            "-start_year",
+            "-first_issue_date",
+            "publisher__name",
+            "title",
+        )
+
+    return runs
 
 
-def get_my_comics_issue_options(*, tracked_issue_ids, selected_publisher_id, selected_run_id):
+def get_my_comics_issue_options(
+    *,
+    tracked_issue_ids,
+    selected_publisher_id,
+    selected_run_id,
+    search_value,
+):
     issues = ComicIssue.objects.filter(
         id__in=tracked_issue_ids,
     ).select_related(
@@ -1274,15 +1472,41 @@ def get_my_comics_issue_options(*, tracked_issue_ids, selected_publisher_id, sel
     if selected_run_id:
         issues = issues.filter(run_id=selected_run_id)
 
-    return issues.order_by(
-        "-run__start_year",
-        "-published_date",
-        "run__title",
-        "issue_number",
-    )
+    if search_value:
+        issues = issues.filter(
+            Q(issue_number__icontains=search_value)
+            | Q(run__title__icontains=search_value)
+            | Q(run__start_year__icontains=search_value)
+            | Q(run__publisher__name__icontains=search_value)
+        ).annotate(
+            search_rank=Case(
+                When(issue_number__iexact=search_value, then=Value(0)),
+                When(issue_number__istartswith=search_value, then=Value(1)),
+                When(run__title__iexact=search_value, then=Value(2)),
+                When(run__title__istartswith=search_value, then=Value(3)),
+                When(run__title__icontains=search_value, then=Value(4)),
+                default=Value(5),
+                output_field=IntegerField(),
+            )
+        ).order_by(
+            "search_rank",
+            "-run__start_year",
+            "-published_date",
+            "run__title",
+            "issue_number",
+        )
+    else:
+        issues = issues.order_by(
+            "-run__start_year",
+            "-published_date",
+            "run__title",
+            "issue_number",
+        )
+
+    return issues
 
 
-def get_my_comics_one_shot_options(*, tracked_one_shot_ids, selected_publisher_id):
+def get_my_comics_one_shot_options(*, tracked_one_shot_ids, selected_publisher_id, search_value):
     one_shots = ComicOneShot.objects.filter(
         id__in=tracked_one_shot_ids,
     ).select_related(
@@ -1292,12 +1516,57 @@ def get_my_comics_one_shot_options(*, tracked_one_shot_ids, selected_publisher_i
     if selected_publisher_id:
         one_shots = one_shots.filter(publisher_id=selected_publisher_id)
 
-    return one_shots.order_by(
-        "-published_date",
-        "-start_year",
-        "publisher__name",
-        "title",
-    )
+    if search_value:
+        one_shots = one_shots.filter(
+            Q(title__icontains=search_value)
+            | Q(start_year__icontains=search_value)
+            | Q(publisher__name__icontains=search_value)
+        ).annotate(
+            search_rank=Case(
+                When(title__iexact=search_value, then=Value(0)),
+                When(title__istartswith=search_value, then=Value(1)),
+                When(publisher__name__istartswith=search_value, then=Value(2)),
+                When(title__icontains=search_value, then=Value(3)),
+                default=Value(4),
+                output_field=IntegerField(),
+            )
+        ).order_by(
+            "search_rank",
+            "-published_date",
+            "-start_year",
+            "publisher__name",
+            "title",
+        )
+    else:
+        one_shots = one_shots.order_by(
+            "-published_date",
+            "-start_year",
+            "publisher__name",
+            "title",
+        )
+
+    return one_shots
+
+
+def get_my_comics_status_options(search_value):
+    options = [
+        {
+            "value": value,
+            "label": label,
+        }
+        for value, label in FollowedRun.STATUS_CHOICES
+    ]
+
+    if not search_value:
+        return options
+
+    search_value = search_value.casefold()
+
+    return [
+        option
+        for option in options
+        if search_value in option["label"].casefold()
+    ]
 
 
 def build_my_comics_url(**params):
@@ -1399,6 +1668,118 @@ def build_my_comics_status_filter_options(filters):
     ]
 
 
+def build_my_comics_publisher_json_option(
+    publisher,
+    *,
+    selected_option_id,
+    selected_status,
+):
+    return {
+        "id": publisher.id,
+        "url": build_my_comics_url(
+            publisher=publisher.id,
+            status=selected_status,
+        ),
+        "label": publisher.name,
+        "meta": "",
+        "search_label": publisher.name,
+        "active": publisher.id == selected_option_id,
+    }
+
+
+def build_my_comics_run_json_option(
+    run,
+    *,
+    selected_option_id,
+    selected_publisher_id,
+    selected_status,
+):
+    year = run.start_year or "Unknown year"
+
+    return {
+        "id": run.id,
+        "url": build_my_comics_url(
+            publisher=selected_publisher_id,
+            run=run.id,
+            status=selected_status,
+        ),
+        "label": f"{year} — {run.title}",
+        "meta": run.publisher.name,
+        "search_label": f"{run.title} {run.start_year} {run.publisher.name}",
+        "active": run.id == selected_option_id,
+    }
+
+
+def build_my_comics_issue_json_option(
+    issue,
+    *,
+    selected_option_id,
+    selected_publisher_id,
+    selected_run_id,
+    selected_status,
+):
+    return {
+        "id": issue.id,
+        "url": build_my_comics_url(
+            publisher=selected_publisher_id,
+            run=selected_run_id,
+            issue=issue.id,
+            status=selected_status,
+        ),
+        "label": f"{issue.run.title} #{issue.issue_number}",
+        "meta": (
+            f"{issue.run.publisher.name}"
+            f" · {format_date_or_unknown(issue.published_date)}"
+        ),
+        "search_label": (
+            f"{issue.run.title} {issue.run.start_year} "
+            f"{issue.issue_number} {issue.run.publisher.name}"
+        ),
+        "active": issue.id == selected_option_id,
+    }
+
+
+def build_my_comics_one_shot_json_option(
+    one_shot,
+    *,
+    selected_option_id,
+    selected_publisher_id,
+    selected_status,
+):
+    return {
+        "id": one_shot.id,
+        "url": build_my_comics_url(
+            publisher=selected_publisher_id,
+            one_shot=one_shot.id,
+            status=selected_status,
+        ),
+        "label": one_shot.title,
+        "meta": (
+            f"{one_shot.publisher.name}"
+            f" · {format_date_or_unknown(one_shot.published_date)}"
+        ),
+        "search_label": f"{one_shot.title} {one_shot.start_year} {one_shot.publisher.name}",
+        "active": one_shot.id == selected_option_id,
+    }
+
+
+def build_my_comics_status_json_option(option, *, filters):
+    return {
+        "id": option["value"],
+        "url": build_my_comics_url(
+            publisher=filters["publisher_id"],
+            run=filters["run_id"],
+            issue=filters["issue_id"],
+            one_shot=filters["one_shot_id"],
+            status=option["value"],
+        ),
+        "label": option["label"],
+        "meta": "",
+        "search_label": option["label"],
+        "active": option["value"] == filters["status"],
+    }
+
+
 def build_status_choices(status_choices):
     return [
         {
@@ -1436,6 +1817,17 @@ def get_int_query_param(request, name):
         return int(raw_value)
     except (TypeError, ValueError):
         return None
+
+
+def get_nonnegative_int_query_param(request, name):
+    raw_value = request.GET.get(name)
+
+    try:
+        value = int(raw_value)
+    except (TypeError, ValueError):
+        return 0
+
+    return max(value, 0)
 
 
 def format_date_or_unknown(value):

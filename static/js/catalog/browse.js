@@ -1,5 +1,6 @@
 document.addEventListener("DOMContentLoaded", function () {
     const unfollowStatusValue = "__unfollow__";
+    const dropdownOptionPageSize = 10;
     const dropdowns = Array.from(document.querySelectorAll(".searchable-dropdown"));
     const statusModalElement = document.getElementById("tracking-status-modal");
     const statusModalTitle = document.getElementById("tracking-status-modal-title");
@@ -100,15 +101,24 @@ document.addEventListener("DOMContentLoaded", function () {
         return link;
     }
 
-    function renderOptions(optionsContainer, noResultsMessage, options) {
-        clearElement(optionsContainer);
+    function countRenderedOptions(optionsContainer) {
+        return optionsContainer.querySelectorAll("[data-dropdown-option]").length;
+    }
+
+    function renderOptions(optionsContainer, noResultsMessage, options, append) {
+        if (!append) {
+            clearElement(optionsContainer);
+        }
 
         options.forEach(function (option) {
             optionsContainer.appendChild(createOptionElement(option));
         });
 
         if (noResultsMessage) {
-            noResultsMessage.classList.toggle("d-none", options.length !== 0);
+            noResultsMessage.classList.toggle(
+                "d-none",
+                countRenderedOptions(optionsContainer) !== 0,
+            );
         }
     }
 
@@ -126,15 +136,16 @@ document.addEventListener("DOMContentLoaded", function () {
 
         let debounceTimer = null;
         let latestRequestNumber = 0;
+        let isLoadingOptions = false;
+        let nextOffset = countRenderedOptions(optionsContainer);
+        let hasMoreOptions = nextOffset >= dropdownOptionPageSize;
 
-        function fetchOptions() {
-            latestRequestNumber += 1;
-
-            const requestNumber = latestRequestNumber;
+        function buildOptionsUrl(offset) {
             const url = new URL(optionsUrl, window.location.origin);
             const searchValue = searchInput.value.trim();
 
             url.searchParams.set("kind", optionsKind);
+            url.searchParams.set("offset", String(offset));
 
             if (searchValue) {
                 url.searchParams.set("q", searchValue);
@@ -152,7 +163,24 @@ document.addEventListener("DOMContentLoaded", function () {
                 url.searchParams.set("run", dropdown.dataset.filterRunId);
             }
 
-            fetch(url.toString(), {
+            return url;
+        }
+
+        function fetchOptions(options) {
+            const append = options && options.append;
+
+            if (append && (!hasMoreOptions || isLoadingOptions)) {
+                return;
+            }
+
+            latestRequestNumber += 1;
+
+            const requestNumber = latestRequestNumber;
+            const offset = append ? nextOffset : 0;
+
+            isLoadingOptions = true;
+
+            fetch(buildOptionsUrl(offset).toString(), {
                 headers: {
                     "X-Requested-With": "XMLHttpRequest",
                 },
@@ -169,11 +197,21 @@ document.addEventListener("DOMContentLoaded", function () {
                         return;
                     }
 
-                    renderOptions(optionsContainer, noResultsMessage, data.options || []);
+                    const optionRows = data.options || [];
+
+                    renderOptions(optionsContainer, noResultsMessage, optionRows, append);
+
+                    nextOffset = Number(data.next_offset || offset + optionRows.length);
+                    hasMoreOptions = Boolean(data.has_more);
                 })
                 .catch(function () {
                     if (noResultsMessage) {
                         noResultsMessage.classList.remove("d-none");
+                    }
+                })
+                .finally(function () {
+                    if (requestNumber === latestRequestNumber) {
+                        isLoadingOptions = false;
                     }
                 });
         }
@@ -182,7 +220,9 @@ document.addEventListener("DOMContentLoaded", function () {
             window.clearTimeout(debounceTimer);
 
             debounceTimer = window.setTimeout(function () {
-                fetchOptions();
+                nextOffset = 0;
+                hasMoreOptions = true;
+                fetchOptions({ append: false });
             }, 150);
         }
 
@@ -190,6 +230,15 @@ document.addEventListener("DOMContentLoaded", function () {
 
         searchInput.addEventListener("click", function (event) {
             event.stopPropagation();
+        });
+
+        optionsContainer.addEventListener("scroll", function () {
+            const scrollBottom = optionsContainer.scrollTop + optionsContainer.clientHeight;
+            const nearBottom = scrollBottom >= optionsContainer.scrollHeight - 32;
+
+            if (nearBottom) {
+                fetchOptions({ append: true });
+            }
         });
 
         dropdownButton.addEventListener("shown.bs.dropdown", function () {

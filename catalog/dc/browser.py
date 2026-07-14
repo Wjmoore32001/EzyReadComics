@@ -1,4 +1,5 @@
 import re
+import time
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from urllib.parse import urlparse
@@ -15,12 +16,28 @@ DC_BROWSE_BASE_URL = "https://www.dc.com/comics"
 DC_TIME_ZONE = "America/New_York"
 DEFAULT_TIMEOUT_MS = 45000
 
+DETAIL_SETTLE_MS = 250
+BROWSE_SETTLE_MS = 250
+BROWSE_LINK_STABLE_TIMEOUT_MS = 2500
+CAROUSEL_SETTLE_MS = 75
+CAROUSEL_STATE_CHANGE_TIMEOUT_MS = 750
+
+BLOCKED_RESOURCE_TYPES = {
+    "image",
+    "media",
+    "font",
+}
+
 DETAIL_URL_RE = re.compile(
-    r"^https?://(?:www\.)?dc\.com/(?:comics|graphic-novels)/[^/?#]+/[^/?#]+/?$",
+    r"^https?://(?:www\.)?dc\.com/"
+    r"(?:"
+    r"comics/[^/?#]+/[^/?#]+"
+    r"|"
+    r"graphic-novels/[^/?#]+(?:/[^/?#]+)?"
+    r")/?$",
     re.IGNORECASE,
 )
 ISSUE_NUMBER_RE = re.compile(r"#\s*(?P<number>\d+[A-Za-z]?)\s*$")
-ISSUE_NUMBER_ANYWHERE_RE = re.compile(r"#\s*(?P<number>\d+[A-Za-z]?)")
 COLLECTED_RANGE_RE = re.compile(
     r"#\s*(?P<start>\d+)\s*(?:-|–|—|to|through)\s*#?\s*(?P<end>\d+)",
     re.IGNORECASE,
@@ -86,7 +103,7 @@ def ensure_playwright():
 
 
 def build_browser_context(browser):
-    return browser.new_context(
+    context = browser.new_context(
         user_agent=(
             "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
             "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -98,6 +115,21 @@ def build_browser_context(browser):
         locale="en-US",
         timezone_id=DC_TIME_ZONE,
     )
+    install_fast_resource_blocking(context)
+    return context
+
+
+def install_fast_resource_blocking(context):
+    def handle_route(route):
+        resource_type = route.request.resource_type
+
+        if resource_type in BLOCKED_RESOURCE_TYPES:
+            route.abort()
+            return
+
+        route.continue_()
+
+    context.route("**/*", handle_route)
 
 
 @contextmanager
@@ -128,7 +160,6 @@ def read_browse_page(*, context, page_number, timeout_ms=DEFAULT_TIMEOUT_MS):
     try:
         requested_url = build_browse_url(page_number)
         page.goto(requested_url, wait_until="domcontentloaded", timeout=timeout_ms)
-        safe_wait_for_networkidle(page=page, timeout_ms=timeout_ms)
 
         try:
             page.wait_for_function(
@@ -143,7 +174,8 @@ def read_browse_page(*, context, page_number, timeout_ms=DEFAULT_TIMEOUT_MS):
         except Exception:
             pass
 
-        page.wait_for_timeout(750)
+        page.wait_for_timeout(BROWSE_SETTLE_MS)
+        wait_for_browse_link_count_stable(page)
         browse_data = extract_browse_detail_links(page)
 
         return DcBrowseResult(
@@ -155,6 +187,26 @@ def read_browse_page(*, context, page_number, timeout_ms=DEFAULT_TIMEOUT_MS):
         )
     finally:
         page.close()
+
+
+def wait_for_browse_link_count_stable(page):
+    deadline = time.monotonic() + (BROWSE_LINK_STABLE_TIMEOUT_MS / 1000)
+    previous_count = -1
+    stable_polls = 0
+
+    while time.monotonic() < deadline:
+        count = len(extract_browse_detail_links(page).get("links", []))
+
+        if count == previous_count:
+            stable_polls += 1
+        else:
+            stable_polls = 0
+            previous_count = count
+
+        if stable_polls >= 3:
+            return
+
+        page.wait_for_timeout(100)
 
 
 def read_detail_page(
@@ -169,7 +221,6 @@ def read_detail_page(
 
     try:
         page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
-        safe_wait_for_networkidle(page=page, timeout_ms=timeout_ms)
 
         try:
             page.wait_for_function(
@@ -188,7 +239,7 @@ def read_detail_page(
         except Exception:
             pass
 
-        page.wait_for_timeout(750)
+        page.wait_for_timeout(DETAIL_SETTLE_MS)
 
         if scan_more_from_series:
             more_links, scroll_clicks = collect_more_from_series_links(
@@ -217,6 +268,12 @@ def read_detail_page(
         )
 
         series = parse_series(first_value(specs.get("Series")))
+        series = enrich_series_from_detail_text(
+            series=series,
+            title=title,
+            text=text,
+        )
+
         candidate_issue_links = [
             link for link in more_links if is_comic_issue_url(link.get("href"))
         ]
@@ -234,8 +291,6 @@ def read_detail_page(
             item_type=item_type,
             issue_number=issue_number,
             series=series,
-            more_links=more_links,
-            collection_parse=collection_parse,
         )
 
         return DcDetail(
@@ -296,11 +351,15 @@ def extract_browse_detail_links(page):
 
                         const parts = url.pathname.split("/").filter(Boolean);
 
-                        if (parts.length !== 3) {
-                            return false;
+                        if (parts[0] === "comics") {
+                            return parts.length === 3;
                         }
 
-                        return parts[0] === "comics" || parts[0] === "graphic-novels";
+                        if (parts[0] === "graphic-novels") {
+                            return parts.length === 2 || parts.length === 3;
+                        }
+
+                        return false;
                     } catch {
                         return false;
                     }
@@ -398,17 +457,24 @@ def collect_more_from_series_links(*, page, timeout_ms):
         seen_states.add(state)
 
     while True:
+        previous_state = state
         clicked = click_more_from_series_next(page)
 
         if not clicked:
             break
 
         clicks += 1
-        safe_wait_for_networkidle(page=page, timeout_ms=min(timeout_ms, 10000))
-        page.wait_for_timeout(400)
+        state = wait_for_more_from_series_state_change(
+            page=page,
+            previous_state=previous_state,
+            timeout_ms=CAROUSEL_STATE_CHANGE_TIMEOUT_MS,
+        )
+        page.wait_for_timeout(CAROUSEL_SETTLE_MS)
 
         added = add_links()
-        state = get_more_from_series_visible_state(page)
+
+        if not state:
+            state = get_more_from_series_visible_state(page)
 
         if not state and added == 0:
             break
@@ -420,6 +486,24 @@ def collect_more_from_series_links(*, page, timeout_ms):
             seen_states.add(state)
 
     return links, clicks
+
+
+def wait_for_more_from_series_state_change(*, page, previous_state, timeout_ms):
+    if not previous_state:
+        page.wait_for_timeout(CAROUSEL_SETTLE_MS)
+        return get_more_from_series_visible_state(page)
+
+    deadline = time.monotonic() + (timeout_ms / 1000)
+
+    while time.monotonic() < deadline:
+        current_state = get_more_from_series_visible_state(page)
+
+        if current_state and current_state != previous_state:
+            return current_state
+
+        page.wait_for_timeout(50)
+
+    return get_more_from_series_visible_state(page)
 
 
 def extract_more_from_series_links(page):
@@ -457,11 +541,15 @@ def extract_more_from_series_links(page):
 
                         const parts = url.pathname.split("/").filter(Boolean);
 
-                        if (parts.length !== 3) {
-                            return false;
+                        if (parts[0] === "comics") {
+                            return parts.length === 3;
                         }
 
-                        return parts[0] === "comics" || parts[0] === "graphic-novels";
+                        if (parts[0] === "graphic-novels") {
+                            return parts.length === 2 || parts.length === 3;
+                        }
+
+                        return false;
                     } catch {
                         return false;
                     }
@@ -560,11 +648,15 @@ def get_more_from_series_visible_state(page):
 
                             const parts = url.pathname.split("/").filter(Boolean);
 
-                            if (parts.length !== 3) {
-                                return false;
+                            if (parts[0] === "comics") {
+                                return parts.length === 3;
                             }
 
-                            return parts[0] === "comics" || parts[0] === "graphic-novels";
+                            if (parts[0] === "graphic-novels") {
+                                return parts.length === 2 || parts.length === 3;
+                            }
+
+                            return false;
                         } catch {
                             return false;
                         }
@@ -762,6 +854,18 @@ def click_more_from_series_next(page):
 
 def parse_collection_relationship(*, description, candidate_issue_links, series_title=""):
     issue_numbers = parse_collected_issue_numbers(description)
+
+    if not issue_numbers:
+        return DcCollectionParse()
+
+    return collection_parse_from_issue_numbers(
+        issue_numbers=issue_numbers,
+        candidate_issue_links=candidate_issue_links,
+        series_title=series_title,
+    )
+
+
+def collection_parse_from_issue_numbers(*, issue_numbers, candidate_issue_links, series_title):
     matched_links = []
     unmatched_numbers = []
 
@@ -796,9 +900,6 @@ def parse_collected_issue_numbers(description):
             numbers.extend(str(number) for number in range(start, end + 1))
         else:
             numbers.extend(str(number) for number in range(start, end - 1, -1))
-
-    for match in ISSUE_NUMBER_ANYWHERE_RE.finditer(description):
-        numbers.append(clean_text(match.group("number")))
 
     return unique_list(numbers)
 
@@ -861,7 +962,7 @@ def link_issue_number(link):
     return ""
 
 
-def classify_detail(*, item_type, issue_number, series, more_links, collection_parse):
+def classify_detail(*, item_type, issue_number, series):
     if item_type == "COMIC BOOK":
         if issue_number:
             return "issue"
@@ -869,18 +970,24 @@ def classify_detail(*, item_type, issue_number, series, more_links, collection_p
         return "comic_book_needs_review"
 
     if item_type == "GRAPHIC NOVEL":
-        if collection_parse.issue_numbers and series.raw:
+        if series.raw:
             return "collected_volume"
 
-        if not series.raw and not more_links and not collection_parse.issue_numbers:
-            return "standalone_graphic_novel_or_one_shot"
-
-        if series.raw and not collection_parse.issue_numbers:
-            return "graphic_novel_series_item_needs_review"
-
-        return "graphic_novel_needs_review"
+        return "standalone_graphic_novel_or_one_shot"
 
     return "unknown"
+
+
+def detail_skip_reason(detail):
+    if detail.classification == "graphic_novel_needs_review":
+        return "Graphic novel could not be safely classified as volume or standalone."
+    if detail.classification == "graphic_novel_series_item_needs_review":
+        return "Graphic novel has a Series value but no collected issue range."
+    if detail.classification == "comic_book_needs_review":
+        return "Comic book page did not expose an issue number."
+    if detail.classification == "unknown":
+        return "DC detail page type was not recognized."
+    return ""
 
 
 def clean_detail_links(raw_links):
@@ -991,22 +1098,61 @@ def parse_series(value):
     return DcSeriesInfo(raw=value, title=value)
 
 
+def enrich_series_from_detail_text(*, series, title, text):
+    if series.is_ongoing:
+        return series
+
+    if not series.start_year:
+        return series
+
+    if has_ongoing_series_marker(
+        text=title,
+        series_title=series.title,
+        start_year=series.start_year,
+    ):
+        series.is_ongoing = True
+        return series
+
+    if has_ongoing_series_marker(
+        text=text,
+        series_title=series.title,
+        start_year=series.start_year,
+    ):
+        series.is_ongoing = True
+
+    return series
+
+
+def has_ongoing_series_marker(*, text, series_title, start_year):
+    text = clean_text(text)
+    series_title = clean_text(series_title)
+    start_year = clean_text(start_year)
+
+    if not text or not start_year:
+        return False
+
+    year_only_pattern = r"\(" + re.escape(start_year) + r"\s*-\s*\)"
+
+    if not series_title:
+        return bool(re.search(year_only_pattern, text, flags=re.IGNORECASE))
+
+    title_pattern = re.escape(series_title)
+    title_with_ongoing_year_pattern = (
+        title_pattern + r"\s*" + year_only_pattern
+    )
+
+    return bool(
+        re.search(title_with_ongoing_year_pattern, text, flags=re.IGNORECASE)
+        or re.search(year_only_pattern, text, flags=re.IGNORECASE)
+    )
+
+
 def extract_description(*, lines, item_type, title):
-    start_index = None
-
-    if title:
-        title_key = normalize_key(title)
-
-        for index, line in enumerate(lines):
-            if normalize_key(line.lstrip("#").strip()) == title_key:
-                start_index = index + 1
-                break
-
-    if start_index is None and item_type:
-        for index, line in enumerate(lines):
-            if line.upper() == item_type:
-                start_index = index + 1
-                break
+    start_index = find_description_start_index(
+        lines=lines,
+        item_type=item_type,
+        title=title,
+    )
 
     if start_index is None:
         return ""
@@ -1026,6 +1172,69 @@ def extract_description(*, lines, item_type, title):
         description_lines.append(line)
 
     return clean_text(" ".join(description_lines))
+
+
+def find_description_start_index(*, lines, item_type, title):
+    item_type_index = find_item_type_index(lines=lines, item_type=item_type)
+
+    if item_type_index is not None:
+        title_index = find_title_index_after_item_type(
+            lines=lines,
+            item_type_index=item_type_index,
+            title=title,
+        )
+
+        if title_index is not None:
+            return title_index + 1
+
+    if title:
+        title_key = normalize_key(title)
+
+        for index, line in enumerate(lines):
+            if normalize_key(line.lstrip("#").strip()) == title_key:
+                return index + 1
+
+    if item_type_index is not None:
+        return item_type_index + 1
+
+    return None
+
+
+def find_item_type_index(*, lines, item_type):
+    if not item_type:
+        return None
+
+    for index, line in enumerate(lines):
+        if line.upper() == item_type:
+            return index
+
+    return None
+
+
+def find_title_index_after_item_type(*, lines, item_type_index, title):
+    title_key = normalize_key(title)
+
+    for index in range(item_type_index + 1, len(lines)):
+        line = lines[index]
+
+        if is_noise_line(line):
+            continue
+
+        if is_description_stop_line(line):
+            return None
+
+        if not title_key:
+            return index
+
+        if normalize_key(line.lstrip("#").strip()) == title_key:
+            return index
+
+        if index <= item_type_index + 3:
+            continue
+
+        return None
+
+    return None
 
 
 def extract_label_block(*, lines, start_marker, end_markers):
@@ -1211,6 +1420,8 @@ def looks_like_special_issue_label(value):
             ": ark m",
             " special ",
             " special #",
+            ": uncovered ",
+            ": uncovered #",
         ]
     )
 

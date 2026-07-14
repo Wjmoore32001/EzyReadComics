@@ -1,0 +1,117 @@
+python manage.py shell <<'PY'
+from django.apps import apps
+from django.db import transaction
+from django.db.models import Q
+
+CONFIRM_DELETE_DC = True
+
+def model(name):
+    try:
+        return apps.get_model("catalog", name)
+    except LookupError:
+        return None
+
+ComicPublisher = model("ComicPublisher")
+ComicRun = model("ComicRun")
+ComicIssue = model("ComicIssue")
+ComicOneShot = model("ComicOneShot")
+ComicVolume = model("ComicVolume")
+
+ComicIssueCredit = model("ComicIssueCredit")
+ComicRunCredit = model("ComicRunCredit")
+ComicOneShotCredit = model("ComicOneShotCredit")
+ComicVolumeCredit = model("ComicVolumeCredit")
+
+ComicVolumeIssue = model("ComicVolumeIssue")
+ComicVolumeRun = model("ComicVolumeRun")
+ComicVolumeOneShot = model("ComicVolumeOneShot")
+
+if not CONFIRM_DELETE_DC:
+    print("CONFIRM_DELETE_DC is False. Nothing deleted.")
+    raise SystemExit
+
+if not ComicPublisher:
+    print("ComicPublisher model not found. Nothing deleted.")
+    raise SystemExit
+
+dc_publishers = ComicPublisher.objects.filter(
+    Q(name__iexact="DC") | Q(slug__iexact="dc")
+)
+
+if not dc_publishers.exists():
+    print("No DC publisher found. Nothing deleted.")
+    raise SystemExit
+
+runs = ComicRun.objects.filter(publisher__in=dc_publishers) if ComicRun else None
+issues = ComicIssue.objects.filter(run__in=runs) if ComicIssue and runs is not None else None
+volumes = (
+    ComicVolume.objects.filter(Q(publisher__in=dc_publishers) | Q(run__in=runs))
+    if ComicVolume and runs is not None
+    else None
+)
+one_shots = (
+    ComicOneShot.objects.filter(publisher__in=dc_publishers)
+    if ComicOneShot
+    else None
+)
+
+print("Deleting all DC catalog data only.")
+print(f"DC publishers: {dc_publishers.count()}")
+print(f"Runs: {runs.count() if runs is not None else 0}")
+print(f"Issues: {issues.count() if issues is not None else 0}")
+print(f"Volumes: {volumes.count() if volumes is not None else 0}")
+print(f"One-shots: {one_shots.count() if one_shots is not None else 0}")
+
+if ComicIssueCredit and issues is not None:
+    print(f"Issue credits: {ComicIssueCredit.objects.filter(issue__in=issues).count()}")
+if ComicRunCredit and runs is not None:
+    print(f"Run credits: {ComicRunCredit.objects.filter(run__in=runs).count()}")
+if ComicOneShotCredit and one_shots is not None:
+    print(f"One-shot credits: {ComicOneShotCredit.objects.filter(one_shot__in=one_shots).count()}")
+if ComicVolumeCredit and volumes is not None:
+    print(f"Volume credits: {ComicVolumeCredit.objects.filter(volume__in=volumes).count()}")
+if ComicVolumeIssue and volumes is not None and issues is not None:
+    print(f"Volume issue links: {ComicVolumeIssue.objects.filter(Q(volume__in=volumes) | Q(issue__in=issues)).count()}")
+if ComicVolumeRun and volumes is not None and runs is not None:
+    print(f"Volume run links: {ComicVolumeRun.objects.filter(Q(volume__in=volumes) | Q(run__in=runs)).count()}")
+if ComicVolumeOneShot and volumes is not None and one_shots is not None:
+    print(f"Volume one-shot links: {ComicVolumeOneShot.objects.filter(Q(volume__in=volumes) | Q(one_shot__in=one_shots)).count()}")
+
+with transaction.atomic():
+    if ComicIssueCredit and issues is not None:
+        ComicIssueCredit.objects.filter(issue__in=issues).delete()
+
+    if ComicRunCredit and runs is not None:
+        ComicRunCredit.objects.filter(run__in=runs).delete()
+
+    if ComicOneShotCredit and one_shots is not None:
+        ComicOneShotCredit.objects.filter(one_shot__in=one_shots).delete()
+
+    if ComicVolumeCredit and volumes is not None:
+        ComicVolumeCredit.objects.filter(volume__in=volumes).delete()
+
+    if ComicVolumeIssue and volumes is not None and issues is not None:
+        ComicVolumeIssue.objects.filter(Q(volume__in=volumes) | Q(issue__in=issues)).delete()
+
+    if ComicVolumeRun and volumes is not None and runs is not None:
+        ComicVolumeRun.objects.filter(Q(volume__in=volumes) | Q(run__in=runs)).delete()
+
+    if ComicVolumeOneShot and volumes is not None and one_shots is not None:
+        ComicVolumeOneShot.objects.filter(Q(volume__in=volumes) | Q(one_shot__in=one_shots)).delete()
+
+    if issues is not None:
+        issues.delete()
+
+    if volumes is not None:
+        volumes.delete()
+
+    if one_shots is not None:
+        one_shots.delete()
+
+    if runs is not None:
+        runs.delete()
+
+    dc_publishers.delete()
+
+print("Done. All DC catalog data deleted. Marvel was not touched.")
+PY
