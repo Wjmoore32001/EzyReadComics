@@ -142,11 +142,13 @@ class Command(BaseCommand):
 
         self.stdout.write(f"Detail pages read: {len(details)}")
 
-        return self.write_detail_batch(
+        total = self.write_detail_batch(
             details=details,
             dry_run=dry_run,
             verbose=verbose,
         )
+        details.clear()
+        return total
 
     def sync_browse_pages(
         self,
@@ -162,49 +164,66 @@ class Command(BaseCommand):
         total = DcWriteResult()
         processed_detail_keys = set()
 
-        with dc_browser_context(headed=headed) as context:
-            for page_number in range(start_page, start_page + page_count):
-                browse_result = read_browse_page(
-                    context=context,
-                    page_number=page_number,
-                    timeout_ms=timeout_ms,
-                )
+        for page_number in range(start_page, start_page + page_count):
+            details = self.read_browse_page_batch(
+                page_number=page_number,
+                follow_related_graphic_novels=follow_related_graphic_novels,
+                headed=headed,
+                timeout_ms=timeout_ms,
+                processed_detail_keys=processed_detail_keys,
+            )
 
-                self.stdout.write(
-                    f"Browse page {page_number}: "
-                    f"{len(browse_result.detail_links)} detail URLs found "
-                    f"(marker={'yes' if browse_result.browse_marker_found else 'no'})"
-                )
+            self.stdout.write(f"Browse page {page_number}: {len(details)} detail pages read")
 
-                details = self.read_seed_batch(
-                    context=context,
-                    seed_links=browse_result.detail_links,
-                    follow_related_graphic_novels=follow_related_graphic_novels,
-                    timeout_ms=timeout_ms,
-                    processed_detail_keys=processed_detail_keys,
-                )
+            page_result = self.write_detail_batch(
+                details=details,
+                dry_run=dry_run,
+                verbose=verbose,
+            )
+            add_results(total, page_result)
 
-                self.stdout.write(f"Browse page {page_number}: {len(details)} detail pages read")
+            self.stdout.write(
+                f"Browse page {page_number}: batch complete "
+                f"(runs +{page_result.runs_created}/~{page_result.runs_updated}, "
+                f"issues +{page_result.issues_created}/~{page_result.issues_updated}, "
+                f"volumes +{page_result.volumes_created}/~{page_result.volumes_updated}, "
+                f"one-shots +{page_result.one_shots_created}/~{page_result.one_shots_updated}, "
+                f"skipped {page_result.skipped})"
+            )
 
-                page_result = self.write_detail_batch(
-                    details=details,
-                    dry_run=dry_run,
-                    verbose=verbose,
-                )
-                add_results(total, page_result)
-
-                self.stdout.write(
-                    f"Browse page {page_number}: batch complete "
-                    f"(runs +{page_result.runs_created}/~{page_result.runs_updated}, "
-                    f"issues +{page_result.issues_created}/~{page_result.issues_updated}, "
-                    f"volumes +{page_result.volumes_created}/~{page_result.volumes_updated}, "
-                    f"one-shots +{page_result.one_shots_created}/~{page_result.one_shots_updated}, "
-                    f"skipped {page_result.skipped})"
-                )
-
-                details.clear()
+            details.clear()
 
         return total
+
+    def read_browse_page_batch(
+        self,
+        *,
+        page_number,
+        follow_related_graphic_novels,
+        headed,
+        timeout_ms,
+        processed_detail_keys,
+    ):
+        with dc_browser_context(headed=headed) as context:
+            browse_result = read_browse_page(
+                context=context,
+                page_number=page_number,
+                timeout_ms=timeout_ms,
+            )
+
+            self.stdout.write(
+                f"Browse page {page_number}: "
+                f"{len(browse_result.detail_links)} detail URLs found "
+                f"(marker={'yes' if browse_result.browse_marker_found else 'no'})"
+            )
+
+            return self.read_seed_batch(
+                context=context,
+                seed_links=browse_result.detail_links,
+                follow_related_graphic_novels=follow_related_graphic_novels,
+                timeout_ms=timeout_ms,
+                processed_detail_keys=processed_detail_keys,
+            )
 
     def read_seed_batch(
         self,
@@ -358,10 +377,10 @@ class Command(BaseCommand):
 
         if detail_url:
             self.stdout.write("Browse behavior: skipped for direct detail URL")
-            self.stdout.write("Database behavior: write one direct-detail batch after reading")
+            self.stdout.write("Database behavior: close browser, then write direct-detail batch")
         else:
             self.stdout.write("Browse behavior: collect seed URLs from Browse Comics")
-            self.stdout.write("Database behavior: write and clear each browse page batch before continuing")
+            self.stdout.write("Database behavior: read one browse page, close browser, write batch, clear memory")
 
         self.stdout.write("Series map behavior: scan More From This Series once per seed")
         self.stdout.write("Discovered detail behavior: read item details only, no carousel rescan")
