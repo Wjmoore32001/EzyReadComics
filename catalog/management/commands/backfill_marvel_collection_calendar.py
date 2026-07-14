@@ -277,6 +277,8 @@ class Command(BaseCommand):
         collections = read_result["collections"]
         kept_collections = read_result["kept_collections"]
         skipped_collections = read_result["skipped_collections"]
+        duplicate_skipped_collections = read_result["duplicate_skipped_collections"]
+        limit_skipped_collections = read_result["limit_skipped_collections"]
         records = read_result["records"]
 
         totals["calendar_reads"] = 1
@@ -285,6 +287,39 @@ class Command(BaseCommand):
         totals["skipped_collections"] = len(skipped_collections)
         totals["limit_skipped"] = read_result["limit_skipped"]
         totals["duplicate_collections_skipped"] = read_result["duplicate_collections_skipped"]
+
+        for collection in skipped_collections:
+            totals["skipped_reports"].append(
+                build_collection_report(
+                    collection=collection,
+                    detail=None,
+                    result=None,
+                    series_lookups={},
+                    reason="DM/variant collection row",
+                )
+            )
+
+        for collection in duplicate_skipped_collections:
+            totals["skipped_reports"].append(
+                build_collection_report(
+                    collection=collection,
+                    detail=None,
+                    result=None,
+                    series_lookups={},
+                    reason="duplicate collection URL already processed in this command run",
+                )
+            )
+
+        for collection in limit_skipped_collections:
+            totals["skipped_reports"].append(
+                build_collection_report(
+                    collection=collection,
+                    detail=None,
+                    result=None,
+                    series_lookups={},
+                    reason="skipped by --limit",
+                )
+            )
 
         if verbose and skipped_collections:
             self.stdout.write("")
@@ -357,6 +392,19 @@ class Command(BaseCommand):
                 dry_run=dry_run,
             )
             merge_totals(totals, result)
+
+            report = build_collection_report(
+                collection=record.collection,
+                detail=record.detail,
+                result=result,
+                series_lookups=series_lookups,
+                reason=result.get("skipped"),
+            )
+
+            if result["skipped"]:
+                totals["skipped_reports"].append(report)
+            elif collection_report_is_incomplete(report):
+                totals["incomplete_reports"].append(report)
 
             if verbose:
                 self.print_result(
@@ -504,8 +552,80 @@ class Command(BaseCommand):
         self.stdout.write(f"{prefix_created} volume-one-shot links: {totals['volume_one_shots_created']}")
         self.stdout.write(f"Credits added: {totals['credits_added']}")
 
+        self.print_final_reports(totals)
+
         if dry_run:
             self.stdout.write("Dry run only. No catalog data was created or updated.")
+
+    def print_final_reports(self, totals):
+        skipped_reports = totals.get("skipped_reports") or []
+        incomplete_reports = totals.get("incomplete_reports") or []
+
+        if not skipped_reports and not incomplete_reports:
+            return
+
+        self.stdout.write("")
+        self.stdout.write(self.style.WARNING("Skipped / incomplete collection details:"))
+
+        if skipped_reports:
+            self.stdout.write("")
+            self.stdout.write("Skipped collections:")
+
+            for report in skipped_reports:
+                self.print_collection_report(
+                    report=report,
+                    include_collecting_text=True,
+                )
+
+        if incomplete_reports:
+            self.stdout.write("")
+            self.stdout.write("Incomplete collection issue links:")
+
+            for report in incomplete_reports:
+                self.print_collection_report(
+                    report=report,
+                    include_collecting_text=False,
+                )
+
+    def print_collection_report(self, *, report, include_collecting_text):
+        self.stdout.write(f"- {report['row']}")
+
+        if report.get("reason"):
+            self.stdout.write(f"  Reason: {report['reason']}")
+
+        if report.get("detail_url"):
+            self.stdout.write(f"  URL: {report['detail_url']}")
+
+        if report.get("confidence"):
+            self.stdout.write(f"  Collection confidence: {report['confidence']}")
+
+        self.stdout.write(f"  Parsed run links: {len(report['parsed_run_links'])}")
+        self.stdout.write(f"  Parsed one-shots: {len(report['parsed_one_shots'])}")
+
+        if report.get("issue_urls_found") or report.get("issue_urls_missing"):
+            self.stdout.write(f"  Issue URLs found: {report['issue_urls_found']}")
+            self.stdout.write(f"  Issue URLs missing: {report['issue_urls_missing']}")
+
+        for run_link in report["parsed_run_links"]:
+            self.stdout.write(f"  Run: {run_link}")
+
+        for one_shot in report["parsed_one_shots"]:
+            self.stdout.write(f"  One-shot: {one_shot}")
+
+        for note in report["series_lookup_notes"]:
+            self.stdout.write(f"  Series lookup: {note}")
+
+        for note in report["missing_issue_notes"]:
+            self.stdout.write(f"  Missing issue refs: {note}")
+
+        for warning in report["warnings"]:
+            self.stdout.write(f"  Parser warning: {warning}")
+
+        if include_collecting_text and report.get("collecting_text"):
+            self.stdout.write(
+                "  Collecting text: "
+                + truncate_report_text(report["collecting_text"], max_length=800)
+            )
 
 
 def read_calendar_and_collection_details_for_window(
@@ -526,25 +646,24 @@ def read_calendar_and_collection_details_for_window(
         collections = extract_calendar_collections(rendered_calendar)
         kept_collections, skipped_collections = split_skipped_collections(collections)
 
-        duplicate_collections_skipped = 0
+        duplicate_skipped_collections = []
         unique_kept_collections = []
 
         for collection in kept_collections:
             detail_url = clean_text(collection.get("detail_url"))
 
             if detail_url in globally_seen_collection_urls:
-                duplicate_collections_skipped += 1
+                duplicate_skipped_collections.append(collection)
                 continue
 
             globally_seen_collection_urls.add(detail_url)
             unique_kept_collections.append(collection)
 
         kept_collections = unique_kept_collections
-
-        limit_skipped = 0
+        limit_skipped_collections = []
 
         if limit is not None and len(kept_collections) > limit:
-            limit_skipped = len(kept_collections) - limit
+            limit_skipped_collections = kept_collections[limit:]
             kept_collections = kept_collections[:limit]
 
         records = []
@@ -567,8 +686,10 @@ def read_calendar_and_collection_details_for_window(
         "kept_collections": kept_collections,
         "skipped_collections": skipped_collections,
         "records": records,
-        "limit_skipped": limit_skipped,
-        "duplicate_collections_skipped": duplicate_collections_skipped,
+        "limit_skipped": len(limit_skipped_collections),
+        "limit_skipped_collections": limit_skipped_collections,
+        "duplicate_collections_skipped": len(duplicate_skipped_collections),
+        "duplicate_skipped_collections": duplicate_skipped_collections,
     }
 
 
@@ -934,6 +1055,184 @@ def resolve_or_create_issue(*, run, series_issue, detail_map, skip_details, dry_
     return issue or existing_issue
 
 
+def build_collection_report(*, collection, detail, result, series_lookups, reason):
+    detail = detail or empty_collection_detail()
+    result = result or new_totals()
+    run_links = normalized_run_links(detail.get("run_links") or [])
+    one_shots = clean_one_shot_candidates(detail.get("one_shots") or [])
+
+    return {
+        "row": format_collection_row(collection),
+        "detail_url": clean_text(collection.get("detail_url")),
+        "reason": clean_text(reason),
+        "confidence": clean_text(detail.get("confidence")),
+        "collecting_text": clean_text(detail.get("collecting_text")),
+        "warnings": unique_report_strings(detail.get("warnings") or []),
+        "parsed_run_links": describe_run_links(run_links),
+        "parsed_one_shots": describe_one_shots(one_shots),
+        "issue_urls_found": result.get("issue_urls_found", 0),
+        "issue_urls_missing": result.get("issue_urls_missing", 0),
+        "series_lookup_notes": collect_series_lookup_notes(
+            run_links=run_links,
+            series_lookups=series_lookups,
+        ),
+        "missing_issue_notes": collect_missing_issue_notes(
+            run_links=run_links,
+            series_lookups=series_lookups,
+        ),
+    }
+
+
+def collection_report_is_incomplete(report):
+    if report["issue_urls_missing"] > 0:
+        return True
+
+    if report["series_lookup_notes"]:
+        return True
+
+    return False
+
+
+def describe_run_links(run_links):
+    descriptions = []
+
+    for run_link in run_links:
+        title = clean_text(
+            run_link.get("catalog_run_title")
+            or run_link.get("source_run_title")
+            or run_link.get("run_title")
+        )
+        start_year = clean_text(run_link.get("start_year"))
+        issue_numbers_text = clean_text(run_link.get("issue_numbers_text"))
+
+        if not issue_numbers_text:
+            issue_numbers_text = format_issue_number_list(run_link.get("issue_numbers") or [])
+
+        label = format_run_label(title=title, start_year=start_year)
+
+        if issue_numbers_text:
+            label = f"{label} #{issue_numbers_text}"
+
+        descriptions.append(label)
+
+    return descriptions
+
+
+def describe_one_shots(one_shots):
+    descriptions = []
+
+    for one_shot in one_shots:
+        title = clean_text(one_shot.get("title"))
+        start_year = clean_text(one_shot.get("start_year"))
+        reason = clean_text(one_shot.get("reason"))
+
+        label = format_run_label(title=title, start_year=start_year)
+
+        if reason:
+            label = f"{label} ({reason})"
+
+        descriptions.append(label)
+
+    return descriptions
+
+
+def collect_series_lookup_notes(*, run_links, series_lookups):
+    notes = []
+
+    for run_link in run_links:
+        lookup = series_lookups.get(run_key_from_run_link(run_link))
+        label = format_run_label(
+            title=run_link["catalog_run_title"],
+            start_year=run_link["start_year"],
+        )
+
+        if lookup is None:
+            notes.append(f"{label}: no series lookup was built")
+            continue
+
+        if lookup.error:
+            notes.append(f"{label}: {lookup.error}")
+
+    return unique_report_strings(notes)
+
+
+def collect_missing_issue_notes(*, run_links, series_lookups):
+    notes = []
+
+    for run_link in run_links:
+        lookup = series_lookups.get(run_key_from_run_link(run_link))
+        series = lookup.series if lookup else None
+        issue_lookup = series_issue_lookup(series) if series else {}
+        missing_numbers = []
+
+        for issue_number in sorted(run_link.get("issue_numbers") or [], key=issue_number_sort_key):
+            if normalize_issue_number(issue_number) not in issue_lookup:
+                missing_numbers.append(issue_number)
+
+        if not missing_numbers:
+            continue
+
+        label = format_run_label(
+            title=run_link["catalog_run_title"],
+            start_year=run_link["start_year"],
+        )
+        notes.append(f"{label} #{format_issue_number_list(missing_numbers)}")
+
+    return notes
+
+
+def format_run_label(*, title, start_year):
+    title = clean_text(title)
+    start_year = clean_text(start_year)
+
+    if title and start_year:
+        return f"{title} ({start_year})"
+
+    return title or "[unknown run]"
+
+
+def format_issue_number_list(issue_numbers, max_items=40):
+    issue_numbers = [clean_text(issue_number) for issue_number in issue_numbers]
+    issue_numbers = [issue_number for issue_number in issue_numbers if issue_number]
+
+    if not issue_numbers:
+        return ""
+
+    displayed = issue_numbers[:max_items]
+    text = ", ".join(displayed)
+
+    if len(issue_numbers) > max_items:
+        text += f", ... +{len(issue_numbers) - max_items} more"
+
+    return text
+
+
+def truncate_report_text(value, *, max_length):
+    value = clean_text(value)
+
+    if len(value) <= max_length:
+        return value
+
+    return value[: max_length - 3].rstrip() + "..."
+
+
+def unique_report_strings(values):
+    seen = set()
+    result = []
+
+    for value in values:
+        value = clean_text(value)
+        key = value.casefold()
+
+        if not key or key in seen:
+            continue
+
+        seen.add(key)
+        result.append(value)
+
+    return result
+
+
 def normalized_run_links(run_links):
     normalized = []
 
@@ -1155,6 +1454,8 @@ def new_totals():
         "volume_one_shots_created": 0,
         "credits_added": 0,
         "skipped": "",
+        "skipped_reports": [],
+        "incomplete_reports": [],
     }
 
 
@@ -1162,3 +1463,6 @@ def merge_totals(target, source):
     for key, value in source.items():
         if isinstance(value, int):
             target[key] += value
+        elif isinstance(value, list):
+            target.setdefault(key, [])
+            target[key].extend(value)
