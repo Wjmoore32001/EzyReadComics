@@ -335,13 +335,31 @@ a {
 
 .searchable-dropdown .dropdown-menu {
   width: 100%;
+  max-width: min(36rem, calc(100vw - 2rem));
+  overflow-x: hidden;
   background: #121620;
   border-color: var(--erc-border);
   box-shadow: 0 1rem 2rem rgba(0, 0, 0, 0.35);
 }
 
+.searchable-dropdown [data-dropdown-options] {
+  max-width: 100%;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
 .searchable-dropdown .dropdown-item {
   color: #d7deeb;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.searchable-dropdown .dropdown-item span,
+.searchable-dropdown .dropdown-item-text {
+  white-space: normal;
 }
 
 .searchable-dropdown .dropdown-item:hover {

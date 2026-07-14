@@ -18,6 +18,7 @@ DEFAULT_TIMEOUT_MS = 45000
 
 DETAIL_SETTLE_MS = 250
 BROWSE_SETTLE_MS = 250
+BROWSE_LINK_STABLE_TIMEOUT_MS = 2500
 CAROUSEL_SETTLE_MS = 75
 CAROUSEL_STATE_CHANGE_TIMEOUT_MS = 750
 
@@ -28,11 +29,15 @@ BLOCKED_RESOURCE_TYPES = {
 }
 
 DETAIL_URL_RE = re.compile(
-    r"^https?://(?:www\.)?dc\.com/(?:comics|graphic-novels)/[^/?#]+/[^/?#]+/?$",
+    r"^https?://(?:www\.)?dc\.com/"
+    r"(?:"
+    r"comics/[^/?#]+/[^/?#]+"
+    r"|"
+    r"graphic-novels/[^/?#]+(?:/[^/?#]+)?"
+    r")/?$",
     re.IGNORECASE,
 )
 ISSUE_NUMBER_RE = re.compile(r"#\s*(?P<number>\d+[A-Za-z]?)\s*$")
-ISSUE_NUMBER_ANYWHERE_RE = re.compile(r"#\s*(?P<number>\d+[A-Za-z]?)")
 COLLECTED_RANGE_RE = re.compile(
     r"#\s*(?P<start>\d+)\s*(?:-|–|—|to|through)\s*#?\s*(?P<end>\d+)",
     re.IGNORECASE,
@@ -170,6 +175,7 @@ def read_browse_page(*, context, page_number, timeout_ms=DEFAULT_TIMEOUT_MS):
             pass
 
         page.wait_for_timeout(BROWSE_SETTLE_MS)
+        wait_for_browse_link_count_stable(page)
         browse_data = extract_browse_detail_links(page)
 
         return DcBrowseResult(
@@ -181,6 +187,26 @@ def read_browse_page(*, context, page_number, timeout_ms=DEFAULT_TIMEOUT_MS):
         )
     finally:
         page.close()
+
+
+def wait_for_browse_link_count_stable(page):
+    deadline = time.monotonic() + (BROWSE_LINK_STABLE_TIMEOUT_MS / 1000)
+    previous_count = -1
+    stable_polls = 0
+
+    while time.monotonic() < deadline:
+        count = len(extract_browse_detail_links(page).get("links", []))
+
+        if count == previous_count:
+            stable_polls += 1
+        else:
+            stable_polls = 0
+            previous_count = count
+
+        if stable_polls >= 3:
+            return
+
+        page.wait_for_timeout(100)
 
 
 def read_detail_page(
@@ -265,8 +291,6 @@ def read_detail_page(
             item_type=item_type,
             issue_number=issue_number,
             series=series,
-            more_links=more_links,
-            collection_parse=collection_parse,
         )
 
         return DcDetail(
@@ -327,11 +351,15 @@ def extract_browse_detail_links(page):
 
                         const parts = url.pathname.split("/").filter(Boolean);
 
-                        if (parts.length !== 3) {
-                            return false;
+                        if (parts[0] === "comics") {
+                            return parts.length === 3;
                         }
 
-                        return parts[0] === "comics" || parts[0] === "graphic-novels";
+                        if (parts[0] === "graphic-novels") {
+                            return parts.length === 2 || parts.length === 3;
+                        }
+
+                        return false;
                     } catch {
                         return false;
                     }
@@ -513,11 +541,15 @@ def extract_more_from_series_links(page):
 
                         const parts = url.pathname.split("/").filter(Boolean);
 
-                        if (parts.length !== 3) {
-                            return false;
+                        if (parts[0] === "comics") {
+                            return parts.length === 3;
                         }
 
-                        return parts[0] === "comics" || parts[0] === "graphic-novels";
+                        if (parts[0] === "graphic-novels") {
+                            return parts.length === 2 || parts.length === 3;
+                        }
+
+                        return false;
                     } catch {
                         return false;
                     }
@@ -616,11 +648,15 @@ def get_more_from_series_visible_state(page):
 
                             const parts = url.pathname.split("/").filter(Boolean);
 
-                            if (parts.length !== 3) {
-                                return false;
+                            if (parts[0] === "comics") {
+                                return parts.length === 3;
                             }
 
-                            return parts[0] === "comics" || parts[0] === "graphic-novels";
+                            if (parts[0] === "graphic-novels") {
+                                return parts.length === 2 || parts.length === 3;
+                            }
+
+                            return false;
                         } catch {
                             return false;
                         }
@@ -818,6 +854,18 @@ def click_more_from_series_next(page):
 
 def parse_collection_relationship(*, description, candidate_issue_links, series_title=""):
     issue_numbers = parse_collected_issue_numbers(description)
+
+    if not issue_numbers:
+        return DcCollectionParse()
+
+    return collection_parse_from_issue_numbers(
+        issue_numbers=issue_numbers,
+        candidate_issue_links=candidate_issue_links,
+        series_title=series_title,
+    )
+
+
+def collection_parse_from_issue_numbers(*, issue_numbers, candidate_issue_links, series_title):
     matched_links = []
     unmatched_numbers = []
 
@@ -852,9 +900,6 @@ def parse_collected_issue_numbers(description):
             numbers.extend(str(number) for number in range(start, end + 1))
         else:
             numbers.extend(str(number) for number in range(start, end - 1, -1))
-
-    for match in ISSUE_NUMBER_ANYWHERE_RE.finditer(description):
-        numbers.append(clean_text(match.group("number")))
 
     return unique_list(numbers)
 
@@ -917,7 +962,7 @@ def link_issue_number(link):
     return ""
 
 
-def classify_detail(*, item_type, issue_number, series, more_links, collection_parse):
+def classify_detail(*, item_type, issue_number, series):
     if item_type == "COMIC BOOK":
         if issue_number:
             return "issue"
@@ -925,18 +970,24 @@ def classify_detail(*, item_type, issue_number, series, more_links, collection_p
         return "comic_book_needs_review"
 
     if item_type == "GRAPHIC NOVEL":
-        if collection_parse.issue_numbers and series.raw:
+        if series.raw:
             return "collected_volume"
 
-        if not series.raw and not more_links and not collection_parse.issue_numbers:
-            return "standalone_graphic_novel_or_one_shot"
-
-        if series.raw and not collection_parse.issue_numbers:
-            return "graphic_novel_series_item_needs_review"
-
-        return "graphic_novel_needs_review"
+        return "standalone_graphic_novel_or_one_shot"
 
     return "unknown"
+
+
+def detail_skip_reason(detail):
+    if detail.classification == "graphic_novel_needs_review":
+        return "Graphic novel could not be safely classified as volume or standalone."
+    if detail.classification == "graphic_novel_series_item_needs_review":
+        return "Graphic novel has a Series value but no collected issue range."
+    if detail.classification == "comic_book_needs_review":
+        return "Comic book page did not expose an issue number."
+    if detail.classification == "unknown":
+        return "DC detail page type was not recognized."
+    return ""
 
 
 def clean_detail_links(raw_links):
@@ -1369,6 +1420,8 @@ def looks_like_special_issue_label(value):
             ": ark m",
             " special ",
             " special #",
+            ": uncovered ",
+            ": uncovered #",
         ]
     )
 

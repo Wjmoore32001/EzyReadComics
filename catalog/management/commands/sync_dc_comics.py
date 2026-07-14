@@ -5,6 +5,7 @@ from django.core.management.base import BaseCommand, CommandError
 from catalog.dc.browser import (
     DEFAULT_TIMEOUT_MS,
     dc_browser_context,
+    detail_skip_reason,
     read_browse_page,
     read_detail_page,
 )
@@ -116,7 +117,7 @@ class Command(BaseCommand):
             )
             add_results(total, result)
 
-            if verbose:
+            if verbose or result.skipped:
                 self.print_detail_result(detail=detail, result=result)
 
         self.print_totals(total)
@@ -291,11 +292,20 @@ class Command(BaseCommand):
     def print_detail_result(self, *, detail, result):
         identity = run_identity_from_detail(detail)
         status = run_status_from_detail(detail)
+        skip_reason = detail_skip_reason(detail)
 
         self.stdout.write("")
-        self.stdout.write(detail.title or detail.final_url)
+
+        if result.skipped:
+            self.stdout.write(self.style.WARNING(f"SKIPPED: {detail.title or detail.final_url}"))
+        else:
+            self.stdout.write(detail.title or detail.final_url)
+
         self.stdout.write(f"  Type: {detail.item_type or 'unknown'}")
         self.stdout.write(f"  Classification: {detail.classification}")
+
+        if skip_reason:
+            self.stdout.write(f"  Skip reason: {skip_reason}")
 
         if identity.title:
             self.stdout.write(
