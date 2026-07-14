@@ -18,6 +18,9 @@ from catalog.dc.writer import (
 )
 
 
+DETAIL_READ_ATTEMPTS = 3
+
+
 class Command(BaseCommand):
     help = "Sync DC.com browse/detail comic data into the catalog."
 
@@ -253,7 +256,7 @@ class Command(BaseCommand):
 
             scanned_seed_urls.add(seed_key)
 
-            seed_detail = read_detail_page(
+            seed_detail = self.read_detail_with_retries(
                 context=context,
                 url=seed_url,
                 timeout_ms=timeout_ms,
@@ -267,7 +270,7 @@ class Command(BaseCommand):
                 detail=seed_detail,
             )
 
-            if not stored_seed:
+            if not stored_seed or seed_detail.classification == "read_error":
                 continue
 
             series_map_links = seed_detail.more_from_series_links
@@ -290,7 +293,7 @@ class Command(BaseCommand):
                 if key in processed_detail_keys or key in detail_by_url:
                     continue
 
-                detail = read_detail_page(
+                detail = self.read_detail_with_retries(
                     context=context,
                     url=url,
                     timeout_ms=timeout_ms,
@@ -307,18 +310,68 @@ class Command(BaseCommand):
 
         return details
 
+    def read_detail_with_retries(
+        self,
+        *,
+        context,
+        url,
+        timeout_ms,
+        scan_more_from_series,
+        known_more_from_series_links=None,
+    ):
+        last_detail = None
+
+        for attempt in range(1, DETAIL_READ_ATTEMPTS + 1):
+            detail = read_detail_page(
+                context=context,
+                url=url,
+                timeout_ms=timeout_ms,
+                scan_more_from_series=scan_more_from_series,
+                known_more_from_series_links=known_more_from_series_links,
+            )
+            last_detail = detail
+
+            if detail.classification != "read_error":
+                if attempt > 1:
+                    self.stdout.write(
+                        self.style.SUCCESS(
+                            f"Detail read recovered on attempt {attempt}: {detail.final_url}"
+                        )
+                    )
+                return detail
+
+            if attempt < DETAIL_READ_ATTEMPTS:
+                self.stdout.write(
+                    self.style.WARNING(
+                        f"Detail read failed attempt {attempt}/{DETAIL_READ_ATTEMPTS}: "
+                        f"{detail.final_url or url}"
+                    )
+                )
+                continue
+
+            self.stdout.write(
+                self.style.WARNING(
+                    f"Detail read failed final attempt: {detail.final_url or url}"
+                )
+            )
+
+        return last_detail
+
     def store_detail(self, *, details, detail_by_url, processed_detail_keys, detail):
         key = normalize_url_for_compare(detail.final_url)
 
         if not key:
             return False
 
-        if key in detail_by_url or key in processed_detail_keys:
+        if key in detail_by_url:
             return False
 
         detail_by_url[key] = detail
-        processed_detail_keys.add(key)
         details.append(detail)
+
+        if detail.classification != "read_error":
+            processed_detail_keys.add(key)
+
         return True
 
     def enqueue_url(self, *, queue, queued_keys, processed_detail_keys, url):
@@ -339,10 +392,14 @@ class Command(BaseCommand):
         total = DcWriteResult()
 
         for detail in sort_details_for_writing(details):
-            result = write_dc_detail(
-                detail=detail,
-                dry_run=dry_run,
-            )
+            if detail.classification == "read_error":
+                result = DcWriteResult(skipped=1)
+            else:
+                result = write_dc_detail(
+                    detail=detail,
+                    dry_run=dry_run,
+                )
+
             add_results(total, result)
 
             if verbose or result.skipped:
@@ -385,7 +442,9 @@ class Command(BaseCommand):
         self.stdout.write("Series map behavior: scan More From This Series once per seed")
         self.stdout.write("Discovered detail behavior: read item details only, no carousel rescan")
         self.stdout.write("Volume matching: use explicit collected issue ranges only")
-        self.stdout.write("Duplicate behavior: keep a small URL set to avoid repeat detail reads across pages")
+        self.stdout.write(f"Detail retry behavior: retry failed detail reads up to {DETAIL_READ_ATTEMPTS} times")
+        self.stdout.write("Duplicate behavior: keep a small URL set to avoid repeat successful reads across pages")
+        self.stdout.write("Failed read behavior: read_error URLs are not permanently marked processed")
         self.stdout.write("")
 
     def print_detail_result(self, *, detail, result):
@@ -423,6 +482,9 @@ class Command(BaseCommand):
             + ("yes" if detail.scanned_more_from_series else "no")
         )
         self.stdout.write(f"  Source URL: {detail.final_url}")
+
+        if detail.read_error:
+            self.stdout.write(f"  Read error: {detail.read_error}")
 
         if detail.candidate_issue_links:
             self.stdout.write(f"  Series issue links available: {len(detail.candidate_issue_links)}")
@@ -486,8 +548,9 @@ def detail_write_priority(detail):
         "issue": 10,
         "collected_volume": 20,
         "standalone_graphic_novel_or_one_shot": 30,
+        "read_error": 90,
     }
-    return priorities.get(detail.classification, 90)
+    return priorities.get(detail.classification, 80)
 
 
 def is_graphic_novel_link(link):

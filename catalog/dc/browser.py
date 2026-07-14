@@ -21,6 +21,7 @@ BROWSE_SETTLE_MS = 250
 BROWSE_LINK_STABLE_TIMEOUT_MS = 2500
 CAROUSEL_SETTLE_MS = 75
 CAROUSEL_STATE_CHANGE_TIMEOUT_MS = 750
+BODY_TEXT_TIMEOUT_MS = 10000
 
 BLOCKED_RESOURCE_TYPES = {
     "image",
@@ -38,6 +39,7 @@ DETAIL_URL_RE = re.compile(
     re.IGNORECASE,
 )
 ISSUE_NUMBER_RE = re.compile(r"#\s*(?P<number>\d+[A-Za-z]?)\s*$")
+BARE_ISSUE_MARKER_RE = re.compile(r"#\s*$")
 COLLECTED_RANGE_RE = re.compile(
     r"#\s*(?P<start>\d+)\s*(?:-|–|—|to|through)\s*#?\s*(?P<end>\d+)",
     re.IGNORECASE,
@@ -92,6 +94,7 @@ class DcDetail:
     collection_parse: DcCollectionParse = field(default_factory=DcCollectionParse)
     series_scroll_clicks: int = 0
     scanned_more_from_series: bool = False
+    read_error: str = ""
 
 
 def ensure_playwright():
@@ -220,7 +223,14 @@ def read_detail_page(
     page = context.new_page()
 
     try:
-        page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
+        try:
+            page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
+        except Exception as error:
+            return build_read_error_detail(
+                url=url,
+                final_url=safe_page_url(page, url),
+                error=error,
+            )
 
         try:
             page.wait_for_function(
@@ -250,11 +260,26 @@ def read_detail_page(
             more_links = clean_detail_links(known_more_from_series_links or [])
             scroll_clicks = 0
 
-        text = page.locator("body").inner_text(timeout=timeout_ms)
+        text = read_body_text(page)
+
+        if not text:
+            return build_read_error_detail(
+                url=url,
+                final_url=safe_page_url(page, url),
+                error="Body text was not readable before timeout.",
+                more_links=more_links,
+                scroll_clicks=scroll_clicks,
+                scanned_more_from_series=scan_more_from_series,
+            )
+
         lines = normalize_lines(text)
 
         item_type = extract_item_type(lines)
         title = extract_detail_title(lines=lines, item_type=item_type)
+
+        if not title:
+            title = title_from_url(safe_page_url(page, url))
+
         description = extract_description(lines=lines, item_type=item_type, title=title)
         specs = extract_label_block(
             lines=lines,
@@ -291,11 +316,13 @@ def read_detail_page(
             item_type=item_type,
             issue_number=issue_number,
             series=series,
+            title=title,
+            collection_parse=collection_parse,
         )
 
         return DcDetail(
             url=url,
-            final_url=page.url,
+            final_url=safe_page_url(page, url),
             item_type=item_type,
             classification=classification,
             title=title,
@@ -312,8 +339,64 @@ def read_detail_page(
             series_scroll_clicks=scroll_clicks,
             scanned_more_from_series=scan_more_from_series,
         )
+    except Exception as error:
+        return build_read_error_detail(
+            url=url,
+            final_url=safe_page_url(page, url),
+            error=error,
+        )
     finally:
         page.close()
+
+
+def read_body_text(page):
+    try:
+        return clean_text(page.locator("body").inner_text(timeout=BODY_TEXT_TIMEOUT_MS))
+    except Exception:
+        pass
+
+    try:
+        return clean_text(
+            page.evaluate(
+                """
+                () => document.body ? document.body.innerText : ""
+                """
+            )
+        )
+    except Exception:
+        return ""
+
+
+def build_read_error_detail(
+    *,
+    url,
+    final_url,
+    error,
+    more_links=None,
+    scroll_clicks=0,
+    scanned_more_from_series=False,
+):
+    final_url = clean_text(final_url) or clean_text(url)
+    title = title_from_url(final_url)
+
+    return DcDetail(
+        url=url,
+        final_url=final_url,
+        item_type="",
+        classification="read_error",
+        title=title,
+        more_from_series_links=clean_detail_links(more_links or []),
+        series_scroll_clicks=scroll_clicks,
+        scanned_more_from_series=scanned_more_from_series,
+        read_error=clean_text(error),
+    )
+
+
+def safe_page_url(page, fallback):
+    try:
+        return clean_text(page.url) or clean_text(fallback)
+    except Exception:
+        return clean_text(fallback)
 
 
 def extract_browse_detail_links(page):
@@ -947,6 +1030,9 @@ def link_issue_number(link):
     if label_match:
         return clean_text(label_match.group("number"))
 
+    if BARE_ISSUE_MARKER_RE.search(label):
+        return "0"
+
     parsed = urlparse(href)
     parts = [part for part in parsed.path.split("/") if part]
 
@@ -962,10 +1048,16 @@ def link_issue_number(link):
     return ""
 
 
-def classify_detail(*, item_type, issue_number, series):
+def classify_detail(*, item_type, issue_number, series, title, collection_parse):
     if item_type == "COMIC BOOK":
         if issue_number:
             return "issue"
+
+        if series.raw and looks_like_volume_title(title):
+            return "collected_volume"
+
+        if series.raw and collection_parse.issue_numbers:
+            return "collected_volume"
 
         return "comic_book_needs_review"
 
@@ -979,12 +1071,16 @@ def classify_detail(*, item_type, issue_number, series):
 
 
 def detail_skip_reason(detail):
+    if detail.classification == "read_error":
+        if detail.read_error:
+            return f"Detail page could not be read after retries: {detail.read_error}"
+        return "Detail page could not be read after retries."
     if detail.classification == "graphic_novel_needs_review":
         return "Graphic novel could not be safely classified as volume or standalone."
     if detail.classification == "graphic_novel_series_item_needs_review":
         return "Graphic novel has a Series value but no collected issue range."
     if detail.classification == "comic_book_needs_review":
-        return "Comic book page did not expose an issue number."
+        return "Comic book page did not expose an issue number and did not look like a volume."
     if detail.classification == "unknown":
         return "DC detail page type was not recognized."
     return ""
@@ -1041,12 +1137,16 @@ def extract_detail_title(*, lines, item_type):
 
 
 def extract_issue_number(title):
-    match = ISSUE_NUMBER_RE.search(clean_text(title))
+    title = clean_text(title)
+    match = ISSUE_NUMBER_RE.search(title)
 
-    if not match:
-        return ""
+    if match:
+        return clean_text(match.group("number"))
 
-    return clean_text(match.group("number"))
+    if BARE_ISSUE_MARKER_RE.search(title):
+        return "0"
+
+    return ""
 
 
 def build_dc_issue_key(*, title, issue_number):
@@ -1056,7 +1156,7 @@ def build_dc_issue_key(*, title, issue_number):
     if not title or not issue_number:
         return issue_number
 
-    base = re.sub(r"#\s*" + re.escape(issue_number) + r"\s*$", "", title, flags=re.IGNORECASE)
+    base = strip_issue_suffix(title, issue_number)
     base = re.sub(r"\(\d{4}\s*-?\s*\)", "", base)
     base = clean_text(base).strip(" :-")
 
@@ -1067,6 +1167,21 @@ def build_dc_issue_key(*, title, issue_number):
         return f"{base} #{issue_number}"
 
     return issue_number
+
+
+def strip_issue_suffix(value, issue_number):
+    value = clean_text(value)
+    issue_number = clean_text(issue_number)
+
+    if issue_number == "0":
+        return re.sub(r"#\s*$", "", value).strip()
+
+    return re.sub(
+        r"#\s*" + re.escape(issue_number) + r"\s*$",
+        "",
+        value,
+        flags=re.IGNORECASE,
+    ).strip()
 
 
 def parse_series(value):
@@ -1361,7 +1476,7 @@ def link_base_title(label):
     issue_number = extract_issue_number(label)
 
     if issue_number:
-        label = re.sub(r"#\s*" + re.escape(issue_number) + r"\s*$", "", label, flags=re.IGNORECASE)
+        label = strip_issue_suffix(label, issue_number)
 
     label = re.sub(r"\(\d{4}\s*-?\s*\)", "", label)
     return clean_text(label).strip(" :-")
@@ -1424,6 +1539,11 @@ def looks_like_special_issue_label(value):
             ": uncovered #",
         ]
     )
+
+
+def looks_like_volume_title(value):
+    value = clean_text(value)
+    return bool(re.search(r"\bvol\.?\s*\d+", value, flags=re.IGNORECASE))
 
 
 def is_description_stop_line(line):
