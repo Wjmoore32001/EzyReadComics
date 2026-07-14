@@ -97,17 +97,226 @@ class Command(BaseCommand):
             timeout_ms=timeout_ms,
         )
 
-        details = self.read_details(
-            start_page=start_page,
-            page_count=page_count,
-            detail_url=detail_url,
-            follow_related_graphic_novels=follow_related_graphic_novels,
-            headed=headed,
-            timeout_ms=timeout_ms,
-        )
+        if detail_url:
+            total = self.sync_direct_detail_url(
+                detail_url=detail_url,
+                follow_related_graphic_novels=follow_related_graphic_novels,
+                dry_run=dry_run,
+                headed=headed,
+                timeout_ms=timeout_ms,
+                verbose=verbose,
+            )
+        else:
+            total = self.sync_browse_pages(
+                start_page=start_page,
+                page_count=page_count,
+                follow_related_graphic_novels=follow_related_graphic_novels,
+                dry_run=dry_run,
+                headed=headed,
+                timeout_ms=timeout_ms,
+                verbose=verbose,
+            )
+
+        self.print_totals(total)
+
+    def sync_direct_detail_url(
+        self,
+        *,
+        detail_url,
+        follow_related_graphic_novels,
+        dry_run,
+        headed,
+        timeout_ms,
+        verbose,
+    ):
+        processed_detail_keys = set()
+
+        with dc_browser_context(headed=headed) as context:
+            details = self.read_seed_batch(
+                context=context,
+                seed_links=[{"label": "", "href": detail_url}],
+                follow_related_graphic_novels=follow_related_graphic_novels,
+                timeout_ms=timeout_ms,
+                processed_detail_keys=processed_detail_keys,
+            )
 
         self.stdout.write(f"Detail pages read: {len(details)}")
 
+        return self.write_detail_batch(
+            details=details,
+            dry_run=dry_run,
+            verbose=verbose,
+        )
+
+    def sync_browse_pages(
+        self,
+        *,
+        start_page,
+        page_count,
+        follow_related_graphic_novels,
+        dry_run,
+        headed,
+        timeout_ms,
+        verbose,
+    ):
+        total = DcWriteResult()
+        processed_detail_keys = set()
+
+        with dc_browser_context(headed=headed) as context:
+            for page_number in range(start_page, start_page + page_count):
+                browse_result = read_browse_page(
+                    context=context,
+                    page_number=page_number,
+                    timeout_ms=timeout_ms,
+                )
+
+                self.stdout.write(
+                    f"Browse page {page_number}: "
+                    f"{len(browse_result.detail_links)} detail URLs found "
+                    f"(marker={'yes' if browse_result.browse_marker_found else 'no'})"
+                )
+
+                details = self.read_seed_batch(
+                    context=context,
+                    seed_links=browse_result.detail_links,
+                    follow_related_graphic_novels=follow_related_graphic_novels,
+                    timeout_ms=timeout_ms,
+                    processed_detail_keys=processed_detail_keys,
+                )
+
+                self.stdout.write(f"Browse page {page_number}: {len(details)} detail pages read")
+
+                page_result = self.write_detail_batch(
+                    details=details,
+                    dry_run=dry_run,
+                    verbose=verbose,
+                )
+                add_results(total, page_result)
+
+                self.stdout.write(
+                    f"Browse page {page_number}: batch complete "
+                    f"(runs +{page_result.runs_created}/~{page_result.runs_updated}, "
+                    f"issues +{page_result.issues_created}/~{page_result.issues_updated}, "
+                    f"volumes +{page_result.volumes_created}/~{page_result.volumes_updated}, "
+                    f"one-shots +{page_result.one_shots_created}/~{page_result.one_shots_updated}, "
+                    f"skipped {page_result.skipped})"
+                )
+
+                details.clear()
+
+        return total
+
+    def read_seed_batch(
+        self,
+        *,
+        context,
+        seed_links,
+        follow_related_graphic_novels,
+        timeout_ms,
+        processed_detail_keys,
+    ):
+        details = []
+        detail_by_url = {}
+        scanned_seed_urls = set()
+        discovered_urls = deque()
+        discovered_keys = set()
+
+        for seed_link in seed_links:
+            seed_url = clean_text(seed_link.get("href"))
+
+            if not seed_url:
+                continue
+
+            seed_key = normalize_url_for_compare(seed_url)
+
+            if seed_key in scanned_seed_urls or seed_key in processed_detail_keys:
+                continue
+
+            scanned_seed_urls.add(seed_key)
+
+            seed_detail = read_detail_page(
+                context=context,
+                url=seed_url,
+                timeout_ms=timeout_ms,
+                scan_more_from_series=True,
+            )
+
+            stored_seed = self.store_detail(
+                details=details,
+                detail_by_url=detail_by_url,
+                processed_detail_keys=processed_detail_keys,
+                detail=seed_detail,
+            )
+
+            if not stored_seed:
+                continue
+
+            series_map_links = seed_detail.more_from_series_links
+
+            for link in series_map_links:
+                if is_graphic_novel_link(link) and not follow_related_graphic_novels:
+                    continue
+
+                self.enqueue_url(
+                    queue=discovered_urls,
+                    queued_keys=discovered_keys,
+                    processed_detail_keys=processed_detail_keys,
+                    url=link.get("href"),
+                )
+
+            while discovered_urls:
+                url = discovered_urls.popleft()
+                key = normalize_url_for_compare(url)
+
+                if key in processed_detail_keys or key in detail_by_url:
+                    continue
+
+                detail = read_detail_page(
+                    context=context,
+                    url=url,
+                    timeout_ms=timeout_ms,
+                    scan_more_from_series=False,
+                    known_more_from_series_links=series_map_links,
+                )
+
+                self.store_detail(
+                    details=details,
+                    detail_by_url=detail_by_url,
+                    processed_detail_keys=processed_detail_keys,
+                    detail=detail,
+                )
+
+        return details
+
+    def store_detail(self, *, details, detail_by_url, processed_detail_keys, detail):
+        key = normalize_url_for_compare(detail.final_url)
+
+        if not key:
+            return False
+
+        if key in detail_by_url or key in processed_detail_keys:
+            return False
+
+        detail_by_url[key] = detail
+        processed_detail_keys.add(key)
+        details.append(detail)
+        return True
+
+    def enqueue_url(self, *, queue, queued_keys, processed_detail_keys, url):
+        url = clean_text(url)
+
+        if not url:
+            return
+
+        key = normalize_url_for_compare(url)
+
+        if key in queued_keys or key in processed_detail_keys:
+            return
+
+        queued_keys.add(key)
+        queue.append(url)
+
+    def write_detail_batch(self, *, details, dry_run, verbose):
         total = DcWriteResult()
 
         for detail in sort_details_for_writing(details):
@@ -120,138 +329,7 @@ class Command(BaseCommand):
             if verbose or result.skipped:
                 self.print_detail_result(detail=detail, result=result)
 
-        self.print_totals(total)
-
-    def read_details(
-        self,
-        *,
-        start_page,
-        page_count,
-        detail_url,
-        follow_related_graphic_novels,
-        headed,
-        timeout_ms,
-    ):
-        details = []
-        detail_by_url = {}
-        scanned_seed_urls = set()
-        discovered_urls = deque()
-        discovered_keys = set()
-
-        with dc_browser_context(headed=headed) as context:
-            seed_links = self.collect_seed_links(
-                context=context,
-                start_page=start_page,
-                page_count=page_count,
-                detail_url=detail_url,
-                timeout_ms=timeout_ms,
-            )
-
-            for seed_link in seed_links:
-                seed_url = clean_text(seed_link.get("href"))
-
-                if not seed_url:
-                    continue
-
-                seed_key = seed_url.casefold()
-
-                if seed_key in scanned_seed_urls:
-                    continue
-
-                scanned_seed_urls.add(seed_key)
-
-                seed_detail = read_detail_page(
-                    context=context,
-                    url=seed_url,
-                    timeout_ms=timeout_ms,
-                    scan_more_from_series=True,
-                )
-                self.store_detail(
-                    details=details,
-                    detail_by_url=detail_by_url,
-                    detail=seed_detail,
-                )
-
-                series_map_links = seed_detail.more_from_series_links
-
-                for link in series_map_links:
-                    if is_graphic_novel_link(link) and not follow_related_graphic_novels:
-                        continue
-
-                    self.enqueue_url(
-                        queue=discovered_urls,
-                        queued_keys=discovered_keys,
-                        url=link.get("href"),
-                    )
-
-                while discovered_urls:
-                    url = discovered_urls.popleft()
-                    key = url.casefold()
-
-                    if key in detail_by_url:
-                        continue
-
-                    detail = read_detail_page(
-                        context=context,
-                        url=url,
-                        timeout_ms=timeout_ms,
-                        scan_more_from_series=False,
-                        known_more_from_series_links=series_map_links,
-                    )
-                    self.store_detail(
-                        details=details,
-                        detail_by_url=detail_by_url,
-                        detail=detail,
-                    )
-
-        return details
-
-    def collect_seed_links(self, *, context, start_page, page_count, detail_url, timeout_ms):
-        if detail_url:
-            self.stdout.write("Browse skipped: direct detail URL provided")
-            return [{"label": "", "href": detail_url}]
-
-        seed_links = []
-
-        for page_number in range(start_page, start_page + page_count):
-            browse_result = read_browse_page(
-                context=context,
-                page_number=page_number,
-                timeout_ms=timeout_ms,
-            )
-
-            self.stdout.write(
-                f"Browse page {page_number}: "
-                f"{len(browse_result.detail_links)} detail URLs found "
-                f"(marker={'yes' if browse_result.browse_marker_found else 'no'})"
-            )
-
-            seed_links.extend(browse_result.detail_links)
-
-        return seed_links
-
-    def store_detail(self, *, details, detail_by_url, detail):
-        key = detail.final_url.casefold()
-
-        if key in detail_by_url:
-            return
-
-        detail_by_url[key] = detail
-        details.append(detail)
-
-    def enqueue_url(self, *, queue, queued_keys, url):
-        url = clean_text(url)
-
-        if not url:
-            return
-
-        key = url.casefold()
-
-        if key in queued_keys:
-            return
-
-        queued_keys.add(key)
-        queue.append(url)
+        return total
 
     def print_header(
         self,
@@ -280,13 +358,15 @@ class Command(BaseCommand):
 
         if detail_url:
             self.stdout.write("Browse behavior: skipped for direct detail URL")
+            self.stdout.write("Database behavior: write one direct-detail batch after reading")
         else:
             self.stdout.write("Browse behavior: collect seed URLs from Browse Comics")
+            self.stdout.write("Database behavior: write and clear each browse page batch before continuing")
 
         self.stdout.write("Series map behavior: scan More From This Series once per seed")
         self.stdout.write("Discovered detail behavior: read item details only, no carousel rescan")
-        self.stdout.write("Volume matching: use seed series map for collected issue ranges")
-        self.stdout.write("Database behavior: writes happen after browser closes")
+        self.stdout.write("Volume matching: use explicit collected issue ranges only")
+        self.stdout.write("Duplicate behavior: keep a small URL set to avoid repeat detail reads across pages")
         self.stdout.write("")
 
     def print_detail_result(self, *, detail, result):
@@ -393,6 +473,15 @@ def detail_write_priority(detail):
 
 def is_graphic_novel_link(link):
     return "/graphic-novels/" in clean_text(link.get("href"))
+
+
+def normalize_url_for_compare(value):
+    value = clean_text(value).rstrip("/")
+
+    if not value:
+        return ""
+
+    return value.casefold()
 
 
 def clean_text(value):
