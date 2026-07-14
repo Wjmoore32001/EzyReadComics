@@ -31,14 +31,16 @@ COLLECTING_START_RE = re.compile(
     re.IGNORECASE,
 )
 
+COLLECTED_RUN_TITLE_PATTERN = r"[A-Za-z0-9][A-Za-z0-9 .:'’!?&/+,\-]*?"
+
 NORMAL_RUN_TOKEN_RE = re.compile(
-    r"(?P<title>[A-Z][A-Z0-9 .:'’!?&/+,\-]+?)\s*\((?P<year>\d{4})\)"
+    rf"(?P<title>{COLLECTED_RUN_TITLE_PATTERN})\s*\((?P<year>\d{{4}})\)"
 )
 
 PRE_YEAR_ISSUE_TOKEN_RE = re.compile(
-    r"(?P<title_prefix>[A-Z][A-Z0-9 .:'’!?&/+,\-]*?)\s+"
-    r"#(?P<issue>[A-Z0-9.]+(?:\s*[-–—]\s*[A-Z0-9.]+)?)\s+"
-    r"(?P<title_suffix>[A-Z][A-Z0-9 .:'’!?&/+,\-]*?)\s*"
+    rf"(?P<title_prefix>{COLLECTED_RUN_TITLE_PATTERN})\s+"
+    r"#(?P<issue>[A-Za-z0-9.]+(?:\s*[-–—]\s*[A-Za-z0-9.]+)?)\s+"
+    rf"(?P<title_suffix>{COLLECTED_RUN_TITLE_PATTERN})\s*"
     r"\((?P<year>\d{4})\)"
 )
 
@@ -54,6 +56,7 @@ CALENDAR_COLLECTION_LINK_RE = re.compile(
 STOP_TEXT_MARKERS = (
     "DIGITAL ISSUE",
     "MORE DETAILS",
+    "EXTENDED CREDITS AND INFO",
     "EXTENDED CREDITS",
     "Rating:",
     "Format:",
@@ -235,6 +238,8 @@ def read_collection_detail_page(*, context, collection, timeout_ms):
                     const text = document.body ? document.body.innerText : "";
                     return text.includes("Collecting") ||
                            text.includes("COLLECTING") ||
+                           text.includes("Collects") ||
+                           text.includes("COLLECTS") ||
                            text.includes("ISBN") ||
                            text.length > 1000;
                 }
@@ -318,7 +323,7 @@ def extract_calendar_collections(rendered_calendar):
 def best_collection_title_candidate(title_candidates):
     cleaned_candidates = []
 
-    for title in title_candidates:
+    for title in title_candidates or []:
         title = clean_collection_title(title)
 
         if not title:
@@ -478,7 +483,7 @@ def find_description_start_index(lines):
             return last_label_index + 2
 
     for index, line in enumerate(lines):
-        if "Collecting " in line or "COLLECTING " in line:
+        if "Collecting " in line or "COLLECTING " in line or "Collects " in line or "COLLECTS " in line:
             return index
 
     return None

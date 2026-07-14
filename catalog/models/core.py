@@ -55,13 +55,13 @@ class ComicRun(ImageUrlFields):
     STATUS_UNKNOWN = "unknown"
     STATUS_UPCOMING = "upcoming"
     STATUS_ONGOING = "ongoing"
-    STATUS_ENDED = "ended"
+    STATUS_COMPLETED = "completed"
 
     STATUS_CHOICES = [
         (STATUS_UNKNOWN, "Unknown"),
         (STATUS_UPCOMING, "Upcoming"),
         (STATUS_ONGOING, "Ongoing"),
-        (STATUS_ENDED, "Ended"),
+        (STATUS_COMPLETED, "Completed"),
     ]
 
     publisher = models.ForeignKey(

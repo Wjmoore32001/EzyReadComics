@@ -37,7 +37,7 @@ DETAIL_URL_RE = re.compile(
     r")/?$",
     re.IGNORECASE,
 )
-ISSUE_NUMBER_RE = re.compile(r"#\s*(?P<number>\d+[A-Za-z]?)\s*$")
+ISSUE_NUMBER_RE = re.compile(r"#\s*(?P<number>\d+[A-Za-z]?)(?=\b|[^A-Za-z0-9])")
 COLLECTED_RANGE_RE = re.compile(
     r"#\s*(?P<start>\d+)\s*(?:-|–|—|to|through)\s*#?\s*(?P<end>\d+)",
     re.IGNORECASE,
@@ -1056,7 +1056,7 @@ def build_dc_issue_key(*, title, issue_number):
     if not title or not issue_number:
         return issue_number
 
-    base = re.sub(r"#\s*" + re.escape(issue_number) + r"\s*$", "", title, flags=re.IGNORECASE)
+    base = remove_issue_marker_from_label(label=title, issue_number=issue_number)
     base = re.sub(r"\(\d{4}\s*-?\s*\)", "", base)
     base = clean_text(base).strip(" :-")
 
@@ -1361,10 +1361,26 @@ def link_base_title(label):
     issue_number = extract_issue_number(label)
 
     if issue_number:
-        label = re.sub(r"#\s*" + re.escape(issue_number) + r"\s*$", "", label, flags=re.IGNORECASE)
+        label = remove_issue_marker_from_label(label=label, issue_number=issue_number)
 
     label = re.sub(r"\(\d{4}\s*-?\s*\)", "", label)
     return clean_text(label).strip(" :-")
+
+
+def remove_issue_marker_from_label(*, label, issue_number):
+    label = clean_item_label(label)
+    issue_number = clean_text(issue_number)
+
+    if not label or not issue_number:
+        return label
+
+    return re.sub(
+        r"#\s*" + re.escape(issue_number) + r"(?=\b|[^A-Za-z0-9])",
+        "",
+        label,
+        count=1,
+        flags=re.IGNORECASE,
+    )
 
 
 def normalize_title(value):
@@ -1420,6 +1436,9 @@ def looks_like_special_issue_label(value):
             ": ark m",
             " special ",
             " special #",
+            " director's cut",
+            " directors cut",
+            " deluxe edition",
             ": uncovered ",
             ": uncovered #",
         ]
@@ -1518,23 +1537,12 @@ def unique_list(values):
 
     for value in values:
         value = clean_text(value)
-
-        if not value:
-            continue
-
         key = value.casefold()
 
-        if key in seen:
+        if not value or key in seen:
             continue
 
         seen.add(key)
         output.append(value)
 
     return output
-
-
-def safe_wait_for_networkidle(*, page, timeout_ms):
-    try:
-        page.wait_for_load_state("networkidle", timeout=timeout_ms)
-    except Exception:
-        pass

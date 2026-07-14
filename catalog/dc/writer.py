@@ -1029,7 +1029,7 @@ def run_status_from_detail(detail):
         if has_ongoing_dash and not has_end_year:
             return ComicRun.STATUS_ONGOING
 
-        return ComicRun.STATUS_ENDED
+        return ComicRun.STATUS_COMPLETED
 
     if detail.series.is_ongoing:
         return ComicRun.STATUS_ONGOING
@@ -1044,10 +1044,10 @@ def run_status_from_detail(detail):
             return ComicRun.STATUS_ONGOING
 
         if has_end_year:
-            return ComicRun.STATUS_ENDED
+            return ComicRun.STATUS_COMPLETED
 
     if clean_text(detail.series.end_year):
-        return ComicRun.STATUS_ENDED
+        return ComicRun.STATUS_COMPLETED
 
     return ComicRun.STATUS_UNKNOWN
 

@@ -77,6 +77,7 @@ class Command(BaseCommand):
         headed = options["headed"]
         timeout_ms = options["timeout"]
         verbose = options["verbose"]
+        self.skipped_details = []
 
         if start_page < 1:
             raise CommandError("--page must be at least 1.")
@@ -117,6 +118,7 @@ class Command(BaseCommand):
                 verbose=verbose,
             )
 
+        self.print_skipped_details()
         self.print_totals(total)
 
     def sync_direct_detail_url(
@@ -345,6 +347,9 @@ class Command(BaseCommand):
             )
             add_results(total, result)
 
+            if result.skipped:
+                self.record_skipped_detail(detail=detail, result=result)
+
             if verbose or result.skipped:
                 self.print_detail_result(detail=detail, result=result)
 
@@ -455,6 +460,48 @@ class Command(BaseCommand):
                 "  Unmatched collected issues: "
                 + ", ".join(detail.collection_parse.unmatched_issue_numbers)
             )
+
+    def record_skipped_detail(self, *, detail, result):
+        identity = run_identity_from_detail(detail)
+        skip_reason = detail_skip_reason(detail) or "Write skipped this detail page."
+
+        if identity.title:
+            run_text = identity.title
+
+            if identity.start_year:
+                run_text = f"{run_text} ({identity.start_year})"
+        else:
+            run_text = "none"
+
+        self.skipped_details.append(
+            {
+                "title": detail.title or detail.final_url,
+                "type": detail.item_type or "unknown",
+                "classification": detail.classification or "unknown",
+                "reason": skip_reason,
+                "run": run_text,
+                "issue": detail.issue_key or detail.issue_number or "none",
+                "url": detail.final_url,
+            }
+        )
+
+    def print_skipped_details(self):
+        skipped_details = getattr(self, "skipped_details", [])
+
+        if not skipped_details:
+            return
+
+        self.stdout.write("")
+        self.stdout.write(self.style.WARNING("Skipped DC detail pages"))
+
+        for index, item in enumerate(skipped_details, start=1):
+            self.stdout.write(f"{index}. {item['title']}")
+            self.stdout.write(f"   Type: {item['type']}")
+            self.stdout.write(f"   Classification: {item['classification']}")
+            self.stdout.write(f"   Reason: {item['reason']}")
+            self.stdout.write(f"   Run: {item['run']}")
+            self.stdout.write(f"   Issue number: {item['issue']}")
+            self.stdout.write(f"   Source URL: {item['url']}")
 
     def print_totals(self, total):
         self.stdout.write("")
