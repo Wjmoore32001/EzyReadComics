@@ -38,7 +38,6 @@ from catalog.marvel.issues import (
     read_issue_detail_page,
 )
 from catalog.marvel.series import (
-    MarvelSeriesIssue,
     read_issue_page_series_url,
     read_series_page,
 )
@@ -179,7 +178,6 @@ class Command(BaseCommand):
             detail_timeout=detail_timeout,
         )
 
-        rendered_calendar = read_result["rendered_calendar"]
         collections = read_result["collections"]
         kept_collections = read_result["kept_collections"]
         skipped_collections = read_result["skipped_collections"]
@@ -555,7 +553,7 @@ def build_issue_detail_plans(*, records, series_lookups):
                 existing_issue = find_existing_issue(
                     run=existing_run,
                     issue_number=series_issue.issue_number,
-                    marvel_issue_id=series_issue.official_source_key,
+                    marvel_issue_id=get_object_value(series_issue, "marvel_issue_id"),
                 )
                 reason = get_issue_detail_read_reason(
                     existing_issue=existing_issue,
@@ -756,7 +754,7 @@ def resolve_or_create_issue(*, run, series_issue, detail_map, skip_details, dry_
         existing_issue = find_existing_issue(
             run=run,
             issue_number=series_issue.issue_number,
-            marvel_issue_id=series_issue.official_source_key,
+            marvel_issue_id=get_object_value(series_issue, "marvel_issue_id"),
         )
 
     detail = detail_map.get(series_issue_key(series_issue))

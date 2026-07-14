@@ -8,6 +8,7 @@ from django.utils import timezone
 from catalog.marvel.browser import (
     MARVEL_CALENDAR_TIME_ZONE,
     marvel_browser_context,
+    safe_close_page,
     safe_wait_for_networkidle,
 )
 from catalog.marvel.text import (
@@ -20,6 +21,9 @@ from catalog.marvel.urls import parse_marvel_issue_url
 
 
 MARVEL_CALENDAR_BASE_URL = "https://www.marvel.com/comics/calendar"
+
+PAGE_READ_ATTEMPTS = 3
+RETRY_SETTLE_MS = 500
 
 ISSUE_TEXT_RE = re.compile(
     r"(?P<title>[A-Z0-9][^\n\r]{1,220}?)\s*"
@@ -87,15 +91,45 @@ def read_release_calendar_with_browser(*, calendar_url, headed=False, timeout_ms
 
 
 def read_release_calendar_page(*, context, calendar_url, timeout_ms):
-    page = context.new_page()
+    calendar_url = clean_text(calendar_url)
+    last_error = ""
+
+    for attempt in range(PAGE_READ_ATTEMPTS):
+        try:
+            return read_release_calendar_page_once(
+                context=context,
+                calendar_url=calendar_url,
+                timeout_ms=timeout_ms,
+            )
+        except Exception as exc:
+            last_error = clean_text(exc)
+
+            if attempt < PAGE_READ_ATTEMPTS - 1:
+                settle_browser_context(context=context)
+
+    return {
+        "title": "",
+        "status": None,
+        "text": "",
+        "links": [],
+        "error": f"Marvel release calendar page read failed after {PAGE_READ_ATTEMPTS} attempts: {last_error}",
+    }
+
+
+def read_release_calendar_page_once(*, context, calendar_url, timeout_ms):
+    page = None
 
     try:
+        page = context.new_page()
         response = page.goto(
             calendar_url,
             wait_until="domcontentloaded",
             timeout=timeout_ms,
         )
         status = response.status if response else None
+
+        if status and status >= 400:
+            raise RuntimeError(f"HTTP {status}")
 
         safe_wait_for_networkidle(page=page, timeout_ms=timeout_ms)
 
@@ -119,24 +153,28 @@ def read_release_calendar_page(*, context, calendar_url, timeout_ms):
             "status": status,
             "text": page.locator("body").inner_text(timeout=timeout_ms),
             "links": extract_calendar_issue_links(page),
+            "error": "",
         }
 
     finally:
-        page.close()
+        safe_close_page(page)
 
 
 def extract_calendar_issue_links(page):
-    return page.eval_on_selector_all(
-        "a",
-        """
-        elements => elements
-            .map((element) => ({
-                text: (element.innerText || "").trim(),
-                href: element.href || ""
-            }))
-            .filter((item) => item.text && /\\(\\d{4}\\)\\s*#/.test(item.text))
-        """,
-    )
+    try:
+        return page.eval_on_selector_all(
+            "a",
+            """
+            elements => elements
+                .map((element) => ({
+                    text: (element.innerText || "").trim(),
+                    href: element.href || ""
+                }))
+                .filter((item) => item.text && /\\(\\d{4}\\)\\s*#/.test(item.text))
+            """,
+        )
+    except Exception:
+        return []
 
 
 def extract_release_calendar_issues(*, rendered_calendar):
@@ -341,3 +379,15 @@ def clean_calendar_title(value):
     value = re.sub(r"\s+", " ", value)
     value = value.strip(" -–—")
     return value
+
+
+def settle_browser_context(*, context):
+    page = None
+
+    try:
+        page = context.new_page()
+        page.wait_for_timeout(RETRY_SETTLE_MS)
+    except Exception:
+        pass
+    finally:
+        safe_close_page(page)

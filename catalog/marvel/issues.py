@@ -1,7 +1,7 @@
 import re
 from dataclasses import dataclass, field
 
-from catalog.marvel.browser import PlaywrightTimeoutError, safe_wait_for_networkidle
+from catalog.marvel.browser import safe_close_page, safe_wait_for_networkidle
 from catalog.marvel.credits import (
     DETAIL_CREDIT_LABELS,
     extract_detail_credits_from_page,
@@ -16,6 +16,9 @@ from catalog.marvel.text import (
 )
 from catalog.marvel.urls import parse_marvel_issue_url
 
+
+PAGE_READ_ATTEMPTS = 3
+RETRY_SETTLE_MS = 500
 
 ISSUE_TEXT_RE = re.compile(
     r"(?P<title>[A-Z0-9][^\n\r]{1,220}?)\s*"
@@ -74,18 +77,41 @@ def empty_issue_detail():
 
 
 def read_issue_detail_page(*, context, issue, timeout_ms):
-    detail_url = get_issue_value(issue, "detail_url")
+    detail_url = clean_text(get_issue_value(issue, "detail_url"))
 
     if not detail_url:
-        detail = empty_issue_detail()
-        detail.checked = True
-        detail.read_attempted = False
-        detail.error = "missing detail URL"
-        return detail
+        return failed_issue_detail(
+            error="missing detail URL",
+            read_attempted=False,
+        )
 
-    page = context.new_page()
+    last_error = ""
+
+    for attempt in range(PAGE_READ_ATTEMPTS):
+        try:
+            return read_issue_detail_page_once(
+                context=context,
+                issue=issue,
+                detail_url=detail_url,
+                timeout_ms=timeout_ms,
+            )
+        except Exception as exc:
+            last_error = clean_text(exc)
+
+            if attempt < PAGE_READ_ATTEMPTS - 1:
+                settle_browser_context(context=context)
+
+    return failed_issue_detail(
+        error=f"Marvel issue detail read failed after {PAGE_READ_ATTEMPTS} attempts: {last_error}",
+        read_attempted=True,
+    )
+
+
+def read_issue_detail_page_once(*, context, issue, detail_url, timeout_ms):
+    page = None
 
     try:
+        page = context.new_page()
         response = page.goto(
             detail_url,
             wait_until="domcontentloaded",
@@ -94,11 +120,7 @@ def read_issue_detail_page(*, context, issue, timeout_ms):
         status = response.status if response else None
 
         if status and status >= 400:
-            detail = empty_issue_detail()
-            detail.checked = True
-            detail.read_attempted = True
-            detail.error = f"HTTP {status}"
-            return detail
+            raise RuntimeError(f"HTTP {status}")
 
         safe_wait_for_networkidle(page=page, timeout_ms=timeout_ms)
 
@@ -133,15 +155,16 @@ def read_issue_detail_page(*, context, issue, timeout_ms):
         detail.text_preview = text[:2000]
         return detail
 
-    except Exception as exc:
-        detail = empty_issue_detail()
-        detail.checked = True
-        detail.read_attempted = True
-        detail.error = str(exc)
-        return detail
-
     finally:
-        page.close()
+        safe_close_page(page)
+
+
+def failed_issue_detail(*, error, read_attempted):
+    detail = empty_issue_detail()
+    detail.checked = False
+    detail.read_attempted = read_attempted
+    detail.error = clean_text(error)
+    return detail
 
 
 def extract_issue_links_from_page(page):
@@ -523,3 +546,15 @@ def issue_from_detail_url(detail_url):
         "marvel_issue_id": parsed_url.marvel_id,
         "issue_slug": parsed_url.slug,
     }
+
+
+def settle_browser_context(*, context):
+    page = None
+
+    try:
+        page = context.new_page()
+        page.wait_for_timeout(RETRY_SETTLE_MS)
+    except Exception:
+        pass
+    finally:
+        safe_close_page(page)
