@@ -213,6 +213,8 @@ class Command(BaseCommand):
         calendar_issues = read_result["calendar_issues"]
         kept_calendar_issues = read_result["kept_calendar_issues"]
         keyword_skipped_issues = read_result["keyword_skipped_issues"]
+        limit_skipped_issues = read_result["limit_skipped_issues"]
+        duplicate_series_seed_issues = read_result["duplicate_series_seed_issues"]
         series_records = read_result["series_records"]
 
         totals["calendar_browser_reads"] = 1
@@ -252,6 +254,53 @@ class Command(BaseCommand):
             for record in series_records
             if record.series is not None
         )
+
+        for issue in keyword_skipped_issues:
+            totals["skipped_reports"].append(
+                build_skip_report(
+                    item=format_calendar_issue(issue),
+                    reason="skipped by keyword",
+                    url=get_object_value(issue, "detail_url"),
+                )
+            )
+
+        for issue in limit_skipped_issues:
+            totals["skipped_reports"].append(
+                build_skip_report(
+                    item=format_calendar_issue(issue),
+                    reason="skipped by calendar seed limit",
+                    url=get_object_value(issue, "detail_url"),
+                )
+            )
+
+        for issue in duplicate_series_seed_issues:
+            totals["skipped_reports"].append(
+                build_skip_report(
+                    item=format_calendar_issue(issue),
+                    reason="duplicate series seed already processed in this run",
+                    url=get_object_value(issue, "detail_url"),
+                )
+            )
+
+        for record in series_records:
+            if record.error:
+                totals["skipped_reports"].append(
+                    build_skip_report(
+                        item=format_calendar_issue(record.seed_issue),
+                        reason=record.error,
+                        url=get_object_value(record.seed_issue, "detail_url"),
+                        series_url=record.series_url,
+                    )
+                )
+            elif record.series is not None and record.series.errors:
+                totals["skipped_reports"].append(
+                    build_skip_report(
+                        item=format_calendar_issue(record.seed_issue),
+                        reason="; ".join(record.series.errors),
+                        url=get_object_value(record.seed_issue, "detail_url"),
+                        series_url=record.series_url,
+                    )
+                )
 
         if raw:
             self.print_raw_calendar(rendered_calendar)
@@ -311,8 +360,18 @@ class Command(BaseCommand):
         totals["planned_issue_detail_reads"] = len(detail_targets)
 
         if detail_limit is not None and len(detail_targets) > detail_limit:
-            totals["detail_limit_skipped"] = len(detail_targets) - detail_limit
+            skipped_detail_targets = detail_targets[detail_limit:]
+            totals["detail_limit_skipped"] = len(skipped_detail_targets)
             detail_targets = detail_targets[:detail_limit]
+
+            for issue_plan in skipped_detail_targets:
+                totals["skipped_reports"].append(
+                    build_skip_report(
+                        item=format_series_issue(issue_plan.series_issue),
+                        reason="skipped by detail limit",
+                        url=get_object_value(issue_plan.series_issue, "detail_url"),
+                    )
+                )
 
         detail_map = {}
 
@@ -374,6 +433,15 @@ class Command(BaseCommand):
                     detail=detail,
                 ):
                     totals["issue_writes_skipped_no_detail"] += 1
+                    totals["skipped_reports"].append(
+                        build_skip_report(
+                            item=format_series_issue(issue_plan.series_issue),
+                            reason="issue write skipped because detail failed or was missing required published date",
+                            url=get_object_value(issue_plan.series_issue, "detail_url"),
+                            detail_error=get_detail_value(detail, "error"),
+                            missing_fields=", ".join(get_detail_missing_fields(detail)),
+                        )
+                    )
 
                     if verbose:
                         self.print_issue_skipped(
@@ -575,8 +643,37 @@ class Command(BaseCommand):
         self.stdout.write(f"{updated_label} issues: {totals['issues_updated']}")
         self.stdout.write(f"Credits added: {totals['credits_added']}")
 
+        self.print_final_skipped_reports(totals)
+
         if dry_run:
             self.stdout.write("Dry run only. No catalog data was created or updated.")
+
+    def print_final_skipped_reports(self, totals):
+        reports = totals.get("skipped_reports") or []
+
+        if not reports:
+            return
+
+        self.stdout.write("")
+        self.stdout.write(self.style.WARNING("Skipped / incomplete release details:"))
+
+        for report in reports:
+            self.stdout.write(f"- {report['item']}")
+
+            if report.get("reason"):
+                self.stdout.write(f"  Reason: {report['reason']}")
+
+            if report.get("url"):
+                self.stdout.write(f"  URL: {report['url']}")
+
+            if report.get("series_url"):
+                self.stdout.write(f"  Series URL: {report['series_url']}")
+
+            if report.get("detail_error"):
+                self.stdout.write(f"  Detail error: {report['detail_error']}")
+
+            if report.get("missing_fields"):
+                self.stdout.write(f"  Missing fields: {report['missing_fields']}")
 
 
 def read_calendar_and_series_pages(
@@ -603,15 +700,16 @@ def read_calendar_and_series_pages(
             calendar_issues
         )
 
-        limit_skipped = 0
+        limit_skipped_issues = []
 
         if limit is not None and len(kept_calendar_issues) > limit:
-            limit_skipped = len(kept_calendar_issues) - limit
+            limit_skipped_issues = kept_calendar_issues[limit:]
             kept_calendar_issues = kept_calendar_issues[:limit]
 
         series_records = []
         seen_series_keys = set()
         duplicate_series_seeds = 0
+        duplicate_series_seed_issues = []
         series_page_reads = 0
 
         for calendar_issue in kept_calendar_issues:
@@ -645,6 +743,7 @@ def read_calendar_and_series_pages(
 
             if series_key in seen_series_keys:
                 duplicate_series_seeds += 1
+                duplicate_series_seed_issues.append(calendar_issue)
                 continue
 
             seen_series_keys.add(series_key)
@@ -671,9 +770,11 @@ def read_calendar_and_series_pages(
             "kept_calendar_issues": kept_calendar_issues,
             "keyword_skipped_issues": keyword_skipped_issues,
             "incomplete_count": incomplete_count,
-            "limit_skipped": limit_skipped,
+            "limit_skipped": len(limit_skipped_issues),
+            "limit_skipped_issues": limit_skipped_issues,
             "series_records": series_records,
             "duplicate_series_seeds": duplicate_series_seeds,
+            "duplicate_series_seed_issues": duplicate_series_seed_issues,
             "series_page_reads": series_page_reads,
         }
 
@@ -704,6 +805,25 @@ def should_skip_issue_write_for_failed_missing_detail(*, issue_plan, detail):
         return True
 
     return False
+
+
+def build_skip_report(
+    *,
+    item,
+    reason,
+    url="",
+    series_url="",
+    detail_error="",
+    missing_fields="",
+):
+    return {
+        "item": clean_text(item),
+        "reason": clean_text(reason),
+        "url": clean_text(url),
+        "series_url": clean_text(series_url),
+        "detail_error": clean_text(detail_error),
+        "missing_fields": clean_text(missing_fields),
+    }
 
 
 def merge_write_result(totals, result):
@@ -746,6 +866,7 @@ def new_totals():
         "issues_created": 0,
         "issues_updated": 0,
         "credits_added": 0,
+        "skipped_reports": [],
     }
 
 

@@ -1,9 +1,11 @@
 import re
 from datetime import timedelta
 
-from django.core.management.base import CommandError
-
-from catalog.marvel.browser import marvel_browser_context, safe_wait_for_networkidle
+from catalog.marvel.browser import (
+    marvel_browser_context,
+    safe_close_page,
+    safe_wait_for_networkidle,
+)
 from catalog.marvel.calendar import current_marvel_date
 from catalog.marvel.text import (
     canonical_issue_number,
@@ -15,6 +17,9 @@ from catalog.marvel.urls import parse_marvel_collection_url, parse_marvel_issue_
 
 
 MARVEL_CALENDAR_BASE_URL = "https://www.marvel.com/comics/calendar"
+
+PAGE_READ_ATTEMPTS = 3
+RETRY_SETTLE_MS = 500
 
 ON_SALE_NUMERIC_DATE_RE = re.compile(
     r"ON\s+SALE:?\s*(?P<date>\d{1,2}/\d{1,2}/\d{4})",
@@ -135,9 +140,36 @@ def read_collection_details_with_browser(*, collections, headed=False, timeout_m
 
 
 def read_collection_calendar_page(*, context, calendar_url, timeout_ms):
-    page = context.new_page()
+    calendar_url = clean_text(calendar_url)
+    last_error = ""
+
+    for attempt in range(PAGE_READ_ATTEMPTS):
+        try:
+            return read_collection_calendar_page_once(
+                context=context,
+                calendar_url=calendar_url,
+                timeout_ms=timeout_ms,
+            )
+        except Exception as exc:
+            last_error = clean_text(exc)
+
+            if attempt < PAGE_READ_ATTEMPTS - 1:
+                settle_browser_context(context=context)
+
+    return {
+        "title": "",
+        "status": None,
+        "text": "",
+        "links": [],
+        "error": f"Marvel collection calendar page read failed after {PAGE_READ_ATTEMPTS} attempts: {last_error}",
+    }
+
+
+def read_collection_calendar_page_once(*, context, calendar_url, timeout_ms):
+    page = None
 
     try:
+        page = context.new_page()
         response = page.goto(
             calendar_url,
             wait_until="domcontentloaded",
@@ -146,10 +178,16 @@ def read_collection_calendar_page(*, context, calendar_url, timeout_ms):
         status = response.status if response else None
 
         if status and status >= 400:
-            text = page.locator("body").inner_text(timeout=5000)
-            raise CommandError(
+            text = ""
+
+            try:
+                text = page.locator("body").inner_text(timeout=5000)
+            except Exception:
+                text = ""
+
+            raise RuntimeError(
                 f"Marvel collection calendar page returned HTTP {status}. "
-                f"Try again with --headed. Page text: {text[:500]}"
+                f"Page text: {text[:500]}"
             )
 
         safe_wait_for_networkidle(page=page, timeout_ms=timeout_ms)
@@ -174,34 +212,38 @@ def read_collection_calendar_page(*, context, calendar_url, timeout_ms):
             "status": status,
             "text": page.locator("body").inner_text(timeout=timeout_ms),
             "links": extract_collection_links_from_page(page),
+            "error": "",
         }
     finally:
-        page.close()
+        safe_close_page(page)
 
 
 def extract_collection_links_from_page(page):
-    return page.eval_on_selector_all(
-        "a",
-        """
-        elements => {
-            function normalizeText(value) {
-                return String(value || "")
-                    .replace(/\\u00a0/g, " ")
-                    .replace(/[ \\t]+/g, " ")
-                    .replace(/\\n[ \\t]+/g, "\\n")
-                    .replace(/[ \\t]+\\n/g, "\\n")
-                    .trim();
-            }
+    try:
+        return page.eval_on_selector_all(
+            "a",
+            """
+            elements => {
+                function normalizeText(value) {
+                    return String(value || "")
+                        .replace(/\\u00a0/g, " ")
+                        .replace(/[ \\t]+/g, " ")
+                        .replace(/\\n[ \\t]+/g, "\\n")
+                        .replace(/[ \\t]+\\n/g, "\\n")
+                        .trim();
+                }
 
-            return elements
-                .map((element) => ({
-                    text: normalizeText(element.innerText || element.textContent || ""),
-                    href: element.href || ""
-                }))
-                .filter((item) => item.href && item.href.includes("/comics/collection/"));
-        }
-        """,
-    )
+                return elements
+                    .map((element) => ({
+                        text: normalizeText(element.innerText || element.textContent || ""),
+                        href: element.href || ""
+                    }))
+                    .filter((item) => item.href && item.href.includes("/comics/collection/"));
+            }
+            """,
+        )
+    except Exception:
+        return []
 
 
 def read_collection_detail_page(*, context, collection, timeout_ms):
@@ -213,9 +255,32 @@ def read_collection_detail_page(*, context, collection, timeout_ms):
         detail["error"] = "missing detail URL"
         return detail
 
-    page = context.new_page()
+    last_error = ""
+
+    for attempt in range(PAGE_READ_ATTEMPTS):
+        try:
+            return read_collection_detail_page_once(
+                context=context,
+                detail_url=detail_url,
+                timeout_ms=timeout_ms,
+            )
+        except Exception as exc:
+            last_error = clean_text(exc)
+
+            if attempt < PAGE_READ_ATTEMPTS - 1:
+                settle_browser_context(context=context)
+
+    detail = empty_collection_detail()
+    detail["read_attempted"] = True
+    detail["error"] = f"Marvel collection detail read failed after {PAGE_READ_ATTEMPTS} attempts: {last_error}"
+    return detail
+
+
+def read_collection_detail_page_once(*, context, detail_url, timeout_ms):
+    page = None
 
     try:
+        page = context.new_page()
         response = page.goto(
             detail_url,
             wait_until="domcontentloaded",
@@ -224,10 +289,7 @@ def read_collection_detail_page(*, context, collection, timeout_ms):
         status = response.status if response else None
 
         if status and status >= 400:
-            detail = empty_collection_detail()
-            detail["read_attempted"] = True
-            detail["error"] = f"HTTP {status}"
-            return detail
+            raise RuntimeError(f"HTTP {status}")
 
         safe_wait_for_networkidle(page=page, timeout_ms=timeout_ms)
 
@@ -258,14 +320,8 @@ def read_collection_detail_page(*, context, collection, timeout_ms):
         detail["issue_links"] = extract_issue_links_from_collection_page(page)
         detail["text_preview"] = text[:2500]
         return detail
-
-    except Exception as exc:
-        detail = empty_collection_detail()
-        detail["read_attempted"] = True
-        detail["error"] = str(exc)
-        return detail
     finally:
-        page.close()
+        safe_close_page(page)
 
 
 def extract_issue_links_from_collection_page(page):
@@ -1128,3 +1184,15 @@ def parsed_collection_issue_links(detail):
         )
 
     return parsed_links
+
+
+def settle_browser_context(*, context):
+    page = None
+
+    try:
+        page = context.new_page()
+        page.wait_for_timeout(RETRY_SETTLE_MS)
+    except Exception:
+        pass
+    finally:
+        safe_close_page(page)

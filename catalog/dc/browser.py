@@ -16,6 +16,9 @@ DC_BROWSE_BASE_URL = "https://www.dc.com/comics"
 DC_TIME_ZONE = "America/New_York"
 DEFAULT_TIMEOUT_MS = 45000
 
+PAGE_READ_ATTEMPTS = 3
+RETRY_SETTLE_MS = 250
+
 DETAIL_SETTLE_MS = 250
 BROWSE_SETTLE_MS = 250
 BROWSE_LINK_STABLE_TIMEOUT_MS = 2500
@@ -55,6 +58,7 @@ class DcBrowseResult:
     final_url: str
     detail_links: list[dict] = field(default_factory=list)
     browse_marker_found: bool = False
+    error: str = ""
 
 
 @dataclass
@@ -92,6 +96,7 @@ class DcDetail:
     collection_parse: DcCollectionParse = field(default_factory=DcCollectionParse)
     series_scroll_clicks: int = 0
     scanned_more_from_series: bool = False
+    read_error: str = ""
 
 
 def ensure_playwright():
@@ -143,8 +148,8 @@ def dc_browser_context(*, headed=False):
         try:
             yield context
         finally:
-            context.close()
-            browser.close()
+            safe_close_context(context)
+            safe_close_browser(browser)
 
 
 def build_browse_url(page_number):
@@ -155,10 +160,38 @@ def build_browse_url(page_number):
 
 
 def read_browse_page(*, context, page_number, timeout_ms=DEFAULT_TIMEOUT_MS):
-    page = context.new_page()
+    requested_url = build_browse_url(page_number)
+    last_error = ""
+
+    for attempt in range(PAGE_READ_ATTEMPTS):
+        try:
+            return read_browse_page_once(
+                context=context,
+                page_number=page_number,
+                requested_url=requested_url,
+                timeout_ms=timeout_ms,
+            )
+        except Exception as exc:
+            last_error = clean_text(exc)
+
+            if attempt < PAGE_READ_ATTEMPTS - 1:
+                settle_browser_context(context=context)
+
+    return DcBrowseResult(
+        page_number=page_number,
+        requested_url=requested_url,
+        final_url="",
+        detail_links=[],
+        browse_marker_found=False,
+        error=f"DC browse page read failed after {PAGE_READ_ATTEMPTS} attempts: {last_error}",
+    )
+
+
+def read_browse_page_once(*, context, page_number, requested_url, timeout_ms):
+    page = None
 
     try:
-        requested_url = build_browse_url(page_number)
+        page = context.new_page()
         page.goto(requested_url, wait_until="domcontentloaded", timeout=timeout_ms)
 
         try:
@@ -184,9 +217,10 @@ def read_browse_page(*, context, page_number, timeout_ms=DEFAULT_TIMEOUT_MS):
             final_url=page.url,
             detail_links=browse_data["links"],
             browse_marker_found=browse_data["marker_found"],
+            error="",
         )
     finally:
-        page.close()
+        safe_close_page(page)
 
 
 def wait_for_browse_link_count_stable(page):
@@ -217,9 +251,43 @@ def read_detail_page(
     scan_more_from_series=True,
     known_more_from_series_links=None,
 ):
-    page = context.new_page()
+    url = clean_text(url)
+    last_error = ""
+
+    for attempt in range(PAGE_READ_ATTEMPTS):
+        try:
+            return read_detail_page_once(
+                context=context,
+                url=url,
+                timeout_ms=timeout_ms,
+                scan_more_from_series=scan_more_from_series,
+                known_more_from_series_links=known_more_from_series_links,
+            )
+        except Exception as exc:
+            last_error = clean_text(exc)
+
+            if attempt < PAGE_READ_ATTEMPTS - 1:
+                settle_browser_context(context=context)
+
+    return failed_dc_detail(
+        url=url,
+        error=f"DC detail page read failed after {PAGE_READ_ATTEMPTS} attempts: {last_error}",
+        scan_more_from_series=scan_more_from_series,
+    )
+
+
+def read_detail_page_once(
+    *,
+    context,
+    url,
+    timeout_ms,
+    scan_more_from_series,
+    known_more_from_series_links,
+):
+    page = None
 
     try:
+        page = context.new_page()
         page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
 
         try:
@@ -311,9 +379,24 @@ def read_detail_page(
             collection_parse=collection_parse,
             series_scroll_clicks=scroll_clicks,
             scanned_more_from_series=scan_more_from_series,
+            read_error="",
         )
     finally:
-        page.close()
+        safe_close_page(page)
+
+
+def failed_dc_detail(*, url, error, scan_more_from_series):
+    url = clean_text(url)
+
+    return DcDetail(
+        url=url,
+        final_url=url,
+        item_type="",
+        classification="unknown",
+        title=title_from_url(url) or url,
+        scanned_more_from_series=scan_more_from_series,
+        read_error=clean_text(error),
+    )
 
 
 def extract_browse_detail_links(page):
@@ -979,6 +1062,8 @@ def classify_detail(*, item_type, issue_number, series):
 
 
 def detail_skip_reason(detail):
+    if clean_text(getattr(detail, "read_error", "")):
+        return clean_text(detail.read_error)
     if detail.classification == "graphic_novel_needs_review":
         return "Graphic novel could not be safely classified as volume or standalone."
     if detail.classification == "graphic_novel_series_item_needs_review":
@@ -1546,3 +1631,45 @@ def unique_list(values):
         output.append(value)
 
     return output
+
+
+def settle_browser_context(*, context):
+    page = None
+
+    try:
+        page = context.new_page()
+        page.wait_for_timeout(RETRY_SETTLE_MS)
+    except Exception:
+        pass
+    finally:
+        safe_close_page(page)
+
+
+def safe_close_page(page):
+    if page is None:
+        return
+
+    try:
+        page.close()
+    except Exception:
+        pass
+
+
+def safe_close_context(context):
+    if context is None:
+        return
+
+    try:
+        context.close()
+    except Exception:
+        pass
+
+
+def safe_close_browser(browser):
+    if browser is None:
+        return
+
+    try:
+        browser.close()
+    except Exception:
+        pass
