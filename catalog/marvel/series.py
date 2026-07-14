@@ -121,7 +121,6 @@ def read_issue_page_series_url(*, context, issue_url, timeout_ms):
         page.wait_for_timeout(500)
 
         return extract_back_to_series_url(page)
-
     finally:
         page.close()
 
@@ -146,7 +145,6 @@ def extract_back_to_series_url(page):
 
         if "back to series" in text.casefold() or "back to series" in aria.casefold():
             return clean_text(link.get("href"))
-
     if links:
         return clean_text(links[0].get("href"))
 
@@ -436,6 +434,6 @@ def derive_status_from_series_end_value(end_value):
         return "ongoing"
 
     if clean_text(end_value):
-        return "ended"
+        return "completed"
 
     return "unknown"
