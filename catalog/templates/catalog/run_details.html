@@ -1,9 +1,11 @@
 {% extends "base.html" %}
 {% load static %}
+{% load reading_tracking %}
 
 {% block title %}{{ run }} - EzyReadComics{% endblock %}
 
 {% block content %}
+{% volume_status_choices as volume_status_choices %}
 <div class="erc-page-shell" data-collapsible-lists-page>
     <section class="erc-hero p-4 p-lg-5">
         <div class="erc-hero-content">
@@ -177,7 +179,8 @@
                                         action="{% url 'reading:set_issue_status' issue.id %}"
                                         method="post"
                                         class="erc-track-form"
-                                        data-issue-status-form
+                                        data-simple-status-form
+                                        data-item-type="issue"
                                         data-current-status="{{ issue.user_tracking.status }}"
                                     >
                                         {% csrf_token %}
@@ -196,7 +199,8 @@
                                         action="{% url 'reading:set_issue_status' issue.id %}"
                                         method="post"
                                         class="erc-track-form"
-                                        data-issue-follow-form
+                                        data-simple-follow-form
+                                        data-item-type="issue"
                                     >
                                         {% csrf_token %}
                                         <input type="hidden" name="next" value="{{ request.get_full_path }}">
@@ -239,10 +243,12 @@
                         <th scope="col">Issue Range</th>
                         <th scope="col">Issue Count</th>
                         <th scope="col">Release Date</th>
+                        <th scope="col" class="text-end">My Comics</th>
                     </tr>
                     </thead>
                     <tbody>
                     {% for volume in volumes %}
+                        {% volume_progress_for volume request.user as row_volume_progress %}
                         <tr
                             class="clickable-row"
                             data-row-url="{% url 'catalog:volume_details' volume.id %}"
@@ -275,10 +281,48 @@
                                     <span class="erc-muted">Unknown</span>
                                 {% endif %}
                             </td>
+                            <td class="text-end erc-track-cell">
+                                {% if row_volume_progress %}
+                                    <form
+                                        action="{% url 'reading:set_volume_status' volume.id %}"
+                                        method="post"
+                                        class="erc-track-form"
+                                        data-simple-status-form
+                                        data-item-type="volume"
+                                        data-current-status="{{ row_volume_progress.status }}"
+                                    >
+                                        {% csrf_token %}
+                                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                        <select name="status" class="form-select form-select-sm" data-auto-submit>
+                                            {% for value, label in volume_status_choices %}
+                                                <option value="{{ value }}" {% if row_volume_progress.status == value %}selected{% endif %}>
+                                                    {{ label }}
+                                                </option>
+                                            {% endfor %}
+                                            <option value="__unfollow__">Unfollow</option>
+                                        </select>
+                                    </form>
+                                {% else %}
+                                    <form
+                                        action="{% url 'reading:set_volume_status' volume.id %}"
+                                        method="post"
+                                        class="erc-track-form"
+                                        data-simple-follow-form
+                                        data-item-type="volume"
+                                    >
+                                        {% csrf_token %}
+                                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                        <input type="hidden" name="status" value="">
+                                        <button type="submit" class="btn btn-outline-light btn-sm erc-track-button">
+                                            Follow
+                                        </button>
+                                    </form>
+                                {% endif %}
+                            </td>
                         </tr>
                     {% empty %}
                         <tr>
-                            <td colspan="4" class="text-center erc-muted py-4">
+                            <td colspan="5" class="text-center erc-muted py-4">
                                 No collected volumes have been added for this run.
                             </td>
                         </tr>
@@ -364,5 +408,5 @@
 {% endblock %}
 
 {% block extra_scripts %}
-<script src="{% static 'js/catalog/run-details.js' %}"></script>
+<script src="{% static 'js/catalog/run-details.js' %}?v=volume-one-shot-tracking-20260715"></script>
 {% endblock %}
