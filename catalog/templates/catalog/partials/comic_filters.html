@@ -1,0 +1,441 @@
+<section class="card erc-panel">
+    <div class="card-body p-4">
+        <div class="erc-section-header">
+            <h2 class="h3 fw-bold mb-0 erc-section-title">Filters</h2>
+
+            {% if filters_active %}
+                <a href="{{ filter_base_url }}" class="btn btn-outline-secondary">
+                    Clear filters
+                </a>
+            {% endif %}
+        </div>
+
+        <div class="row g-3 align-items-end">
+            <div class="col-12 col-lg-6 col-xxl">
+                <label class="form-label erc-muted" for="{{ filter_id_prefix }}-publisher-search">
+                    Publisher
+                </label>
+
+                <div
+                    class="dropdown searchable-dropdown"
+                    data-options-kind="publisher"
+                    data-options-url="{{ filter_options_url }}"
+                    data-selected-id="{{ selected_publisher_id|default_if_none:'' }}"
+                >
+                    <button
+                        class="btn erc-filter-button dropdown-toggle text-start w-100"
+                        type="button"
+                        id="{{ filter_id_prefix }}-publisher-dropdown"
+                        data-bs-toggle="dropdown"
+                        data-bs-auto-close="outside"
+                        aria-expanded="false"
+                    >
+                        {% if selected_publisher %}
+                            {{ selected_publisher.name }}
+                        {% else %}
+                            All publishers
+                        {% endif %}
+                    </button>
+
+                    <div
+                        class="dropdown-menu p-2"
+                        aria-labelledby="{{ filter_id_prefix }}-publisher-dropdown"
+                    >
+                        <input
+                            type="search"
+                            id="{{ filter_id_prefix }}-publisher-search"
+                            class="form-control mb-2"
+                            placeholder="Search publishers..."
+                            autocomplete="off"
+                            data-dropdown-search
+                        >
+
+                        <a
+                            href="{{ all_publishers_url }}"
+                            class="dropdown-item rounded {% if not selected_publisher_id %}active{% endif %}"
+                            data-search-label="All publishers"
+                        >
+                            All publishers
+                        </a>
+
+                        <div class="dropdown-divider"></div>
+                        <div data-dropdown-options style="max-height: 18rem; overflow-y: auto;"></div>
+
+                        <p class="dropdown-item-text erc-muted mb-0 d-none" data-no-results>
+                            No matching publishers.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-12 col-lg-6 col-xxl">
+                <div class="form-check form-switch mb-2">
+                    <input
+                        class="form-check-input"
+                        type="checkbox"
+                        id="{{ filter_id_prefix }}-toggle-runs"
+                        data-comic-section-toggle
+                        data-target-section="runs"
+                        checked
+                    >
+                    <label
+                        class="form-check-label erc-muted"
+                        for="{{ filter_id_prefix }}-toggle-runs"
+                    >
+                        Show runs
+                    </label>
+                </div>
+
+                <label class="form-label erc-muted" for="{{ filter_id_prefix }}-run-search">
+                    Run
+                </label>
+
+                <div
+                    class="dropdown searchable-dropdown"
+                    data-options-kind="run"
+                    data-options-url="{{ filter_options_url }}"
+                    data-selected-id="{{ selected_run_id|default_if_none:'' }}"
+                    data-filter-publisher-id="{{ selected_publisher_id|default_if_none:'' }}"
+                >
+                    <button
+                        class="btn erc-filter-button dropdown-toggle text-start w-100"
+                        type="button"
+                        id="{{ filter_id_prefix }}-run-dropdown"
+                        data-bs-toggle="dropdown"
+                        data-bs-auto-close="outside"
+                        aria-expanded="false"
+                    >
+                        {% if selected_run %}
+                            {{ selected_run }}
+                        {% elif selected_publisher %}
+                            All {{ selected_publisher.name }} runs
+                        {% else %}
+                            All runs
+                        {% endif %}
+                    </button>
+
+                    <div
+                        class="dropdown-menu p-2"
+                        aria-labelledby="{{ filter_id_prefix }}-run-dropdown"
+                    >
+                        <input
+                            type="search"
+                            id="{{ filter_id_prefix }}-run-search"
+                            class="form-control mb-2"
+                            placeholder="Search runs..."
+                            autocomplete="off"
+                            data-dropdown-search
+                        >
+
+                        <a
+                            href="{{ all_runs_url }}"
+                            class="dropdown-item rounded {% if not selected_run_id %}active{% endif %}"
+                            data-search-label="All runs"
+                        >
+                            {% if selected_publisher %}
+                                All {{ selected_publisher.name }} runs
+                            {% else %}
+                                All runs
+                            {% endif %}
+                        </a>
+
+                        <div class="dropdown-divider"></div>
+                        <div data-dropdown-options style="max-height: 22rem; overflow-y: auto;"></div>
+
+                        <p class="dropdown-item-text erc-muted mb-0 d-none" data-no-results>
+                            No matching runs.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-12 col-lg-6 col-xxl">
+                <div class="form-check form-switch mb-2">
+                    <input
+                        class="form-check-input"
+                        type="checkbox"
+                        id="{{ filter_id_prefix }}-toggle-issues"
+                        data-comic-section-toggle
+                        data-target-section="issues"
+                        {% if selected_issue_id %}checked{% endif %}
+                    >
+                    <label
+                        class="form-check-label erc-muted"
+                        for="{{ filter_id_prefix }}-toggle-issues"
+                    >
+                        Show issues
+                    </label>
+                </div>
+
+                <label class="form-label erc-muted" for="{{ filter_id_prefix }}-issue-search">
+                    Issue
+                </label>
+
+                <div
+                    class="dropdown searchable-dropdown"
+                    data-options-kind="issue"
+                    data-options-url="{{ filter_options_url }}"
+                    data-selected-id="{{ selected_issue_id|default_if_none:'' }}"
+                    data-filter-publisher-id="{{ selected_publisher_id|default_if_none:'' }}"
+                    data-filter-run-id="{{ selected_run_id|default_if_none:'' }}"
+                >
+                    <button
+                        class="btn erc-filter-button dropdown-toggle text-start w-100"
+                        type="button"
+                        id="{{ filter_id_prefix }}-issue-dropdown"
+                        data-bs-toggle="dropdown"
+                        data-bs-auto-close="outside"
+                        aria-expanded="false"
+                    >
+                        {% if selected_issue %}
+                            {{ selected_issue.run.title }} #{{ selected_issue.issue_number }}
+                        {% elif selected_run %}
+                            All issues in this run
+                        {% elif selected_publisher %}
+                            All {{ selected_publisher.name }} issues
+                        {% else %}
+                            All issues
+                        {% endif %}
+                    </button>
+
+                    <div
+                        class="dropdown-menu p-2"
+                        aria-labelledby="{{ filter_id_prefix }}-issue-dropdown"
+                    >
+                        <input
+                            type="search"
+                            id="{{ filter_id_prefix }}-issue-search"
+                            class="form-control mb-2"
+                            placeholder="Search issues..."
+                            autocomplete="off"
+                            data-dropdown-search
+                        >
+
+                        <a
+                            href="{{ all_issues_url }}"
+                            class="dropdown-item rounded {% if not selected_issue_id %}active{% endif %}"
+                            data-search-label="All issues"
+                        >
+                            {% if selected_run %}
+                                All issues in this run
+                            {% elif selected_publisher %}
+                                All {{ selected_publisher.name }} issues
+                            {% else %}
+                                All issues
+                            {% endif %}
+                        </a>
+
+                        <div class="dropdown-divider"></div>
+                        <div data-dropdown-options style="max-height: 22rem; overflow-y: auto;"></div>
+
+                        <p class="dropdown-item-text erc-muted mb-0 d-none" data-no-results>
+                            No matching issues.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-12 col-lg-6 col-xxl">
+                <div class="form-check form-switch mb-2">
+                    <input
+                        class="form-check-input"
+                        type="checkbox"
+                        id="{{ filter_id_prefix }}-toggle-volumes"
+                        data-comic-section-toggle
+                        data-target-section="volumes"
+                        {% if selected_volume_id %}checked{% endif %}
+                    >
+                    <label
+                        class="form-check-label erc-muted"
+                        for="{{ filter_id_prefix }}-toggle-volumes"
+                    >
+                        Show volumes
+                    </label>
+                </div>
+
+                <label class="form-label erc-muted" for="{{ filter_id_prefix }}-volume-search">
+                    Collected volume
+                </label>
+
+                <div
+                    class="dropdown searchable-dropdown"
+                    data-options-kind="volume"
+                    data-options-url="{{ filter_options_url }}"
+                    data-selected-id="{{ selected_volume_id|default_if_none:'' }}"
+                    data-filter-publisher-id="{{ selected_publisher_id|default_if_none:'' }}"
+                    data-filter-run-id="{{ selected_run_id|default_if_none:'' }}"
+                >
+                    <button
+                        class="btn erc-filter-button dropdown-toggle text-start w-100"
+                        type="button"
+                        id="{{ filter_id_prefix }}-volume-dropdown"
+                        data-bs-toggle="dropdown"
+                        data-bs-auto-close="outside"
+                        aria-expanded="false"
+                    >
+                        {% if selected_volume %}
+                            {{ selected_volume }}
+                        {% elif selected_run %}
+                            All volumes in this run
+                        {% elif selected_publisher %}
+                            All {{ selected_publisher.name }} volumes
+                        {% else %}
+                            All volumes
+                        {% endif %}
+                    </button>
+
+                    <div
+                        class="dropdown-menu p-2"
+                        aria-labelledby="{{ filter_id_prefix }}-volume-dropdown"
+                    >
+                        <input
+                            type="search"
+                            id="{{ filter_id_prefix }}-volume-search"
+                            class="form-control mb-2"
+                            placeholder="Search volumes..."
+                            autocomplete="off"
+                            data-dropdown-search
+                        >
+
+                        <a
+                            href="{{ all_volumes_url }}"
+                            class="dropdown-item rounded {% if not selected_volume_id %}active{% endif %}"
+                            data-search-label="All volumes"
+                        >
+                            {% if selected_run %}
+                                All volumes in this run
+                            {% elif selected_publisher %}
+                                All {{ selected_publisher.name }} volumes
+                            {% else %}
+                                All volumes
+                            {% endif %}
+                        </a>
+
+                        <div class="dropdown-divider"></div>
+                        <div data-dropdown-options style="max-height: 22rem; overflow-y: auto;"></div>
+
+                        <p class="dropdown-item-text erc-muted mb-0 d-none" data-no-results>
+                            No matching volumes.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-12 col-lg-6 col-xxl">
+                <div class="form-check form-switch mb-2">
+                    <input
+                        class="form-check-input"
+                        type="checkbox"
+                        id="{{ filter_id_prefix }}-toggle-one-shots"
+                        data-comic-section-toggle
+                        data-target-section="one_shots"
+                        {% if selected_one_shot_id %}checked{% endif %}
+                    >
+                    <label
+                        class="form-check-label erc-muted"
+                        for="{{ filter_id_prefix }}-toggle-one-shots"
+                    >
+                        Show one-shots
+                    </label>
+                </div>
+
+                <label class="form-label erc-muted" for="{{ filter_id_prefix }}-one-shot-search">
+                    One-shot
+                </label>
+
+                <div
+                    class="dropdown searchable-dropdown"
+                    data-options-kind="one_shot"
+                    data-options-url="{{ filter_options_url }}"
+                    data-selected-id="{{ selected_one_shot_id|default_if_none:'' }}"
+                    data-filter-publisher-id="{{ selected_publisher_id|default_if_none:'' }}"
+                >
+                    <button
+                        class="btn erc-filter-button dropdown-toggle text-start w-100"
+                        type="button"
+                        id="{{ filter_id_prefix }}-one-shot-dropdown"
+                        data-bs-toggle="dropdown"
+                        data-bs-auto-close="outside"
+                        aria-expanded="false"
+                    >
+                        {% if selected_one_shot %}
+                            {{ selected_one_shot.title }}
+                        {% elif selected_publisher %}
+                            All {{ selected_publisher.name }} one-shots
+                        {% else %}
+                            All one-shots
+                        {% endif %}
+                    </button>
+
+                    <div
+                        class="dropdown-menu p-2"
+                        aria-labelledby="{{ filter_id_prefix }}-one-shot-dropdown"
+                    >
+                        <input
+                            type="search"
+                            id="{{ filter_id_prefix }}-one-shot-search"
+                            class="form-control mb-2"
+                            placeholder="Search one-shots..."
+                            autocomplete="off"
+                            data-dropdown-search
+                        >
+
+                        <a
+                            href="{{ all_one_shots_url }}"
+                            class="dropdown-item rounded {% if not selected_one_shot_id %}active{% endif %}"
+                            data-search-label="All one-shots"
+                        >
+                            {% if selected_publisher %}
+                                All {{ selected_publisher.name }} one-shots
+                            {% else %}
+                                All one-shots
+                            {% endif %}
+                        </a>
+
+                        <div class="dropdown-divider"></div>
+                        <div data-dropdown-options style="max-height: 22rem; overflow-y: auto;"></div>
+
+                        <p class="dropdown-item-text erc-muted mb-0 d-none" data-no-results>
+                            No matching one-shots.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {% if filters_active %}
+            <div class="d-flex flex-wrap gap-2 mt-4">
+                {% if selected_run_id %}
+                    <a href="{{ clear_run_url }}" class="btn btn-sm btn-outline-secondary">
+                        Clear run
+                    </a>
+                {% endif %}
+
+                {% if selected_issue_id %}
+                    <a href="{{ clear_issue_url }}" class="btn btn-sm btn-outline-secondary">
+                        Clear issue
+                    </a>
+                {% endif %}
+
+                {% if selected_volume_id %}
+                    <a href="{{ clear_volume_url }}" class="btn btn-sm btn-outline-secondary">
+                        Clear volume
+                    </a>
+                {% endif %}
+
+                {% if selected_one_shot_id %}
+                    <a href="{{ clear_one_shot_url }}" class="btn btn-sm btn-outline-secondary">
+                        Clear one-shot
+                    </a>
+                {% endif %}
+
+                {% for item in selected_items %}
+                    <span class="erc-filter-chip">
+                        <span class="erc-filter-chip-label">{{ item.label }}</span>
+                        {{ item.value }}
+                    </span>
+                {% endfor %}
+            </div>
+        {% endif %}
+    </div>
+</section>

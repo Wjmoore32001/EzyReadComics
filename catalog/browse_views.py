@@ -6,6 +6,7 @@ from catalog.listing import (
     LISTING_INITIAL_RESULT_LIMIT,
     LISTING_LOAD_MORE_LIMIT,
     LISTING_OPTION_LIMIT,
+    build_filter_context,
     build_issue_option,
     build_one_shot_option,
     build_publisher_option,
@@ -59,12 +60,6 @@ def browse(request):
         one_shot_id=get_int_query_param(request, "one_shot"),
     )
 
-    selected_publisher_id = selected_publisher.id if selected_publisher else None
-    selected_run_id = selected_run.id if selected_run else None
-    selected_issue_id = selected_issue.id if selected_issue else None
-    selected_volume_id = selected_volume.id if selected_volume else None
-    selected_one_shot_id = selected_one_shot.id if selected_one_shot else None
-
     runs_queryset, volumes_queryset, issues_queryset, one_shots_queryset = get_browse_querysets(
         selected_publisher=selected_publisher,
         selected_run=selected_run,
@@ -113,11 +108,6 @@ def browse(request):
     attach_one_shot_tracking(request, one_shots)
 
     context = {
-        "publishers": [],
-        "run_options": [],
-        "issue_options": [],
-        "volume_options": [],
-        "one_shot_options": [],
         "runs": runs,
         "volumes": volumes,
         "issues": issues,
@@ -130,30 +120,21 @@ def browse(request):
         "volumes_initially_loaded": volumes_initially_loaded,
         "issues_initially_loaded": issues_initially_loaded,
         "one_shots_initially_loaded": one_shots_initially_loaded,
-        "selected_publisher": selected_publisher,
-        "selected_run": selected_run,
-        "selected_issue": selected_issue,
-        "selected_volume": selected_volume,
-        "selected_one_shot": selected_one_shot,
-        "selected_publisher_id": selected_publisher_id,
-        "selected_run_id": selected_run_id,
-        "selected_issue_id": selected_issue_id,
-        "selected_volume_id": selected_volume_id,
-        "selected_one_shot_id": selected_one_shot_id,
-        "selected_items": build_selected_items(
+        "listing_items_url": reverse("catalog:browse_items"),
+        "run_status_choices": FollowedRun.STATUS_CHOICES,
+        "issue_status_choices": IssueProgress.STATUS_CHOICES,
+        "volume_status_choices": VolumeProgress.STATUS_CHOICES,
+        "one_shot_status_choices": OneShotProgress.STATUS_CHOICES,
+        **build_filter_context(
+            base_url=reverse("catalog:browse"),
+            options_url=reverse("catalog:browse_options"),
+            id_prefix="browse",
             selected_publisher=selected_publisher,
             selected_run=selected_run,
             selected_issue=selected_issue,
             selected_volume=selected_volume,
             selected_one_shot=selected_one_shot,
         ),
-        "browse_initial_limit": BROWSE_INITIAL_RESULT_LIMIT,
-        "browse_load_more_limit": BROWSE_LOAD_MORE_LIMIT,
-        "browse_option_limit": BROWSE_OPTION_LIMIT,
-        "run_status_choices": FollowedRun.STATUS_CHOICES,
-        "issue_status_choices": IssueProgress.STATUS_CHOICES,
-        "volume_status_choices": VolumeProgress.STATUS_CHOICES,
-        "one_shot_status_choices": OneShotProgress.STATUS_CHOICES,
     }
 
     return render(request, "catalog/browse.html", context)
@@ -450,36 +431,3 @@ def get_browse_querysets(
 
 def browse_url_with_params(**params):
     return build_query_url(reverse("catalog:browse"), **params)
-
-
-def build_selected_items(
-    *,
-    selected_publisher,
-    selected_run,
-    selected_issue,
-    selected_volume,
-    selected_one_shot,
-):
-    selected_items = []
-
-    if selected_publisher:
-        selected_items.append({"label": "Publisher", "value": selected_publisher.name})
-
-    if selected_run:
-        selected_items.append({"label": "Run", "value": str(selected_run)})
-
-    if selected_issue:
-        selected_items.append(
-            {
-                "label": "Issue",
-                "value": f"{selected_issue.run} #{selected_issue.issue_number}",
-            }
-        )
-
-    if selected_volume:
-        selected_items.append({"label": "Volume", "value": str(selected_volume)})
-
-    if selected_one_shot:
-        selected_items.append({"label": "One-shot", "value": selected_one_shot.title})
-
-    return selected_items

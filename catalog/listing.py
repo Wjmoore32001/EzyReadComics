@@ -326,3 +326,143 @@ def build_one_shot_option(one_shot, *, url, selected_option_id):
         ),
         "active": one_shot.id == selected_option_id,
     }
+
+def build_selected_items(
+    *,
+    selected_publisher,
+    selected_run,
+    selected_issue,
+    selected_volume,
+    selected_one_shot,
+):
+    selected_items = []
+
+    if selected_publisher:
+        selected_items.append(
+            {
+                "label": "Publisher",
+                "value": selected_publisher.name,
+            }
+        )
+
+    if selected_run:
+        selected_items.append(
+            {
+                "label": "Run",
+                "value": str(selected_run),
+            }
+        )
+
+    if selected_issue:
+        selected_items.append(
+            {
+                "label": "Issue",
+                "value": f"{selected_issue.run} #{selected_issue.issue_number}",
+            }
+        )
+
+    if selected_volume:
+        selected_items.append(
+            {
+                "label": "Volume",
+                "value": str(selected_volume),
+            }
+        )
+
+    if selected_one_shot:
+        selected_items.append(
+            {
+                "label": "One-shot",
+                "value": selected_one_shot.title,
+            }
+        )
+
+    return selected_items
+
+
+def build_filter_context(
+    *,
+    base_url,
+    options_url,
+    id_prefix,
+    selected_publisher,
+    selected_run,
+    selected_issue,
+    selected_volume,
+    selected_one_shot,
+):
+    selected_publisher_id = selected_publisher.id if selected_publisher else None
+    selected_run_id = selected_run.id if selected_run else None
+    selected_issue_id = selected_issue.id if selected_issue else None
+    selected_volume_id = selected_volume.id if selected_volume else None
+    selected_one_shot_id = selected_one_shot.id if selected_one_shot else None
+
+    return {
+        "filter_base_url": base_url,
+        "filter_options_url": options_url,
+        "filter_id_prefix": id_prefix,
+        "filters_active": any(
+            [
+                selected_publisher_id,
+                selected_run_id,
+                selected_issue_id,
+                selected_volume_id,
+                selected_one_shot_id,
+            ]
+        ),
+        "selected_publisher": selected_publisher,
+        "selected_run": selected_run,
+        "selected_issue": selected_issue,
+        "selected_volume": selected_volume,
+        "selected_one_shot": selected_one_shot,
+        "selected_publisher_id": selected_publisher_id,
+        "selected_run_id": selected_run_id,
+        "selected_issue_id": selected_issue_id,
+        "selected_volume_id": selected_volume_id,
+        "selected_one_shot_id": selected_one_shot_id,
+        "selected_items": build_selected_items(
+            selected_publisher=selected_publisher,
+            selected_run=selected_run,
+            selected_issue=selected_issue,
+            selected_volume=selected_volume,
+            selected_one_shot=selected_one_shot,
+        ),
+        "all_publishers_url": base_url,
+        "all_runs_url": build_query_url(
+            base_url,
+            publisher=selected_publisher_id,
+        ),
+        "all_issues_url": build_query_url(
+            base_url,
+            publisher=selected_publisher_id,
+            run=selected_run_id,
+        ),
+        "all_volumes_url": build_query_url(
+            base_url,
+            publisher=selected_publisher_id,
+            run=selected_run_id,
+        ),
+        "all_one_shots_url": build_query_url(
+            base_url,
+            publisher=selected_publisher_id,
+        ),
+        "clear_run_url": build_query_url(
+            base_url,
+            publisher=selected_publisher_id,
+        ),
+        "clear_issue_url": build_query_url(
+            base_url,
+            publisher=selected_publisher_id,
+            run=selected_run_id,
+        ),
+        "clear_volume_url": build_query_url(
+            base_url,
+            publisher=selected_publisher_id,
+            run=selected_run_id,
+        ),
+        "clear_one_shot_url": build_query_url(
+            base_url,
+            publisher=selected_publisher_id,
+        ),
+    }
+

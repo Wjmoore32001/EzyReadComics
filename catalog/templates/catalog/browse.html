@@ -27,554 +27,30 @@
         </div>
     </section>
 
-    <section class="card erc-panel">
-        <div class="card-body p-4">
-            <div class="erc-section-header">
-                <h2 class="h3 fw-bold mb-0 erc-section-title">Filters</h2>
+    {% include "catalog/partials/comic_filters.html" %}
 
-                {% if selected_publisher or selected_run or selected_issue or selected_volume or selected_one_shot %}
-                    <a href="{% url 'catalog:browse' %}" class="btn btn-outline-secondary">
-                        Clear filters
-                    </a>
-                {% endif %}
-            </div>
-
-            <div class="row g-3 align-items-end">
-                <div class="col-12 col-lg-6 col-xxl">
-                    <label class="form-label erc-muted" for="publisher-search-browse">Publisher</label>
-
-                    <div
-                        class="dropdown searchable-dropdown"
-                        data-options-kind="publisher"
-                        data-options-url="{% url 'catalog:browse_options' %}"
-                        data-selected-id="{{ selected_publisher_id|default_if_none:'' }}"
-                    >
-                        <button
-                            class="btn erc-filter-button dropdown-toggle text-start w-100"
-                            type="button"
-                            id="publisher-dropdown-browse"
-                            data-bs-toggle="dropdown"
-                            data-bs-auto-close="outside"
-                            aria-expanded="false"
-                        >
-                            {% if selected_publisher %}
-                                {{ selected_publisher.name }}
-                            {% else %}
-                                All publishers
-                            {% endif %}
-                        </button>
-
-                        <div class="dropdown-menu p-2" aria-labelledby="publisher-dropdown-browse">
-                            <input
-                                type="search"
-                                id="publisher-search-browse"
-                                class="form-control mb-2"
-                                placeholder="Search publishers..."
-                                autocomplete="off"
-                                data-dropdown-search
-                            >
-
-                            <a
-                                href="{% url 'catalog:browse' %}"
-                                class="dropdown-item rounded {% if not selected_publisher %}active{% endif %}"
-                            >
-                                All publishers
-                            </a>
-
-                            <div class="dropdown-divider"></div>
-
-                            <div data-dropdown-options style="max-height: 18rem; overflow-y: auto;">
-                                {% for publisher in publishers %}
-                                    <a
-                                        href="{% url 'catalog:browse' %}?publisher={{ publisher.id }}"
-                                        class="dropdown-item rounded {% if selected_publisher_id == publisher.id %}active{% endif %}"
-                                        data-dropdown-option
-                                        data-search-label="{{ publisher.name }}"
-                                    >
-                                        <span class="fw-semibold">{{ publisher.name }}</span>
-                                    </a>
-                                {% endfor %}
-                            </div>
-
-                            <p class="dropdown-item-text erc-muted mb-0 d-none" data-no-results>
-                                No matching publishers.
-                            </p>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="col-12 col-lg-6 col-xxl">
-                    <div class="form-check form-switch mb-2">
-                        <input
-                            class="form-check-input"
-                            type="checkbox"
-                            id="browse-toggle-runs"
-                            data-section-visibility-toggle
-                            data-target-section="runs"
-                            checked
-                        >
-                        <label class="form-check-label erc-muted" for="browse-toggle-runs">
-                            Show runs
-                        </label>
-                    </div>
-
-                    <label class="form-label erc-muted" for="run-search-browse">Run</label>
-
-                    <div
-                        class="dropdown searchable-dropdown"
-                        data-options-kind="run"
-                        data-options-url="{% url 'catalog:browse_options' %}"
-                        data-selected-id="{{ selected_run_id|default_if_none:'' }}"
-                        data-filter-publisher-id="{{ selected_publisher_id|default_if_none:'' }}"
-                    >
-                        <button
-                            class="btn erc-filter-button dropdown-toggle text-start w-100"
-                            type="button"
-                            id="run-dropdown-browse"
-                            data-bs-toggle="dropdown"
-                            data-bs-auto-close="outside"
-                            aria-expanded="false"
-                        >
-                            {% if selected_run %}
-                                {{ selected_run.title }}{% if selected_run.start_year %} ({{ selected_run.start_year }}){% endif %}
-                            {% elif selected_publisher %}
-                                All {{ selected_publisher.name }} runs
-                            {% else %}
-                                All runs
-                            {% endif %}
-                        </button>
-
-                        <div class="dropdown-menu p-2" aria-labelledby="run-dropdown-browse">
-                            <input
-                                type="search"
-                                id="run-search-browse"
-                                class="form-control mb-2"
-                                placeholder="Search runs..."
-                                autocomplete="off"
-                                data-dropdown-search
-                            >
-
-                            {% if selected_publisher %}
-                                <a
-                                    href="{% url 'catalog:browse' %}?publisher={{ selected_publisher.id }}"
-                                    class="dropdown-item rounded {% if not selected_run %}active{% endif %}"
-                                >
-                                    All {{ selected_publisher.name }} runs
-                                </a>
-                            {% else %}
-                                <a
-                                    href="{% url 'catalog:browse' %}"
-                                    class="dropdown-item rounded {% if not selected_run %}active{% endif %}"
-                                >
-                                    All runs
-                                </a>
-                            {% endif %}
-
-                            <div class="dropdown-divider"></div>
-
-                            <div data-dropdown-options style="max-height: 22rem; overflow-y: auto;">
-                                {% for run in run_options %}
-                                    <a
-                                        href="{% url 'catalog:browse' %}?run={{ run.id }}"
-                                        class="dropdown-item rounded {% if selected_run_id == run.id %}active{% endif %}"
-                                        data-dropdown-option
-                                        data-search-label="{{ run.title }} {{ run.start_year }} {{ run.publisher.name }}"
-                                    >
-                                        <span class="fw-semibold">
-                                            {{ run.title }}{% if run.start_year %} ({{ run.start_year }}){% endif %}
-                                        </span>
-                                        <span class="erc-muted">
-                                            · {{ run.publisher.name }}
-                                            {% if run.issue_count %}
-                                                · {{ run.issue_count }} issues
-                                            {% else %}
-                                                · issue count unknown
-                                            {% endif %}
-                                        </span>
-                                    </a>
-                                {% endfor %}
-                            </div>
-
-                            <p class="dropdown-item-text erc-muted mb-0 d-none" data-no-results>
-                                No matching runs.
-                            </p>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="col-12 col-lg-6 col-xxl">
-                    <div class="form-check form-switch mb-2">
-                        <input
-                            class="form-check-input"
-                            type="checkbox"
-                            id="browse-toggle-issues"
-                            data-section-visibility-toggle
-                            data-target-section="issues"
-                            {% if selected_issue %}checked{% endif %}
-                        >
-                        <label class="form-check-label erc-muted" for="browse-toggle-issues">
-                            Show issues
-                        </label>
-                    </div>
-
-                    <label class="form-label erc-muted" for="issue-search-browse">Issues</label>
-
-                    <div
-                        class="dropdown searchable-dropdown"
-                        data-options-kind="issue"
-                        data-options-url="{% url 'catalog:browse_options' %}"
-                        data-selected-id="{{ selected_issue_id|default_if_none:'' }}"
-                        data-filter-publisher-id="{{ selected_publisher_id|default_if_none:'' }}"
-                        data-filter-run-id="{{ selected_run_id|default_if_none:'' }}"
-                    >
-                        <button
-                            class="btn erc-filter-button dropdown-toggle text-start w-100"
-                            type="button"
-                            id="issue-dropdown-browse"
-                            data-bs-toggle="dropdown"
-                            data-bs-auto-close="outside"
-                            aria-expanded="false"
-                        >
-                            {% if selected_issue %}
-                                {{ selected_issue.run.title }} #{{ selected_issue.issue_number }}
-                            {% elif selected_run %}
-                                All issues in this run
-                            {% elif selected_publisher %}
-                                All {{ selected_publisher.name }} issues
-                            {% else %}
-                                All issues
-                            {% endif %}
-                        </button>
-
-                        <div class="dropdown-menu p-2" aria-labelledby="issue-dropdown-browse">
-                            <input
-                                type="search"
-                                id="issue-search-browse"
-                                class="form-control mb-2"
-                                placeholder="Search issues..."
-                                autocomplete="off"
-                                data-dropdown-search
-                            >
-
-                            {% if selected_run %}
-                                <a
-                                    href="{% url 'catalog:browse' %}?run={{ selected_run.id }}"
-                                    class="dropdown-item rounded {% if not selected_issue %}active{% endif %}"
-                                >
-                                    All issues in this run
-                                </a>
-                            {% elif selected_publisher %}
-                                <a
-                                    href="{% url 'catalog:browse' %}?publisher={{ selected_publisher.id }}"
-                                    class="dropdown-item rounded {% if not selected_issue %}active{% endif %}"
-                                >
-                                    All {{ selected_publisher.name }} issues
-                                </a>
-                            {% else %}
-                                <a
-                                    href="{% url 'catalog:browse' %}"
-                                    class="dropdown-item rounded {% if not selected_issue %}active{% endif %}"
-                                >
-                                    All issues
-                                </a>
-                            {% endif %}
-
-                            <div class="dropdown-divider"></div>
-
-                            <div data-dropdown-options style="max-height: 22rem; overflow-y: auto;">
-                                {% for issue in issue_options %}
-                                    <a
-                                        href="{% url 'catalog:browse' %}?issue={{ issue.id }}"
-                                        class="dropdown-item rounded {% if selected_issue_id == issue.id %}active{% endif %}"
-                                        data-dropdown-option
-                                        data-search-label="{{ issue.run.title }} {{ issue.run.start_year }} {{ issue.issue_number }} {{ issue.run.publisher.name }}"
-                                    >
-                                        <span class="fw-semibold">
-                                            {{ issue.run.title }} #{{ issue.issue_number }}
-                                        </span>
-                                        <span class="erc-muted">
-                                            · {{ issue.run.publisher.name }}
-                                            {% if issue.published_date %}
-                                                · {{ issue.published_date|date:"Y-m-d" }}
-                                            {% endif %}
-                                        </span>
-                                    </a>
-                                {% endfor %}
-                            </div>
-
-                            <p class="dropdown-item-text erc-muted mb-0 d-none" data-no-results>
-                                No matching issues.
-                            </p>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="col-12 col-lg-6 col-xxl">
-                    <div class="form-check form-switch mb-2">
-                        <input
-                            class="form-check-input"
-                            type="checkbox"
-                            id="browse-toggle-volumes"
-                            data-section-visibility-toggle
-                            data-target-section="volumes"
-                            {% if selected_volume %}checked{% endif %}
-                        >
-                        <label class="form-check-label erc-muted" for="browse-toggle-volumes">
-                            Show volumes
-                        </label>
-                    </div>
-
-                    <label class="form-label erc-muted" for="volume-search-browse">Collected volume</label>
-
-                    <div
-                        class="dropdown searchable-dropdown"
-                        data-options-kind="volume"
-                        data-options-url="{% url 'catalog:browse_options' %}"
-                        data-selected-id="{{ selected_volume_id|default_if_none:'' }}"
-                        data-filter-publisher-id="{{ selected_publisher_id|default_if_none:'' }}"
-                        data-filter-run-id="{{ selected_run_id|default_if_none:'' }}"
-                    >
-                        <button
-                            class="btn erc-filter-button dropdown-toggle text-start w-100"
-                            type="button"
-                            id="volume-dropdown-browse"
-                            data-bs-toggle="dropdown"
-                            data-bs-auto-close="outside"
-                            aria-expanded="false"
-                        >
-                            {% if selected_volume %}
-                                {{ selected_volume }}
-                            {% elif selected_run %}
-                                All volumes in this run
-                            {% elif selected_publisher %}
-                                All {{ selected_publisher.name }} volumes
-                            {% else %}
-                                All volumes
-                            {% endif %}
-                        </button>
-
-                        <div class="dropdown-menu p-2" aria-labelledby="volume-dropdown-browse">
-                            <input
-                                type="search"
-                                id="volume-search-browse"
-                                class="form-control mb-2"
-                                placeholder="Search volumes..."
-                                autocomplete="off"
-                                data-dropdown-search
-                            >
-
-                            {% if selected_run %}
-                                <a
-                                    href="{% url 'catalog:browse' %}?run={{ selected_run.id }}"
-                                    class="dropdown-item rounded {% if not selected_volume %}active{% endif %}"
-                                >
-                                    All volumes in this run
-                                </a>
-                            {% elif selected_publisher %}
-                                <a
-                                    href="{% url 'catalog:browse' %}?publisher={{ selected_publisher.id }}"
-                                    class="dropdown-item rounded {% if not selected_volume %}active{% endif %}"
-                                >
-                                    All {{ selected_publisher.name }} volumes
-                                </a>
-                            {% else %}
-                                <a
-                                    href="{% url 'catalog:browse' %}"
-                                    class="dropdown-item rounded {% if not selected_volume %}active{% endif %}"
-                                >
-                                    All volumes
-                                </a>
-                            {% endif %}
-
-                            <div class="dropdown-divider"></div>
-
-                            <div data-dropdown-options style="max-height: 22rem; overflow-y: auto;">
-                                {% for volume in volume_options %}
-                                    <a
-                                        href="{% url 'catalog:browse' %}?volume={{ volume.id }}"
-                                        class="dropdown-item rounded {% if selected_volume_id == volume.id %}active{% endif %}"
-                                        data-dropdown-option
-                                        data-search-label="{{ volume.title }} {{ volume.run.title }} {{ volume.volume_number }} {{ volume.publisher.name }}"
-                                    >
-                                        <span class="fw-semibold">{{ volume }}</span>
-                                        <span class="erc-muted">
-                                            · {{ volume.publisher.name }}
-                                            · {{ volume.run }}
-                                            {% if volume.issue_count %}
-                                                · {{ volume.issue_count }} issues
-                                            {% endif %}
-                                        </span>
-                                    </a>
-                                {% endfor %}
-                            </div>
-
-                            <p class="dropdown-item-text erc-muted mb-0 d-none" data-no-results>
-                                No matching volumes.
-                            </p>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="col-12 col-lg-6 col-xxl">
-                    <div class="form-check form-switch mb-2">
-                        <input
-                            class="form-check-input"
-                            type="checkbox"
-                            id="browse-toggle-one-shots"
-                            data-section-visibility-toggle
-                            data-target-section="one_shots"
-                            {% if selected_one_shot %}checked{% endif %}
-                        >
-                        <label class="form-check-label erc-muted" for="browse-toggle-one-shots">
-                            Show one-shots
-                        </label>
-                    </div>
-
-                    <label class="form-label erc-muted" for="one-shot-search-browse">One-shot</label>
-
-                    <div
-                        class="dropdown searchable-dropdown"
-                        data-options-kind="one_shot"
-                        data-options-url="{% url 'catalog:browse_options' %}"
-                        data-selected-id="{{ selected_one_shot_id|default_if_none:'' }}"
-                        data-filter-publisher-id="{{ selected_publisher_id|default_if_none:'' }}"
-                    >
-                        <button
-                            class="btn erc-filter-button dropdown-toggle text-start w-100"
-                            type="button"
-                            id="one-shot-dropdown-browse"
-                            data-bs-toggle="dropdown"
-                            data-bs-auto-close="outside"
-                            aria-expanded="false"
-                        >
-                            {% if selected_one_shot %}
-                                {{ selected_one_shot.title }}
-                            {% elif selected_publisher %}
-                                All {{ selected_publisher.name }} one-shots
-                            {% else %}
-                                All one-shots
-                            {% endif %}
-                        </button>
-
-                        <div class="dropdown-menu p-2" aria-labelledby="one-shot-dropdown-browse">
-                            <input
-                                type="search"
-                                id="one-shot-search-browse"
-                                class="form-control mb-2"
-                                placeholder="Search one-shots..."
-                                autocomplete="off"
-                                data-dropdown-search
-                            >
-
-                            {% if selected_publisher %}
-                                <a
-                                    href="{% url 'catalog:browse' %}?publisher={{ selected_publisher.id }}"
-                                    class="dropdown-item rounded {% if not selected_one_shot %}active{% endif %}"
-                                >
-                                    All {{ selected_publisher.name }} one-shots
-                                </a>
-                            {% else %}
-                                <a
-                                    href="{% url 'catalog:browse' %}"
-                                    class="dropdown-item rounded {% if not selected_one_shot %}active{% endif %}"
-                                >
-                                    All one-shots
-                                </a>
-                            {% endif %}
-
-                            <div class="dropdown-divider"></div>
-
-                            <div data-dropdown-options style="max-height: 22rem; overflow-y: auto;">
-                                {% for one_shot in one_shot_options %}
-                                    <a
-                                        href="{% url 'catalog:browse' %}?one_shot={{ one_shot.id }}"
-                                        class="dropdown-item rounded {% if selected_one_shot_id == one_shot.id %}active{% endif %}"
-                                        data-dropdown-option
-                                        data-search-label="{{ one_shot.title }} {{ one_shot.start_year }} {{ one_shot.publisher.name }}"
-                                    >
-                                        <span class="fw-semibold">{{ one_shot.title }}</span>
-                                        <span class="erc-muted">
-                                            · {{ one_shot.publisher.name }}
-                                            {% if one_shot.published_date %}
-                                                · {{ one_shot.published_date|date:"Y-m-d" }}
-                                            {% elif one_shot.start_year %}
-                                                · {{ one_shot.start_year }}
-                                            {% endif %}
-                                        </span>
-                                    </a>
-                                {% endfor %}
-                            </div>
-
-                            <p class="dropdown-item-text erc-muted mb-0 d-none" data-no-results>
-                                No matching one-shots.
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            {% if selected_publisher or selected_run or selected_issue or selected_volume or selected_one_shot %}
-                <div class="d-flex flex-wrap gap-2 mt-4">
-                    {% if selected_run %}
-                        <a
-                            href="{% if selected_publisher %}{% url 'catalog:browse' %}?publisher={{ selected_publisher.id }}{% else %}{% url 'catalog:browse' %}{% endif %}"
-                            class="btn btn-sm btn-outline-secondary"
-                        >
-                            Clear run
-                        </a>
-                    {% endif %}
-
-                    {% if selected_issue %}
-                        <a
-                            href="{% if selected_run %}{% url 'catalog:browse' %}?run={{ selected_run.id }}{% elif selected_publisher %}{% url 'catalog:browse' %}?publisher={{ selected_publisher.id }}{% else %}{% url 'catalog:browse' %}{% endif %}"
-                            class="btn btn-sm btn-outline-secondary"
-                        >
-                            Clear issue
-                        </a>
-                    {% endif %}
-
-                    {% if selected_volume %}
-                        <a
-                            href="{% if selected_run %}{% url 'catalog:browse' %}?run={{ selected_run.id }}{% elif selected_publisher %}{% url 'catalog:browse' %}?publisher={{ selected_publisher.id }}{% else %}{% url 'catalog:browse' %}{% endif %}"
-                            class="btn btn-sm btn-outline-secondary"
-                        >
-                            Clear volume
-                        </a>
-                    {% endif %}
-
-                    {% if selected_one_shot %}
-                        <a
-                            href="{% if selected_publisher %}{% url 'catalog:browse' %}?publisher={{ selected_publisher.id }}{% else %}{% url 'catalog:browse' %}{% endif %}"
-                            class="btn btn-sm btn-outline-secondary"
-                        >
-                            Clear one-shot
-                        </a>
-                    {% endif %}
-
-                    {% for item in selected_items %}
-                        <span class="erc-filter-chip">
-                            <span class="erc-filter-chip-label">{{ item.label }}</span>
-                            {{ item.value }}
-                        </span>
-                    {% endfor %}
-                </div>
-            {% endif %}
-        </div>
-    </section>
-
-    <section class="card erc-panel erc-data-card" data-load-section="runs" data-browse-section-loaded="1" data-kind="runs" data-items-url="{% url 'catalog:browse_items' %}" data-offset="{{ runs|length }}" data-has-more="{% if has_more_runs %}1{% else %}0{% endif %}"
+    <section
+        class="card erc-panel erc-data-card"
+        data-comic-section="runs"
+        data-section-loaded="1"
+        data-kind="runs"
+        data-items-url="{{ listing_items_url }}"
+        data-offset="{{ runs|length }}"
+        data-has-more="{% if has_more_runs %}1{% else %}0{% endif %}"
         data-filter-publisher-id="{{ selected_publisher_id|default_if_none:'' }}"
         data-filter-run-id="{{ selected_run_id|default_if_none:'' }}"
         data-filter-issue-id="{{ selected_issue_id|default_if_none:'' }}"
         data-filter-volume-id="{{ selected_volume_id|default_if_none:'' }}"
-        data-filter-one-shot-id="{{ selected_one_shot_id|default_if_none:'' }}">
+        data-filter-one-shot-id="{{ selected_one_shot_id|default_if_none:'' }}"
+        data-empty-message="No runs match this filter."
+    >
         <div class="card-body">
             <div class="erc-section-header">
                 <h2 class="h3 fw-bold mb-0 erc-section-title">Runs</h2>
                 <p class="erc-muted mb-0" data-loaded-count>Showing {{ runs|length }} loaded</p>
             </div>
 
-            <div class="table-responsive erc-section-scroll" data-section-scroll style="max-height: 32rem; overflow: auto;">
+            <div class="table-responsive erc-section-scroll" data-comic-section-scroll style="max-height: 32rem; overflow: auto;">
                 <table class="table table-dark table-hover align-middle mb-0 erc-data-table">
                     <thead>
                     <tr>
@@ -584,8 +60,7 @@
                         <th scope="col" class="text-end">My Comics</th>
                     </tr>
                     </thead>
-
-                    <tbody data-load-target>
+                    <tbody data-comic-load-target>
                     {% for run in runs %}
                         <tr class="clickable-row" data-row-url="{% url 'catalog:run_details' run.id %}" tabindex="0" aria-label="Open run details for {{ run }}">
                             <td class="fw-semibold">
@@ -651,7 +126,7 @@
                             </td>
                         </tr>
                     {% empty %}
-                        <tr>
+                        <tr data-empty-row>
                             <td colspan="4" class="text-center erc-muted py-4">No runs match this filter.</td>
                         </tr>
                     {% endfor %}
@@ -661,19 +136,29 @@
         </div>
     </section>
 
-    <section class="card erc-panel erc-data-card {% if not selected_volume %}d-none{% endif %}" data-load-section="volumes" data-browse-section-loaded="{% if volumes_initially_loaded %}1{% else %}0{% endif %}" data-kind="volumes" data-items-url="{% url 'catalog:browse_items' %}" data-offset="{{ volumes|length }}" data-has-more="{% if has_more_volumes %}1{% else %}0{% endif %}"
+    <section
+        class="card erc-panel erc-data-card {% if not selected_volume_id %}d-none{% endif %}"
+        data-comic-section="volumes"
+        data-section-loaded="{% if volumes_initially_loaded %}1{% else %}0{% endif %}"
+        data-kind="volumes"
+        data-items-url="{{ listing_items_url }}"
+        data-offset="{{ volumes|length }}"
+        data-has-more="{% if has_more_volumes %}1{% else %}0{% endif %}"
         data-filter-publisher-id="{{ selected_publisher_id|default_if_none:'' }}"
         data-filter-run-id="{{ selected_run_id|default_if_none:'' }}"
         data-filter-issue-id="{{ selected_issue_id|default_if_none:'' }}"
         data-filter-volume-id="{{ selected_volume_id|default_if_none:'' }}"
-        data-filter-one-shot-id="{{ selected_one_shot_id|default_if_none:'' }}" {% if not selected_volume %}hidden{% endif %}>
+        data-filter-one-shot-id="{{ selected_one_shot_id|default_if_none:'' }}"
+        data-empty-message="No collected volumes match this filter."
+        {% if not selected_volume_id %}hidden{% endif %}
+    >
         <div class="card-body">
             <div class="erc-section-header">
                 <h2 class="h3 fw-bold mb-0 erc-section-title">Volumes</h2>
                 <p class="erc-muted mb-0" data-loaded-count>Showing {{ volumes|length }} loaded</p>
             </div>
 
-            <div class="table-responsive erc-section-scroll" data-section-scroll style="max-height: 32rem; overflow: auto;">
+            <div class="table-responsive erc-section-scroll" data-comic-section-scroll style="max-height: 32rem; overflow: auto;">
                 <table class="table table-dark table-hover align-middle mb-0 erc-data-table">
                     <thead>
                     <tr>
@@ -683,8 +168,7 @@
                         <th scope="col" class="text-end">My Comics</th>
                     </tr>
                     </thead>
-
-                    <tbody data-load-target>
+                    <tbody data-comic-load-target>
                     {% for volume in volumes %}
                         <tr class="clickable-row" data-row-url="{% url 'catalog:volume_details' volume.id %}" tabindex="0" aria-label="Open volume details for {{ volume }}">
                             <td class="fw-semibold">
@@ -723,7 +207,7 @@
                         </tr>
                     {% empty %}
                         {% if volumes_initially_loaded %}
-                            <tr>
+                            <tr data-empty-row>
                                 <td colspan="4" class="text-center erc-muted py-4">No collected volumes match this filter.</td>
                             </tr>
                         {% endif %}
@@ -734,19 +218,29 @@
         </div>
     </section>
 
-    <section class="card erc-panel erc-data-card {% if not selected_issue %}d-none{% endif %}" data-load-section="issues" data-browse-section-loaded="{% if issues_initially_loaded %}1{% else %}0{% endif %}" data-kind="issues" data-items-url="{% url 'catalog:browse_items' %}" data-offset="{{ issues|length }}" data-has-more="{% if has_more_issues %}1{% else %}0{% endif %}"
+    <section
+        class="card erc-panel erc-data-card {% if not selected_issue_id %}d-none{% endif %}"
+        data-comic-section="issues"
+        data-section-loaded="{% if issues_initially_loaded %}1{% else %}0{% endif %}"
+        data-kind="issues"
+        data-items-url="{{ listing_items_url }}"
+        data-offset="{{ issues|length }}"
+        data-has-more="{% if has_more_issues %}1{% else %}0{% endif %}"
         data-filter-publisher-id="{{ selected_publisher_id|default_if_none:'' }}"
         data-filter-run-id="{{ selected_run_id|default_if_none:'' }}"
         data-filter-issue-id="{{ selected_issue_id|default_if_none:'' }}"
         data-filter-volume-id="{{ selected_volume_id|default_if_none:'' }}"
-        data-filter-one-shot-id="{{ selected_one_shot_id|default_if_none:'' }}" {% if not selected_issue %}hidden{% endif %}>
+        data-filter-one-shot-id="{{ selected_one_shot_id|default_if_none:'' }}"
+        data-empty-message="No issues match this filter."
+        {% if not selected_issue_id %}hidden{% endif %}
+    >
         <div class="card-body">
             <div class="erc-section-header">
                 <h2 class="h3 fw-bold mb-0 erc-section-title">Issues</h2>
                 <p class="erc-muted mb-0" data-loaded-count>Showing {{ issues|length }} loaded</p>
             </div>
 
-            <div class="table-responsive erc-section-scroll" data-section-scroll style="max-height: 32rem; overflow: auto;">
+            <div class="table-responsive erc-section-scroll" data-comic-section-scroll style="max-height: 32rem; overflow: auto;">
                 <table class="table table-dark table-hover align-middle mb-0 erc-data-table">
                     <thead>
                     <tr>
@@ -756,11 +250,15 @@
                         <th scope="col" class="text-end">My Comics</th>
                     </tr>
                     </thead>
-                    <tbody data-load-target>
+                    <tbody data-comic-load-target>
                     {% for issue in issues %}
                         <tr class="clickable-row" data-row-url="{% url 'catalog:issue_details' issue.id %}" tabindex="0" aria-label="Open issue details for issue {{ issue.issue_number }}">
-                            <td class="fw-semibold"><a href="{% url 'catalog:issue_details' issue.id %}" class="erc-data-link">#{{ issue.issue_number }}</a></td>
-                            <td><a href="{% url 'catalog:run_details' issue.run.id %}" class="erc-data-link">{{ issue.run }}</a></td>
+                            <td class="fw-semibold">
+                                <a href="{% url 'catalog:issue_details' issue.id %}" class="erc-data-link">#{{ issue.issue_number }}</a>
+                            </td>
+                            <td>
+                                <a href="{% url 'catalog:run_details' issue.run.id %}" class="erc-data-link">{{ issue.run }}</a>
+                            </td>
                             <td>
                                 {% if issue.published_date %}
                                     {{ issue.published_date|date:"Y-m-d" }}
@@ -791,7 +289,7 @@
                         </tr>
                     {% empty %}
                         {% if issues_initially_loaded %}
-                            <tr>
+                            <tr data-empty-row>
                                 <td colspan="4" class="text-center erc-muted py-4">No issues match this filter.</td>
                             </tr>
                         {% endif %}
@@ -802,19 +300,29 @@
         </div>
     </section>
 
-    <section class="card erc-panel erc-data-card {% if not selected_one_shot %}d-none{% endif %}" data-load-section="one_shots" data-browse-section-loaded="{% if one_shots_initially_loaded %}1{% else %}0{% endif %}" data-kind="one_shots" data-items-url="{% url 'catalog:browse_items' %}" data-offset="{{ one_shots|length }}" data-has-more="{% if has_more_one_shots %}1{% else %}0{% endif %}"
+    <section
+        class="card erc-panel erc-data-card {% if not selected_one_shot_id %}d-none{% endif %}"
+        data-comic-section="one_shots"
+        data-section-loaded="{% if one_shots_initially_loaded %}1{% else %}0{% endif %}"
+        data-kind="one_shots"
+        data-items-url="{{ listing_items_url }}"
+        data-offset="{{ one_shots|length }}"
+        data-has-more="{% if has_more_one_shots %}1{% else %}0{% endif %}"
         data-filter-publisher-id="{{ selected_publisher_id|default_if_none:'' }}"
         data-filter-run-id="{{ selected_run_id|default_if_none:'' }}"
         data-filter-issue-id="{{ selected_issue_id|default_if_none:'' }}"
         data-filter-volume-id="{{ selected_volume_id|default_if_none:'' }}"
-        data-filter-one-shot-id="{{ selected_one_shot_id|default_if_none:'' }}" {% if not selected_one_shot %}hidden{% endif %}>
+        data-filter-one-shot-id="{{ selected_one_shot_id|default_if_none:'' }}"
+        data-empty-message="No one-shots match this filter."
+        {% if not selected_one_shot_id %}hidden{% endif %}
+    >
         <div class="card-body">
             <div class="erc-section-header">
                 <h2 class="h3 fw-bold mb-0 erc-section-title">One-shots</h2>
                 <p class="erc-muted mb-0" data-loaded-count>Showing {{ one_shots|length }} loaded</p>
             </div>
 
-            <div class="table-responsive erc-section-scroll" data-section-scroll style="max-height: 32rem; overflow: auto;">
+            <div class="table-responsive erc-section-scroll" data-comic-section-scroll style="max-height: 32rem; overflow: auto;">
                 <table class="table table-dark table-hover align-middle mb-0 erc-data-table">
                     <thead>
                     <tr>
@@ -824,11 +332,12 @@
                         <th scope="col" class="text-end">My Comics</th>
                     </tr>
                     </thead>
-
-                    <tbody data-load-target>
+                    <tbody data-comic-load-target>
                     {% for one_shot in one_shots %}
                         <tr class="clickable-row" data-row-url="{% url 'catalog:one_shot_details' one_shot.id %}" tabindex="0" aria-label="Open one-shot details for {{ one_shot.title }}">
-                            <td class="fw-semibold"><a href="{% url 'catalog:one_shot_details' one_shot.id %}" class="erc-data-link">{{ one_shot.title }}</a></td>
+                            <td class="fw-semibold">
+                                <a href="{% url 'catalog:one_shot_details' one_shot.id %}" class="erc-data-link">{{ one_shot.title }}</a>
+                            </td>
                             <td>{{ one_shot.publisher.name }}</td>
                             <td>
                                 {% if one_shot.published_date %}
@@ -862,7 +371,7 @@
                         </tr>
                     {% empty %}
                         {% if one_shots_initially_loaded %}
-                            <tr>
+                            <tr data-empty-row>
                                 <td colspan="4" class="text-center erc-muted py-4">No one-shots match this filter.</td>
                             </tr>
                         {% endif %}
@@ -903,5 +412,6 @@
 {% endblock %}
 
 {% block extra_scripts %}
-<script src="{% static 'js/catalog/browse.js' %}?v=section-scroll-20260715"></script>
+<script src="{% static 'js/comic-lists.js' %}?v=shared-listing-20260715"></script>
+<script src="{% static 'js/catalog/browse.js' %}?v=shared-listing-20260715"></script>
 {% endblock %}

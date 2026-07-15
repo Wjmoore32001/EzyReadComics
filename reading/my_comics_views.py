@@ -9,6 +9,7 @@ from catalog.listing import (
     LISTING_INITIAL_RESULT_LIMIT,
     LISTING_LOAD_MORE_LIMIT,
     LISTING_OPTION_LIMIT,
+    build_filter_context,
     build_issue_option,
     build_one_shot_option,
     build_publisher_option,
@@ -90,15 +91,6 @@ def my_comics(request):
             limit=MY_COMICS_INITIAL_RESULT_LIMIT,
         )
 
-    items_url = build_query_url(
-        reverse("reading:my_comics_items"),
-        volume=filters["volume_id"],
-    )
-    options_url = build_query_url(
-        reverse("reading:my_comics_options"),
-        volume=filters["volume_id"],
-    )
-
     context = {
         "followed_runs": runs,
         "volume_progress": volumes,
@@ -112,61 +104,22 @@ def my_comics(request):
         "volumes_initially_loaded": volumes_initially_loaded,
         "issues_initially_loaded": issues_initially_loaded,
         "one_shots_initially_loaded": one_shots_initially_loaded,
+        "listing_items_url": reverse("reading:my_comics_items"),
         "run_status_choices": FollowedRun.STATUS_CHOICES,
         "issue_status_choices": IssueProgress.STATUS_CHOICES,
         "volume_status_choices": VolumeProgress.STATUS_CHOICES,
         "one_shot_status_choices": OneShotProgress.STATUS_CHOICES,
-        "publisher_options": [],
-        "run_options": [],
-        "issue_options": [],
-        "volume_options": [],
-        "one_shot_options": [],
-        "all_publishers_url": build_my_comics_url(),
-        "all_runs_url": build_my_comics_url(
-            publisher=filters["publisher_id"],
-        ),
-        "all_issues_url": build_my_comics_url(
-            publisher=filters["publisher_id"],
-            run=filters["run_id"],
-        ),
-        "all_volumes_url": build_my_comics_url(
-            publisher=filters["publisher_id"],
-            run=filters["run_id"],
-        ),
-        "all_one_shots_url": build_my_comics_url(
-            publisher=filters["publisher_id"],
-        ),
-        "clear_run_url": build_my_comics_url(
-            publisher=filters["publisher_id"],
-        ),
-        "clear_issue_url": build_my_comics_url(
-            publisher=filters["publisher_id"],
-            run=filters["run_id"],
-        ),
-        "clear_volume_url": build_my_comics_url(
-            publisher=filters["publisher_id"],
-            run=filters["run_id"],
-        ),
-        "clear_one_shot_url": build_my_comics_url(
-            publisher=filters["publisher_id"],
-        ),
-        "selected_publisher": selection["publisher"],
-        "selected_run": selection["run"],
-        "selected_issue": selection["issue"],
-        "selected_volume": selection["volume"],
-        "selected_one_shot": selection["one_shot"],
-        "selected_publisher_id": filters["publisher_id"],
-        "selected_run_id": filters["run_id"],
-        "selected_issue_id": filters["issue_id"],
-        "selected_volume_id": filters["volume_id"],
-        "selected_one_shot_id": filters["one_shot_id"],
-        "filters_active": my_comics_filters_active(filters),
         "unfollow_status_value": UNFOLLOW_STATUS_VALUE,
-        "my_comics_initial_limit": MY_COMICS_INITIAL_RESULT_LIMIT,
-        "my_comics_load_more_limit": MY_COMICS_LOAD_MORE_LIMIT,
-        "my_comics_option_limit": MY_COMICS_OPTION_LIMIT,
-        "my_comics_items_url": items_url,
-        "my_comics_options_url": options_url,
+        **build_filter_context(
+            base_url=reverse("reading:my_comics"),
+            options_url=reverse("reading:my_comics_options"),
+            id_prefix="my-comics",
+            selected_publisher=selection["publisher"],
+            selected_run=selection["run"],
+            selected_issue=selection["issue"],
+            selected_volume=selection["volume"],
+            selected_one_shot=selection["one_shot"],
+        ),
     }
 
     return render(request, "reading/my_comics.html", context)
@@ -525,9 +478,6 @@ def get_filtered_my_comics_querysets(user, filters):
 
     return followed_runs, volume_progress, issue_progress, one_shot_progress
 
-
-def my_comics_filters_active(filters):
-    return any(filters.values())
 
 
 def get_user_tracked_publisher_ids(user):
