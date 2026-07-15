@@ -562,7 +562,7 @@
         </div>
     </section>
 
-    <section class="card erc-panel erc-data-card" data-load-section="runs">
+    <section class="card erc-panel erc-data-card" data-load-section="runs" data-browse-section-loaded="1">
         <div class="card-body">
             <div class="erc-section-header">
                 <h2 class="h3 fw-bold mb-0 erc-section-title">Runs</h2>
@@ -684,7 +684,7 @@
         </div>
     </section>
 
-    <section class="card erc-panel erc-data-card {% if not selected_volume %}d-none{% endif %}" data-load-section="volumes" {% if not selected_volume %}hidden{% endif %}>
+    <section class="card erc-panel erc-data-card {% if not selected_volume %}d-none{% endif %}" data-load-section="volumes" data-browse-section-loaded="{% if volumes_initially_loaded %}1{% else %}0{% endif %}" {% if not selected_volume %}hidden{% endif %}>
         <div class="card-body">
             <div class="erc-section-header">
                 <h2 class="h3 fw-bold mb-0 erc-section-title">Volumes</h2>
@@ -740,9 +740,11 @@
                             </td>
                         </tr>
                     {% empty %}
-                        <tr>
-                            <td colspan="4" class="text-center erc-muted py-4">No collected volumes match this filter.</td>
-                        </tr>
+                        {% if volumes_initially_loaded %}
+                            <tr>
+                                <td colspan="4" class="text-center erc-muted py-4">No collected volumes match this filter.</td>
+                            </tr>
+                        {% endif %}
                     {% endfor %}
                     </tbody>
                 </table>
@@ -772,7 +774,7 @@
         </div>
     </section>
 
-    <section class="card erc-panel erc-data-card {% if not selected_issue %}d-none{% endif %}" data-load-section="issues" {% if not selected_issue %}hidden{% endif %}>
+    <section class="card erc-panel erc-data-card {% if not selected_issue %}d-none{% endif %}" data-load-section="issues" data-browse-section-loaded="{% if issues_initially_loaded %}1{% else %}0{% endif %}" {% if not selected_issue %}hidden{% endif %}>
         <div class="card-body">
             <div class="erc-section-header">
                 <h2 class="h3 fw-bold mb-0 erc-section-title">Issues</h2>
@@ -823,9 +825,11 @@
                             </td>
                         </tr>
                     {% empty %}
-                        <tr>
-                            <td colspan="4" class="text-center erc-muted py-4">No issues match this filter.</td>
-                        </tr>
+                        {% if issues_initially_loaded %}
+                            <tr>
+                                <td colspan="4" class="text-center erc-muted py-4">No issues match this filter.</td>
+                            </tr>
+                        {% endif %}
                     {% endfor %}
                     </tbody>
                 </table>
@@ -855,7 +859,7 @@
         </div>
     </section>
 
-    <section class="card erc-panel erc-data-card {% if not selected_one_shot %}d-none{% endif %}" data-load-section="one_shots" {% if not selected_one_shot %}hidden{% endif %}>
+    <section class="card erc-panel erc-data-card {% if not selected_one_shot %}d-none{% endif %}" data-load-section="one_shots" data-browse-section-loaded="{% if one_shots_initially_loaded %}1{% else %}0{% endif %}" {% if not selected_one_shot %}hidden{% endif %}>
         <div class="card-body">
             <div class="erc-section-header">
                 <h2 class="h3 fw-bold mb-0 erc-section-title">One-shots</h2>
@@ -909,9 +913,11 @@
                             </td>
                         </tr>
                     {% empty %}
-                        <tr>
-                            <td colspan="4" class="text-center erc-muted py-4">No one-shots match this filter.</td>
-                        </tr>
+                        {% if one_shots_initially_loaded %}
+                            <tr>
+                                <td colspan="4" class="text-center erc-muted py-4">No one-shots match this filter.</td>
+                            </tr>
+                        {% endif %}
                     {% endfor %}
                     </tbody>
                 </table>
@@ -971,5 +977,54 @@
 {% endblock %}
 
 {% block extra_scripts %}
-<script src="{% static 'js/catalog/browse.js' %}?v=remove-stat-boxes-20260715"></script>
+<script src="{% static 'js/catalog/browse.js' %}?v=lazy-browse-db-pass-20260715"></script>
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    document.querySelectorAll(".searchable-dropdown").forEach(function (dropdown) {
+        const dropdownButton = dropdown.querySelector("[data-bs-toggle='dropdown']");
+        const searchInput = dropdown.querySelector("[data-dropdown-search]");
+        const optionsContainer = dropdown.querySelector("[data-dropdown-options]");
+
+        if (!dropdownButton || !searchInput || !optionsContainer) {
+            return;
+        }
+
+        dropdownButton.addEventListener("shown.bs.dropdown", function () {
+            if (optionsContainer.querySelector("[data-dropdown-option]") || dropdown.dataset.optionsLoaded === "1") {
+                return;
+            }
+
+            dropdown.dataset.optionsLoaded = "1";
+            searchInput.dispatchEvent(new Event("input", { bubbles: true }));
+        });
+    });
+
+    document.addEventListener("change", function (event) {
+        const toggle = event.target.closest("[data-section-visibility-toggle]");
+
+        if (!toggle || !toggle.checked) {
+            return;
+        }
+
+        const targetSection = toggle.dataset.targetSection;
+        const section = targetSection
+            ? document.querySelector(`[data-load-section="${targetSection}"]`)
+            : null;
+
+        if (!section || section.dataset.browseSectionLoaded === "1") {
+            return;
+        }
+
+        const loadButton = section.querySelector("[data-load-more]");
+
+        if (!loadButton || loadButton.classList.contains("d-none")) {
+            section.dataset.browseSectionLoaded = "1";
+            return;
+        }
+
+        section.dataset.browseSectionLoaded = "1";
+        loadButton.click();
+    });
+});
+</script>
 {% endblock %}
