@@ -2,45 +2,25 @@
 
 A concise history of EzyReadComics development.
 
-The README explains the current product goal and current project state. This file only tracks major development milestones.
+The README describes the current project state. This log tracks major development milestones.
 
 ## Current Status
 
-EzyReadComics is a Django web app being built to help readers find comic runs, understand where to start, browse useful comic information, and track their own reading.
+EzyReadComics is a Django web app for browsing confirmed comic catalog data and tracking personal comic reading progress.
 
 Current project areas:
 
 - `accounts` handles signup, login, logout, account settings, username changes, and password changes.
-- `comicvine` stores source data imported from Comic Vine.
 - `catalog` stores confirmed app-facing comic data.
-- `catalog.marvel` stores shared Marvel.com page readers, parsers, sync planners, and catalog writers.
-- `catalog.dc` stores shared DC.com page readers, parsers, and catalog writers.
+- `catalog.marvel` stores Marvel.com page readers, parsers, sync planners, and catalog writers.
+- `catalog.dc` stores DC.com page readers, parsers, and catalog writers.
+- `comicvine` stores imported Comic Vine source data.
 - `ingestion` stores source-to-catalog staging records and confirmed run candidates.
 - `reading` stores user-specific comic tracking data.
-- The site currently has catalog home, browse, run details, issue details, collected-volume details, My Comics, account, login, and signup pages.
-- The main user-facing pages share the same dark comic-library UI direction.
-- Browse is being kept mobile-friendly by limiting initial catalog rows and loading more rows only when requested.
-- Browse supports inline logged-in tracking actions for runs, volumes, and issues.
-- Browse and My Comics default to showing run sections only, with issue and volume sections toggled off by default.
-- Run follow uses a modal flow for run status, optional issue following, and optional per-issue status selection.
-- My Comics supports filtering followed items by publisher, run, issue, and status.
+- The site has catalog home, browse, run details, issue details, collected-volume details, My Comics, account, login, and signup pages.
+- Browse and My Comics use capped initial loads, section toggles, searchable filters, and inline tracking actions.
 - Admin-facing UI links are hidden unless the logged-in user is staff/admin.
-- Account username and password forms are hidden behind expand buttons by default.
-- Comic Vine backfill/import work is ongoing.
-- Comic Vine run and issue ingestion supports confirmed source-to-catalog promotion.
-- Official Marvel.com release calendar sync and backfill commands support no-AI Marvel issue ingestion.
-- Official Marvel.com collection calendar sync and backfill commands support no-AI collected-volume ingestion.
-- Official Marvel.com sync commands use a shared series-first flow.
-- Official DC.com browse/detail sync supports no-AI DC issue, run, volume, one-shot, and standalone graphic novel ingestion.
-- Catalog records can store generic official source keys and URLs.
-- Issue display has shifted away from issue titles and cover dates.
-- Published date is the main issue date used by the catalog UI.
-- Official issue detail completeness is tracked on catalog issues.
-- Collected-volume detail pages group collected issues by run.
-- Page JavaScript is being kept in static JS files instead of large inline template scripts.
-- Production deployment is running through Render, Neon/PostgreSQL, Gunicorn, WhiteNoise, and Cloudflare DNS.
-- OpenAI is intentionally not part of the current production requirements.
-- Recommendation logic, reading-order algorithms, character features, creator features, event features, and story-arc features are not built yet.
+- Production deployment runs through Render, Neon/PostgreSQL, Gunicorn, WhiteNoise, and Cloudflare DNS.
 
 ## Timeline
 
@@ -48,90 +28,59 @@ Current project areas:
 
 - Added official DC.com browse/detail catalog syncing through `sync_dc_comics`.
 - Added shared DC.com code under `catalog/dc/`.
-- Added DC.com browser/page-reader behavior for rendered pages through Playwright.
-- Added DC.com writer behavior for catalog runs, issues, volumes, one-shots, volume/run links, volume/issue links, and credits.
-- Added `--page` and `--page-count` browse scanning:
-  - `--page` is the first browse page.
-  - `--page-count` is the number of pages to process starting from `--page`.
-  - `--page 2 --page-count 2` processes pages 2 and 3.
-- Added `--detail-url` support so a single official DC detail page can be tested without reading Browse Comics.
-- Added direct DC detail URL support for:
-  - `/comics/<series-slug>/<issue-slug>`
-  - `/graphic-novels/<book-slug>`
-  - `/graphic-novels/<series-slug>/<book-slug>`
-- Added DC page classification:
-  - `COMIC BOOK` pages with issue numbers become issues.
-  - `GRAPHIC NOVEL` pages with a `Series` value become collected volumes.
-  - `GRAPHIC NOVEL` pages with no `Series` value become standalone graphic novels/one-shots.
-- Added DC issue parsing:
-  - Parses issue number from the detail title.
-  - Keeps issue titles out of the main catalog display flow.
-  - Uses official detail description when available.
-  - Collects official Talent credits when available.
-- Added special DC issue key handling:
-  - Annuals, specials, Noir editions, ARK M entries, uncovered entries, and similar special issue labels avoid colliding with normal issue numbers.
-  - Special `#1` pages do not become the parent run description source.
-- Added DC run parsing:
-  - Uses `Specs > Series` as the run assignment source.
-  - Parses values like `POISON IVY 2022` into run title `POISON IVY` and start year `2022`.
-  - Detects ongoing markers such as `(2022-)` when available.
-- Added DC volume parsing:
-  - Parses explicit collected issue ranges such as `#1-6`.
-  - Links collected issues only when they can be resolved safely.
-  - Creates volume/run links even when individual issue links are unavailable.
-  - Creates series graphic novels as volumes even when DC omits the issue range.
-  - Leaves first issue, last issue, issue count, and individual issue links blank when the official page does not state the collected range.
-- Rejected carousel-position inference for DC volume contents:
-  - More From This Series is treated as a release/feed-style list, not collected-issue order.
-  - The sync no longer guesses volume issue ranges from nearby carousel cards.
-- Fixed standalone DC graphic novel handling:
-  - One-segment graphic novel URLs such as `/graphic-novels/orion` can be accepted.
-  - Standalone graphic novels without `Series` and without More From This Series can be stored as one-shots/standalone graphic novels.
-  - Marketing text such as `#1 New York Times bestselling...` is not treated as collected issue data.
-- Added DC More From This Series behavior:
-  - Scans the More From This Series carousel once per seed detail page.
-  - Reuses that discovered series map for related issue and volume detail reads.
-  - Avoids rescanning the carousel on every discovered detail page.
-- Added faster DC sync behavior:
-  - Uses rendered DC pages through Playwright.
-  - Blocks heavy resources such as images, media, and fonts where supported.
-  - Avoids unnecessary waits where possible.
-- Added safer large DC page-count behavior:
-  - Browse pages are processed in batches.
-  - Each browse page's discovered detail pages are written after that page completes.
-  - Local detail objects are cleared after each page batch.
-  - A small processed-URL set is kept so detail pages are not repeated across pages.
-  - This reduces memory growth and avoids losing all progress if a later page crashes.
-- Added better DC verbose output:
-  - Shows classification.
-  - Shows parsed run identity and status.
-  - Shows source URL.
-  - Shows per-detail change counts.
-  - Prints skipped item title, classification, source URL, and skip reason.
-- Added a DC-only local cleanup approach for test resets:
-  - Deletes DC publisher/catalog data only.
-  - Leaves Marvel data untouched.
-  - Leaves shared credit people and roles alone so Marvel credits are not accidentally damaged.
-- Renamed status language direction from `ended` toward `completed` for user-facing clarity and future model cleanup.
-- Confirmed that legacy `ended` data should be migrated to `completed` rather than permanently supporting both labels in display logic.
-- Continued preserving the simple project scope:
-  - No reading-order algorithm.
-  - No event system.
-  - No character model expansion.
-  - No recommendation logic.
+- Added DC Playwright page reading for Browse Comics and detail pages.
+- Added DC catalog writing for runs, issues, volumes, one-shots, volume/run links, volume/issue links, and credits.
+- Added `--page` and `--page-count` support for direct browse-page scanning.
+- Added `--detail-url` support for syncing one DC detail URL.
+- Added DC classification for:
+  - Comic book issues
+  - Collected volumes
+  - Standalone graphic novels
+  - One-shots
+  - Needs-review comic pages
+- Added DC issue parsing from detail titles and Specs data.
+- Added DC run parsing from `Specs > Series` values.
+- Added DC volume parsing from explicit collected issue ranges.
+- Added conservative DC collected-volume behavior:
+  - Create volume/run links when the run is clear.
+  - Link individual issues only when safely resolvable.
+  - Do not guess collected issue ranges from carousel position.
+- Added DC More From This Series scanning in the deep sync command.
+- Added final skipped-item reporting to DC sync output.
+- Added per-page DC write behavior so each browse page is written before the next page is read.
+- Added browser/context reset behavior to reduce memory growth during long DC syncs.
+- Added `sync_dc_comics_fast` for seed-only DC syncing.
+- Added default existing-source skipping to `sync_dc_comics_fast`:
+  - Seed URLs already stored on issues, volumes, or one-shots are skipped before browser detail reads.
+  - `--rescan-existing` forces rereading existing seed URLs.
+- Added official Marvel.com release calendar backfill improvements.
+- Added `--year` support for Marvel release backfills.
+- Kept Marvel release backfills on weekly Wednesday windows.
+- Added browser/context reset behavior to reduce memory growth during long Marvel release backfills.
+- Added write-after-window behavior so Marvel release backfill data is saved in smaller batches.
+- Added `backfill_marvel_release_calendar_fast` for seed-only Marvel release backfilling.
+- Added default existing-source skipping to `backfill_marvel_release_calendar_fast`:
+  - Calendar seed issues already stored by official URL or Marvel issue ID are skipped before issue detail reads.
+  - `--rescan-existing` forces rereading existing seed issues.
+- Kept fast Marvel release backfill from opening Back to Series pages or full Marvel series pages.
+- Kept fast DC sync from scanning More From This Series.
+- Added or updated final skipped-item summaries for Marvel and DC ingestion commands.
+- Added `update_run_dates_and_status` for recalculating run first issue date, latest issue date, issue count, and status from local issues.
+- Added `convert_stale_single_issue_runs_to_one_shots` for moving stale single-issue runs into one-shot records when safe.
+- Added protection so single-issue runs that are primary runs for collected volumes are skipped for manual review instead of being deleted through cascade effects.
+- Continued refining DC and Marvel official-source parsing around one-shots, collected volumes, annuals, special issue labels, and missing issue numbers.
 
 ### 2026-07-13
 
 - Deployed EzyReadComics to production.
-- Added production deployment support for Render:
-  - Added `gunicorn`.
-  - Added WhiteNoise static file serving.
-  - Added production static file storage behavior.
-  - Added `build.sh` for Render builds.
-  - Configured Render build command as `./build.sh`.
-  - Configured Render start command as `gunicorn config.wsgi:application`.
-  - Confirmed Render builds install requirements, collect static files, run migrations, and start Gunicorn.
-- Connected production deployment to the existing Neon/PostgreSQL database through `DATABASE_URL`.
+- Added Render deployment support:
+  - `gunicorn`
+  - WhiteNoise static serving
+  - Production static file collection
+  - `build.sh`
+  - Render build command: `./build.sh`
+  - Render start command: `gunicorn config.wsgi:application`
+- Connected production deployment to Neon/PostgreSQL through `DATABASE_URL`.
 - Configured Cloudflare DNS for:
   - `ezyreadcomics.com`
   - `www.ezyreadcomics.com`
@@ -145,131 +94,42 @@ Current project areas:
   - `ALLOWED_HOSTS`
   - `CSRF_TRUSTED_ORIGINS`
 - Kept the Render fallback domain available at `ezyreadcomics.onrender.com`.
-- Confirmed that pushing or merging to `main` should auto-build and redeploy through Render when Auto-Deploy is enabled.
-- Removed OpenAI from production requirements so the live website does not require OpenAI dependencies.
-- Clarified that AI-assisted catalog commands are optional local/dev helpers, not production website requirements.
 - Updated admin-facing UI visibility:
-  - Main navbar Admin link now only shows to logged-in staff/admin users.
-  - Browse Add data button now only shows to logged-in staff/admin users.
-  - Run detail Edit in admin button now only shows to logged-in staff/admin users.
-  - Issue detail Edit in admin button now only shows to logged-in staff/admin users.
-  - Volume detail Edit in admin button now only shows to logged-in staff/admin users.
-- Updated Browse default section visibility:
-  - Runs are on by default.
-  - Issues are off by default unless an issue filter is selected.
-  - Volumes are off by default unless a volume filter is selected.
-- Updated My Comics default section visibility:
-  - Runs are on by default.
-  - Issues are off by default unless an issue filter is selected.
+  - Navbar Admin link is staff-only.
+  - Browse Add Data button is staff-only.
+  - Detail-page Edit in Admin buttons are staff-only.
+- Updated Browse and My Comics defaults:
+  - Runs are shown by default.
+  - Issues are off by default.
   - Volumes are off by default.
-- Added official Marvel.com release calendar syncing through `sync_marvel_release_calendar_ai`.
-- Kept the command name `sync_marvel_release_calendar_ai` even though the current implementation makes no AI calls.
-- Reworked the Marvel release calendar sync into a series-first flow:
-  - Reads the current Marvel/Eastern date through six days later.
-  - Uses the official Marvel release calendar URL with `dateStart`, `dateEnd`, `tab=comic`, and `variants=false`.
-  - Parses rendered calendar text and issue links from Marvel.com.
-  - Opens calendar issue pages to find the official `Back to Series` link.
-  - Reads the official Marvel series page for the run.
-  - Loads additional series issue cards through the Marvel page's Load More behavior.
-  - Deduplicates duplicate issue anchors by official Marvel issue ID.
-  - Uses uppercase issue-card links from the series page.
-  - Creates or updates catalog runs and issues from official Marvel page data.
-  - Stores official source identifiers and URLs when available.
-  - Uses `published_date` as the issue date.
-  - Leaves issue titles blank.
-  - Does not use Comic Vine.
-  - Does not create collected volumes.
-  - Does not use AI.
-  - Does not use Marvel search.
-  - Does not guess issue URLs.
-- Added direct Marvel issue detail parsing:
-  - Opens official Marvel issue pages with Playwright.
-  - Parses description text from the rendered page.
-  - Parses credits such as Writer, Artist, Penciller, Inker, Colorist, Letterer, Cover Artist, and Editor.
-  - Stores credits through `ComicIssueCredit`.
-  - Reads detail pages only for missing, incomplete, suspicious, or ID-repair issues.
-- Added explicit official issue detail tracking fields to `ComicIssue`:
+- Added official Marvel.com release calendar syncing.
+- Reworked Marvel release ingestion into a series-first flow:
+  - Read the release calendar.
+  - Use issue pages to find Back to Series.
+  - Read official Marvel series pages.
+  - Load series issue cards.
+  - Read detail pages only when needed.
+  - Write runs, issues, credits, and official source fields.
+- Added official issue detail tracking fields to `ComicIssue`:
   - `official_detail_status`
   - `official_detail_checked_at`
   - `official_detail_missing_fields`
-- Added official detail statuses:
-  - `unknown`
-  - `complete`
-  - `incomplete`
-- Marked expected official detail fields as:
-  - Description
-  - Writer credit
-- Added missing-field tracking so upcoming issues that are missing description or Writer can be found and rechecked later.
-- Added generic official source field direction:
+- Added generic official source fields:
   - `official_source_key`
   - `official_source_url`
-- Added shared Marvel.com modules under `catalog/marvel/`:
-  - `browser.py`
-  - `calendar.py`
-  - `collections.py`
-  - `collection_writer.py`
-  - `credits.py`
-  - `issues.py`
-  - `series.py`
-  - `sync_planner.py`
-  - `text.py`
-  - `urls.py`
-  - `writer.py`
-- Moved reusable Marvel.com browser/page-reader behavior out of management commands.
-- Moved reusable issue detail parsing and credit parsing into shared Marvel modules.
-- Moved reusable catalog write behavior into shared Marvel writer modules.
-- Added official Marvel.com release calendar date-range backfilling through `backfill_marvel_release_calendar`.
-- Reworked release calendar backfill around weekly windows:
-  - Accepts oldest and newest dates through command flags or terminal prompts.
-  - Finds Wednesdays inside the selected range.
-  - Processes the newest Wednesday window first.
-  - Uses `dateStart=Wednesday`.
-  - Uses `dateEnd=Wednesday+6 days`.
-  - Reuses the same series-first no-AI parser and apply behavior as the current release sync.
-- Removed default work caps from the release calendar sync and backfill commands:
-  - `--limit` only limits calendar issues when explicitly passed.
-  - `--detail-limit` only limits planned issue detail page reads when explicitly passed.
-- Kept browser page timeouts as per-page safety behavior, not total command runtime limits.
-- Added stale database connection handling to the release backfill command so long Playwright runs can continue after idle Neon/PostgreSQL SSL connections are closed.
-- Added dry-run, verbose, raw, headed, skip-details, and skip-missing-issues flows for testing the Marvel release calendar commands.
+- Added shared Marvel.com modules under `catalog/marvel/`.
+- Added official Marvel.com release calendar backfilling through `backfill_marvel_release_calendar`.
+- Removed default work caps from Marvel release calendar sync/backfill commands.
+- Added stale database connection handling for long Marvel Playwright runs.
 - Added collected-volume catalog support:
-  - Added `ComicOneShot`.
-  - Added `ComicVolumeRun`.
-  - Added `ComicVolumeOneShot`.
-  - Kept `ComicVolumeIssue` for individual issue links.
-  - Allowed a collected volume to represent multiple runs.
-  - Allowed collected volumes to link one-shot-style collected items.
-- Updated collected-volume detail pages:
-  - Shows runs and issues grouped by run.
-  - Removes the old flat order-column display.
-  - Shows a run-level empty state when a volume has a run range but no individual linked issues yet.
-- Added official Marvel.com collection calendar parsing and syncing:
-  - Reads `tab=collection` calendar pages.
-  - Opens official Marvel collection detail pages.
-  - Parses description and Collecting/Collects text.
-  - Creates or updates `ComicVolume` rows.
-  - Creates or updates `ComicVolumeRun` rows.
-  - Creates `ComicVolumeIssue` rows when issue records can be resolved.
-  - Creates `ComicOneShot` and `ComicVolumeOneShot` rows for one-shot-style collected items.
-  - Stores official source identifiers and collection URLs when available.
-  - Skips Direct Market / variant collection rows.
-  - Does not use Comic Vine.
-  - Does not use AI.
-  - Does not use Marvel search.
-  - Does not guess issue URLs.
-- Added official Marvel.com collection calendar backfilling through `backfill_marvel_collection_calendar`.
-- Reworked collection backfill around weekly windows:
-  - Accepts oldest and newest dates.
-  - Finds Wednesdays inside the selected range.
-  - Processes newest weekly window first.
-  - Uses `dateStart=Wednesday`.
-  - Uses `dateEnd=Wednesday+6 days`.
-  - Deduplicates collection URLs across the backfill run.
-- Added annual handling for collected-volume parsing:
-  - Text such as `ULTIMATE FANTASTIC FOUR (2003) #19-32 and ANNUAL (2005) #1` keeps `ULTIMATE FANTASTIC FOUR (2003) #19-32` as a run link.
-  - The annual becomes a one-shot-style item titled `ULTIMATE FANTASTIC FOUR ANNUAL (2005)`.
-- Confirmed that collection sync can create run-range links before individual issues exist locally.
-- Confirmed that individual volume issue links require the related issues to be resolvable through existing local data, stored official source URLs, or official issue links from the collection page.
+  - `ComicOneShot`
+  - `ComicVolumeRun`
+  - `ComicVolumeOneShot`
+  - `ComicVolumeIssue`
+- Updated collected-volume detail pages to group collected contents by run.
+- Added official Marvel.com collection calendar syncing and backfilling.
+- Added Marvel collection parsing for description and Collecting/Collects text.
+- Added Marvel collection writing for volumes, volume/run links, issue links, one-shots, and volume/one-shot links.
 
 ### 2026-07-12
 
@@ -283,7 +143,7 @@ Current project areas:
   - Account
   - Login
   - Signup
-- Updated the shared page style around:
+- Updated shared styling around:
   - Dark page shell
   - Hero sections
   - Blue section headings
@@ -292,143 +152,54 @@ Current project areas:
   - Consistent clickable row/link treatment
   - Mobile-friendlier table columns
 - Updated Browse display:
-  - Runs now display as `Title (Year)` instead of using a separate year column.
+  - Runs display as `Title (Year)`.
   - Browse columns were reduced for a cleaner mobile layout.
   - Browse run rows show status beside publisher.
-  - Browse section headers use the shared blue heading style.
-  - Browse issue and run link colors now match My Comics.
+  - Browse issue and run link colors match My Comics.
 - Updated account pages:
-  - Login and signup now use the shared dark page shell and panel style.
-  - Account now uses the shared dark page shell and account summary cards.
-  - Change username and change password forms are collapsed by default.
-  - Username and password forms reopen automatically when that form has validation errors.
-- Revamped the run follow popup system:
-  - Run follow now happens through the existing modal instead of browser OK/Cancel prompts.
-  - The modal lets the user choose the run status.
-  - The modal can optionally follow all issues in the run.
-  - If following all issues, the modal can apply one issue status to every issue.
-  - If individual issue status mode is enabled, the modal shows one status selector per issue in the run.
-  - Canceling the modal saves nothing.
-  - Saving the modal adds the run and selected issue statuses to My Comics together.
-- Added run-follow option loading:
-  - Added a run follow options endpoint for loading the run's issues into the modal.
-  - Added backend handling for single shared issue status during run follow.
-  - Added backend handling for individual per-issue statuses during run follow.
-- Expanded logged-in tracking behavior across Browse, Run Details, and My Comics:
-  - Browse follow actions now open a status picker instead of silently defaulting to Planned.
-  - Browse tracking actions update the displayed row without a full page refresh.
-  - Browse status dropdowns include unfollow/remove options.
-  - Browse prompts before unfollowing runs, volumes, or issues.
-  - Run status changes can optionally apply the selected status to the run's issues.
-  - Run Read-to-Reading or Read-to-Planned changes can optionally update issue statuses.
-  - Unfollowing a run can optionally remove saved issue statuses for that run.
-  - When all issues in a followed run are marked Read, the app can prompt the user to mark the run Read too.
+  - Login and signup use the shared dark page shell.
+  - Account uses the shared dark page shell and summary cards.
+  - Username and password forms are collapsed by default.
+  - Forms reopen automatically when validation errors are present.
+- Reworked run follow into a modal flow:
+  - Choose run status.
+  - Optionally follow all issues.
+  - Optionally apply one status to all issues.
+  - Optionally set individual issue statuses.
+  - Canceling saves nothing.
+- Expanded logged-in tracking across Browse, Run Details, and My Comics.
 - Added issue tracking controls to run detail pages.
-- Updated follow behavior so run and issue follow buttons ask which status to save.
-- Updated My Comics:
-  - Added filters for publisher, run, and status.
-  - Renamed the progress sections toward followed runs, followed volumes, and followed issues.
-  - Removed followed/updated date columns from the current tracking tables.
-  - Updated empty states to use consistent "not following" language.
-  - Fixed issue unfollow cancellation so Cancel does not submit the unfollow.
-- Reorganized page JavaScript:
-  - Added `static/js/catalog/browse.js`.
-  - Added `static/js/catalog/run-details.js`.
-  - Added `static/js/reading/my-comics.js`.
-  - Moved the global clickable-row script out of `templates/base.html`.
-  - Moved Browse page behavior out of `catalog/templates/catalog/browse.html`.
-  - Moved Run Detail page behavior out of `catalog/templates/catalog/run_details.html`.
-  - Moved My Comics behavior out of `reading/templates/reading/my_comics.html`.
-  - Added template script blocks so page-specific JS can be loaded only where needed.
-  - Added static-file settings for the root `static/` directory.
-- Updated Browse for large catalog performance and mobile use:
-  - Initial browse page load shows a small capped set of runs, collected volumes, and issues.
-  - Filter dropdown searches return a limited set of matching options.
-  - Run, volume, and issue sections can load more rows without a full page reload.
-  - Run, volume, and issue sections can hide rows back down toward the initial view.
-  - Browse ordering is newest-first by run start year where applicable.
-- Added AI-assisted missing Marvel run discovery through `find_missing_marvel_runs_ai`.
-- The missing-run finder creates missing `ComicRun` rows only.
-- The missing-run finder does not create issues from OpenAI.
-- The missing-run finder does not create collected volumes.
-- The missing-run finder does not create credits or images.
-- The missing-run finder checks existing catalog runs locally instead of sending the full existing run list to the model.
-- The missing-run finder works in batches:
-  - Ask for a small batch of current/upcoming Marvel numbered runs.
-  - Reject existing, repeated, or incomplete candidates locally.
-  - Ask for another batch only when the returned candidates are unusable.
-- Run discovery no longer asks for or generates run descriptions.
-- New run descriptions are left blank.
-- Added automatic run-description filling from issue #1:
-  - When issue #1 is saved with a description, the parent run description is filled if it is blank.
-  - This works for normal model saves, including admin/manual issue entry and normal command-created issues.
-  - It does not overwrite an existing run description.
-- Renamed the main issue date concept from store date to published date in the catalog model/UI.
-- Kept `ComicIssue.title` as a legacy/manual field, but removed issue title from the current user-facing issue workflow.
-- Kept `ComicIssue.cover_date` for possible future/debug use, but removed cover date from current user-facing issue display.
-- Updated issue display direction:
-  - Browse issue rows show issue number and published date.
-  - Issue detail pages focus on issue number, published date, description, and credits.
-  - Penciller is collected when available, but no longer drives the main browse UI.
-- Updated `fill_missing_marvel_issues_ai`:
-  - Uses official Marvel.com issue pages only.
-  - Ignores issue titles.
-  - Ignores cover dates.
-  - Uses `published_date`.
-  - Uses existing catalog data first and makes no OpenAI call when a run is already complete enough.
-  - Requires issue number and published date by default.
-  - In strict mode, requires issue number, published date, description, and at least one Writer.
-  - Does not require Penciller.
-  - Collects other Marvel-listed credits when available.
-  - Stores issue credits through `ComicIssueCredit`.
-  - Skips future-dated issues because upcoming Marvel pages may be incomplete.
-  - Can reduce a run's issue count to the currently released count when future-dated issues are found during normal filling, avoiding repeated checks for intentionally skipped upcoming issues.
-- Updated issue credit direction:
-  - Writer is prioritized for strict validation.
-  - Other listed credits such as Artist, Penciller, Inker, Colorist, Letterer, Cover Artist, and Editor are still collected when Marvel provides them.
+- Updated My Comics filtering and section behavior.
+- Reorganized page JavaScript into static files:
+  - `static/js/catalog/browse.js`
+  - `static/js/catalog/run-details.js`
+  - `static/js/reading/my-comics.js`
+- Updated Browse for larger catalog performance:
+  - Capped initial rows.
+  - Limited dropdown search results.
+  - Load More and Hide controls.
+  - Newest-first run ordering where applicable.
+- Added automatic run-description filling from normal mainline issue #1.
+- Renamed the main issue date concept from store date to published date.
+- Kept issue titles and cover dates out of the main user-facing issue workflow.
+- Updated issue details to focus on issue number, published date, description, and credits.
 
 ### 2026-07-11
 
 - Reworked the Marvel Comic Vine run-ingestion algorithm.
-- Changed ingestion from a future placeholder into an active staging path for confirmed Comic Vine run candidates.
-- Added or updated `ComicVineVolumeCandidate` analysis behavior for local Marvel Comic Vine volume rows.
+- Changed ingestion from a placeholder into an active staging path for confirmed Comic Vine run candidates.
+- Added or updated `ComicVineVolumeCandidate` analysis for local Marvel Comic Vine volume rows.
 - Kept the Comic Vine source layer separate from confirmed catalog data.
-- Confirmed that Comic Vine "volume" records cannot be trusted as app-facing runs by default because some Comic Vine volume records are collected-edition/product-line containers.
-- Removed the old `count_of_issues > 1` threshold from the run decision.
-- Changed the analyzer to classify from actual attached local child issue rows instead of trusting Comic Vine `count_of_issues`.
-- Added the strict child-title safety rule:
-  - If any attached child issue title starts with `Vol.`, `Vol`, or `Volume`, the source is unsafe/unresolved and is not promoted as a run.
-- Added the minimum attached-issue requirement:
-  - A source needs at least two attached local child issues before it can be automatically confirmed as a run.
-  - One attached issue is not enough proof because it may be a one-shot, special, facsimile, product record, or incompletely hydrated source.
+- Confirmed that Comic Vine volume records cannot be trusted as app-facing runs by default.
+- Changed the analyzer to classify from actual attached local child issue rows.
+- Added the strict child-title safety rule for `Vol.`, `Vol`, and `Volume` child issue titles.
+- Added the minimum attached-issue requirement for automatic run confirmation.
 - Kept the analyzer conservative:
-  - False negatives are acceptable.
-  - False positives should be avoided.
-  - Uncertain sources stay ingestion-only.
-- Removed broad run-detection requirements from the current analyzer path:
-  - No title/date overlap rule.
-  - No release-cadence requirement.
-  - No cover-date lead requirement.
-  - No broad parent-title guessing as the core rule.
-- The analyzer now makes no Comic Vine API calls.
-- The analyzer writes no catalog rows.
-- The analyzer does not create or update collected-volume catalog records.
-- Verified the known separation cases:
-  - `Avengers (2023)` confirms as a run.
-  - `Alien (2022)` confirms as a run.
-  - `Avengers by Jed Mackay` stays unresolved because its child issue titles are collected-volume style.
-  - `Fantastic Four by Ryan North` stays unresolved because its child issue titles are collected-volume style.
-  - `X-Men by Jed MacKay` stays unresolved because its child issue titles are collected-volume style.
-- Reviewed confirmed run candidates after analysis.
-- Decided that remaining edge publications such as previews, catalogs, facsimiles, and special digital formats are product-scope questions, not the same structural ingestion bug as collected-volume product lines.
-- Confirmed the apply command path:
-  - It selects only confirmed run candidates from the current analysis version.
-  - It skips unresolved, unsafe, insufficient-data, and conflict candidates.
-  - It creates or links catalog runs.
-  - It creates or links catalog issues.
-  - It creates or updates run and issue source links.
-  - It does not call Comic Vine during apply.
-  - It does not write collected-volume catalog rows.
+  - Avoid false positives.
+  - Leave uncertain sources in ingestion.
+  - Make no Comic Vine API calls.
+  - Write no catalog rows during analysis.
+- Confirmed the apply command path for creating or linking catalog runs and issues from confirmed candidates.
 
 ### 2026-07-08
 
@@ -445,39 +216,23 @@ Current project areas:
 - Added run follow and unfollow actions.
 - Added issue status save/remove actions.
 - Added volume status save/remove actions.
-- Added tracking controls to run detail pages.
-- Added tracking controls to issue detail pages.
-- Added tracking controls to collected-volume detail pages.
-- Added My Comics tables for:
-  - Followed runs
-  - Saved volume statuses
-  - Saved issue statuses
-- Saving an issue status now follows the issue's parent run.
-- Saving a volume status now follows the volume's parent run.
-- Marking a volume as read now marks the linked issues inside that volume as read for the same user.
-- Kept deletion behavior conservative:
-  - Unfollowing a run does not automatically delete issue or volume progress.
-  - Removing a volume status does not delete issue progress.
+- Added tracking controls to run, issue, and volume detail pages.
+- Saving issue or volume progress now follows the parent run.
+- Marking a volume Read now marks linked issues in that volume Read for the same user.
 - Added admin support for reading-tracking models.
 
 ### 2026-07-03
 
 - Added the current catalog homepage.
 - Added the current catalog browse page.
-- Added catalog run details pages.
-- Added catalog issue details pages.
-- Added catalog collected-volume details pages.
-- Updated the browse UI to use the darker comic-library style.
+- Added catalog run detail pages.
+- Added catalog issue detail pages.
+- Added catalog collected-volume detail pages.
+- Updated browse UI to use the darker comic-library style.
 - Added searchable filters for publisher, run, and collected volume.
-- Updated browse behavior so run and volume filters can be used without selecting a publisher first.
 - Added row-click behavior for browse and details tables.
-- Removed duplicate underlined links from table rows.
-- Added clear controls for all filters, run filter, and collected-volume filter.
-- Added initial manual catalog test data for the current Fantastic Four run:
-  - `Fantastic Four (2025)`
-  - `Fantastic Four Vol. 1: Save Everyone`
-  - Fantastic Four issues #1-13
-  - collected-volume links for issues #1-5
+- Added clear controls for filters.
+- Added initial manual catalog test data for the current Fantastic Four run and collected volume.
 
 ### 2026-07-01
 
@@ -490,8 +245,8 @@ Current project areas:
 - Established `comicvine` as the source-data layer.
 - Established `catalog` as the confirmed app-facing data layer.
 - Established `ingestion` as the candidate/review layer.
-- Reserved `reading` for user reading-tracking features.
-- Removed the old temporary `comics` app from the active project structure.
+- Established `reading` as the user tracking layer.
+- Removed the temporary `comics` app from the active project structure.
 
 ### 2026-06-30
 
@@ -500,7 +255,6 @@ Current project areas:
 - Added retry handling for Comic Vine requests.
 - Improved command behavior around API limits, timeouts, and partial runs.
 - Added progress reporting for source-data hydration.
-- Reviewed and adjusted model direction toward confirmed data instead of fully automated app-facing imports.
 - Added account pages.
 - Added signup.
 - Added login and logout.
@@ -510,8 +264,6 @@ Current project areas:
 - Added account page support for username changes.
 - Added account page support for password changes.
 - Added username availability validation.
-- Added a database hydration/progress command for checking stored volume and issue hydration status.
-- Added browse table columns for Comic Vine IDs during the earlier source-data browsing phase.
 
 ### 2026-06-28
 
@@ -525,7 +277,6 @@ Current project areas:
 - Added Comic Vine sync state tracking.
 - Added commands for Comic Vine issue discovery, issue updating, volume updating, volume hydration, and historical backfill.
 - Added the `sync_comics` wrapper command.
-- Added the scheduled GitHub Actions workflow for Comic Vine syncing.
 - Added the first basic homepage.
 - Added the first basic issue and volume browsing pages.
 - Added publisher filtering.
@@ -535,30 +286,19 @@ Current project areas:
 ### 2026-06-24 to 2026-06-27
 
 - Restarted the project with a simpler scope.
-- Chose Comic Vine as the main source for comic metadata.
+- Chose Comic Vine as the first source-data provider.
 - Chose Django as the web framework.
 - Chose PostgreSQL/Neon as the main database.
-- Decided to avoid reading-order algorithms, recommendation logic, character models, event models, and story-arc models until the core data and browsing experience are stable.
+- Deferred reading-order algorithms, recommendation logic, character models, event models, and story-arc models until the core catalog and tracking experience are stable.
 
 ## Next Major Goals
 
 - Keep production deployment stable through Render, Neon, and Cloudflare.
-- Keep testing auto-deploy behavior from `main`.
-- Keep testing the no-AI official Marvel release calendar sync against real weekly release pages.
-- Keep testing official Marvel release calendar backfill across wider historical date ranges.
-- Keep testing official Marvel collection calendar sync and backfill across wider historical date ranges.
-- Keep testing official DC.com browse/detail sync across wider browse page ranges.
-- Keep testing DC one-shot, standalone graphic novel, collected-volume, annual, and special issue classification.
-- Backfill older release-calendar issues before expecting older collection volumes to link every individual issue.
-- Add a future command for rechecking issues marked with incomplete official detail fields.
-- Add a future command for marking stale runs as completed after their latest issue date is far enough in the past.
-- Complete the status rename from `ended` to `completed` cleanly at the model/data level.
-- Keep testing the run follow modal with real runs that have different issue counts.
-- Continue verifying issue status behavior from Browse, Run Details, Issue Details, Volume Details, and My Comics.
-- Continue verifying admin-only UI visibility for public pages.
-- Continue verifying confirmed run candidates for obvious source mistakes.
-- Keep Comic Vine source-data backfills running.
-- Keep collected-volume catalog work separate from Comic Vine run ingestion.
-- Continue manually testing confirmed catalog data.
-- Refine catalog models based on real manual entries.
-- Continue polishing My Comics and tracking behavior as real tracked data grows.
+- Continue testing official Marvel release and collection ingestion across wider ranges.
+- Continue testing official DC browse/detail ingestion across wider page ranges.
+- Keep fast ingestion commands focused on seed-only passes and existing-source skips.
+- Use deep ingestion commands for discovery and relationship repair.
+- Keep run status maintenance in the dedicated run date/status command.
+- Keep collected-volume issue links conservative unless issues can be safely resolved.
+- Continue verifying reading tracking from Browse, Detail pages, and My Comics.
+- Continue polishing catalog data as real Marvel and DC ranges are backfilled.
