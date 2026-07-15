@@ -485,10 +485,11 @@ def volume_details(request, pk):
         volume_run_links=volume_run_links,
     )
 
-    default_credits = volume.credits.select_related("person", "role").filter(
-        role__show_by_default=True,
+    default_credits, all_credits = get_unique_volume_credits(
+        volume=volume,
+        volume_issues=volume_issues,
+        volume_run_links=volume_run_links,
     )
-    all_credits = volume.credits.select_related("person", "role")
 
     attach_volume_tracking(request, [volume])
 
@@ -1274,6 +1275,74 @@ def get_unique_run_issue_credits(run):
     ]
 
     return default_credits, unique_credits
+
+
+def get_unique_volume_credits(*, volume, volume_issues, volume_run_links):
+    credits = list(volume.credits.all())
+    explicit_issue_run_ids = set()
+
+    for volume_issue in volume_issues:
+        issue = volume_issue.issue
+        explicit_issue_run_ids.add(issue.run_id)
+        credits.extend(issue.credits.all())
+
+    linked_run_ids = {
+        volume_run_link.run_id
+        for volume_run_link in volume_run_links
+    }
+
+    if volume.run_id:
+        linked_run_ids.add(volume.run_id)
+
+    fallback_run_ids = linked_run_ids - explicit_issue_run_ids
+
+    if fallback_run_ids:
+        credits.extend(
+            ComicIssueCredit.objects.select_related(
+                "person",
+                "role",
+            ).filter(
+                issue__run_id__in=fallback_run_ids,
+            )
+        )
+
+    credits.sort(key=credit_display_sort_key)
+
+    unique_credits = []
+    seen_credit_keys = set()
+
+    for credit in credits:
+        credit_key = (credit.role_id, credit.person_id)
+
+        if credit_key in seen_credit_keys:
+            continue
+
+        seen_credit_keys.add(credit_key)
+        unique_credits.append(credit)
+
+    default_credits = [
+        credit
+        for credit in unique_credits
+        if credit.role.show_by_default
+    ]
+
+    return default_credits, unique_credits
+
+
+def credit_display_sort_key(credit):
+    credit_order = credit.credit_order
+
+    if credit_order is None:
+        credit_order = 2**31
+
+    return (
+        credit.role.display_order,
+        credit_order,
+        credit.person.name.casefold(),
+        credit.role.name.casefold(),
+        credit.role_id,
+        credit.person_id,
+    )
 
 
 def attach_issue_credit_display(issues):
