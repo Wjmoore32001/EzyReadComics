@@ -7,6 +7,7 @@ app_name = "reading"
 
 urlpatterns = [
     path("", views.my_comics, name="my_comics"),
+    path("items/", views.my_comics_items, name="my_comics_items"),
     path("options/", views.my_comics_options, name="my_comics_options"),
     path("runs/<int:run_id>/follow/", views.follow_run, name="follow_run"),
     path("runs/<int:run_id>/follow-options/", views.run_follow_options, name="run_follow_options"),

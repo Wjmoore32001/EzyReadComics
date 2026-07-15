@@ -562,14 +562,19 @@
         </div>
     </section>
 
-    <section class="card erc-panel erc-data-card" data-load-section="runs" data-browse-section-loaded="1">
+    <section class="card erc-panel erc-data-card" data-load-section="runs" data-browse-section-loaded="1" data-kind="runs" data-items-url="{% url 'catalog:browse_items' %}" data-offset="{{ runs|length }}" data-has-more="{% if has_more_runs %}1{% else %}0{% endif %}"
+        data-filter-publisher-id="{{ selected_publisher_id|default_if_none:'' }}"
+        data-filter-run-id="{{ selected_run_id|default_if_none:'' }}"
+        data-filter-issue-id="{{ selected_issue_id|default_if_none:'' }}"
+        data-filter-volume-id="{{ selected_volume_id|default_if_none:'' }}"
+        data-filter-one-shot-id="{{ selected_one_shot_id|default_if_none:'' }}">
         <div class="card-body">
             <div class="erc-section-header">
                 <h2 class="h3 fw-bold mb-0 erc-section-title">Runs</h2>
                 <p class="erc-muted mb-0" data-loaded-count>Showing {{ runs|length }} loaded</p>
             </div>
 
-            <div class="table-responsive">
+            <div class="table-responsive erc-section-scroll" data-section-scroll style="max-height: 32rem; overflow: auto;">
                 <table class="table table-dark table-hover align-middle mb-0 erc-data-table">
                     <thead>
                     <tr>
@@ -653,45 +658,22 @@
                     </tbody>
                 </table>
             </div>
-
-            <div class="erc-load-actions mt-3">
-                <button
-                    type="button"
-                    class="btn erc-load-button {% if not has_more_runs %}d-none{% endif %}"
-                    data-load-more
-                    data-kind="runs"
-                    data-offset="{{ runs|length }}"
-                    data-items-url="{% url 'catalog:browse_items' %}"
-                    data-filter-publisher-id="{{ selected_publisher_id|default_if_none:'' }}"
-                    data-filter-run-id="{{ selected_run_id|default_if_none:'' }}"
-                    data-filter-issue-id="{{ selected_issue_id|default_if_none:'' }}"
-                    data-filter-volume-id="{{ selected_volume_id|default_if_none:'' }}"
-                    data-filter-one-shot-id="{{ selected_one_shot_id|default_if_none:'' }}"
-                >
-                    Load {{ browse_load_more_limit }} more runs
-                </button>
-
-                <button
-                    type="button"
-                    class="btn erc-hide-button d-none"
-                    data-hide-more
-                    data-min-visible="{{ browse_initial_limit }}"
-                    data-hide-count="{{ browse_load_more_limit }}"
-                >
-                    Hide {{ browse_load_more_limit }} runs
-                </button>
-            </div>
         </div>
     </section>
 
-    <section class="card erc-panel erc-data-card {% if not selected_volume %}d-none{% endif %}" data-load-section="volumes" data-browse-section-loaded="{% if volumes_initially_loaded %}1{% else %}0{% endif %}" {% if not selected_volume %}hidden{% endif %}>
+    <section class="card erc-panel erc-data-card {% if not selected_volume %}d-none{% endif %}" data-load-section="volumes" data-browse-section-loaded="{% if volumes_initially_loaded %}1{% else %}0{% endif %}" data-kind="volumes" data-items-url="{% url 'catalog:browse_items' %}" data-offset="{{ volumes|length }}" data-has-more="{% if has_more_volumes %}1{% else %}0{% endif %}"
+        data-filter-publisher-id="{{ selected_publisher_id|default_if_none:'' }}"
+        data-filter-run-id="{{ selected_run_id|default_if_none:'' }}"
+        data-filter-issue-id="{{ selected_issue_id|default_if_none:'' }}"
+        data-filter-volume-id="{{ selected_volume_id|default_if_none:'' }}"
+        data-filter-one-shot-id="{{ selected_one_shot_id|default_if_none:'' }}" {% if not selected_volume %}hidden{% endif %}>
         <div class="card-body">
             <div class="erc-section-header">
                 <h2 class="h3 fw-bold mb-0 erc-section-title">Volumes</h2>
                 <p class="erc-muted mb-0" data-loaded-count>Showing {{ volumes|length }} loaded</p>
             </div>
 
-            <div class="table-responsive">
+            <div class="table-responsive erc-section-scroll" data-section-scroll style="max-height: 32rem; overflow: auto;">
                 <table class="table table-dark table-hover align-middle mb-0 erc-data-table">
                     <thead>
                     <tr>
@@ -749,39 +731,22 @@
                     </tbody>
                 </table>
             </div>
-
-            <div class="erc-load-actions mt-3">
-                <button
-                    type="button"
-                    class="btn erc-load-button {% if not has_more_volumes %}d-none{% endif %}"
-                    data-load-more
-                    data-kind="volumes"
-                    data-offset="{{ volumes|length }}"
-                    data-items-url="{% url 'catalog:browse_items' %}"
-                    data-filter-publisher-id="{{ selected_publisher_id|default_if_none:'' }}"
-                    data-filter-run-id="{{ selected_run_id|default_if_none:'' }}"
-                    data-filter-issue-id="{{ selected_issue_id|default_if_none:'' }}"
-                    data-filter-volume-id="{{ selected_volume_id|default_if_none:'' }}"
-                    data-filter-one-shot-id="{{ selected_one_shot_id|default_if_none:'' }}"
-                >
-                    Load {{ browse_load_more_limit }} more volumes
-                </button>
-
-                <button type="button" class="btn erc-hide-button d-none" data-hide-more data-min-visible="{{ browse_initial_limit }}" data-hide-count="{{ browse_load_more_limit }}">
-                    Hide {{ browse_load_more_limit }} volumes
-                </button>
-            </div>
         </div>
     </section>
 
-    <section class="card erc-panel erc-data-card {% if not selected_issue %}d-none{% endif %}" data-load-section="issues" data-browse-section-loaded="{% if issues_initially_loaded %}1{% else %}0{% endif %}" {% if not selected_issue %}hidden{% endif %}>
+    <section class="card erc-panel erc-data-card {% if not selected_issue %}d-none{% endif %}" data-load-section="issues" data-browse-section-loaded="{% if issues_initially_loaded %}1{% else %}0{% endif %}" data-kind="issues" data-items-url="{% url 'catalog:browse_items' %}" data-offset="{{ issues|length }}" data-has-more="{% if has_more_issues %}1{% else %}0{% endif %}"
+        data-filter-publisher-id="{{ selected_publisher_id|default_if_none:'' }}"
+        data-filter-run-id="{{ selected_run_id|default_if_none:'' }}"
+        data-filter-issue-id="{{ selected_issue_id|default_if_none:'' }}"
+        data-filter-volume-id="{{ selected_volume_id|default_if_none:'' }}"
+        data-filter-one-shot-id="{{ selected_one_shot_id|default_if_none:'' }}" {% if not selected_issue %}hidden{% endif %}>
         <div class="card-body">
             <div class="erc-section-header">
                 <h2 class="h3 fw-bold mb-0 erc-section-title">Issues</h2>
                 <p class="erc-muted mb-0" data-loaded-count>Showing {{ issues|length }} loaded</p>
             </div>
 
-            <div class="table-responsive">
+            <div class="table-responsive erc-section-scroll" data-section-scroll style="max-height: 32rem; overflow: auto;">
                 <table class="table table-dark table-hover align-middle mb-0 erc-data-table">
                     <thead>
                     <tr>
@@ -834,39 +799,22 @@
                     </tbody>
                 </table>
             </div>
-
-            <div class="erc-load-actions mt-3">
-                <button
-                    type="button"
-                    class="btn erc-load-button {% if not has_more_issues %}d-none{% endif %}"
-                    data-load-more
-                    data-kind="issues"
-                    data-offset="{{ issues|length }}"
-                    data-items-url="{% url 'catalog:browse_items' %}"
-                    data-filter-publisher-id="{{ selected_publisher_id|default_if_none:'' }}"
-                    data-filter-run-id="{{ selected_run_id|default_if_none:'' }}"
-                    data-filter-issue-id="{{ selected_issue_id|default_if_none:'' }}"
-                    data-filter-volume-id="{{ selected_volume_id|default_if_none:'' }}"
-                    data-filter-one-shot-id="{{ selected_one_shot_id|default_if_none:'' }}"
-                >
-                    Load {{ browse_load_more_limit }} more issues
-                </button>
-
-                <button type="button" class="btn erc-hide-button d-none" data-hide-more data-min-visible="{{ browse_initial_limit }}" data-hide-count="{{ browse_load_more_limit }}">
-                    Hide {{ browse_load_more_limit }} issues
-                </button>
-            </div>
         </div>
     </section>
 
-    <section class="card erc-panel erc-data-card {% if not selected_one_shot %}d-none{% endif %}" data-load-section="one_shots" data-browse-section-loaded="{% if one_shots_initially_loaded %}1{% else %}0{% endif %}" {% if not selected_one_shot %}hidden{% endif %}>
+    <section class="card erc-panel erc-data-card {% if not selected_one_shot %}d-none{% endif %}" data-load-section="one_shots" data-browse-section-loaded="{% if one_shots_initially_loaded %}1{% else %}0{% endif %}" data-kind="one_shots" data-items-url="{% url 'catalog:browse_items' %}" data-offset="{{ one_shots|length }}" data-has-more="{% if has_more_one_shots %}1{% else %}0{% endif %}"
+        data-filter-publisher-id="{{ selected_publisher_id|default_if_none:'' }}"
+        data-filter-run-id="{{ selected_run_id|default_if_none:'' }}"
+        data-filter-issue-id="{{ selected_issue_id|default_if_none:'' }}"
+        data-filter-volume-id="{{ selected_volume_id|default_if_none:'' }}"
+        data-filter-one-shot-id="{{ selected_one_shot_id|default_if_none:'' }}" {% if not selected_one_shot %}hidden{% endif %}>
         <div class="card-body">
             <div class="erc-section-header">
                 <h2 class="h3 fw-bold mb-0 erc-section-title">One-shots</h2>
                 <p class="erc-muted mb-0" data-loaded-count>Showing {{ one_shots|length }} loaded</p>
             </div>
 
-            <div class="table-responsive">
+            <div class="table-responsive erc-section-scroll" data-section-scroll style="max-height: 32rem; overflow: auto;">
                 <table class="table table-dark table-hover align-middle mb-0 erc-data-table">
                     <thead>
                     <tr>
@@ -922,28 +870,6 @@
                     </tbody>
                 </table>
             </div>
-
-            <div class="erc-load-actions mt-3">
-                <button
-                    type="button"
-                    class="btn erc-load-button {% if not has_more_one_shots %}d-none{% endif %}"
-                    data-load-more
-                    data-kind="one_shots"
-                    data-offset="{{ one_shots|length }}"
-                    data-items-url="{% url 'catalog:browse_items' %}"
-                    data-filter-publisher-id="{{ selected_publisher_id|default_if_none:'' }}"
-                    data-filter-run-id="{{ selected_run_id|default_if_none:'' }}"
-                    data-filter-issue-id="{{ selected_issue_id|default_if_none:'' }}"
-                    data-filter-volume-id="{{ selected_volume_id|default_if_none:'' }}"
-                    data-filter-one-shot-id="{{ selected_one_shot_id|default_if_none:'' }}"
-                >
-                    Load {{ browse_load_more_limit }} more one-shots
-                </button>
-
-                <button type="button" class="btn erc-hide-button d-none" data-hide-more data-min-visible="{{ browse_initial_limit }}" data-hide-count="{{ browse_load_more_limit }}">
-                    Hide {{ browse_load_more_limit }} one-shots
-                </button>
-            </div>
         </div>
     </section>
 </div>
@@ -977,54 +903,5 @@
 {% endblock %}
 
 {% block extra_scripts %}
-<script src="{% static 'js/catalog/browse.js' %}?v=lazy-browse-db-pass-20260715"></script>
-<script>
-document.addEventListener("DOMContentLoaded", function () {
-    document.querySelectorAll(".searchable-dropdown").forEach(function (dropdown) {
-        const dropdownButton = dropdown.querySelector("[data-bs-toggle='dropdown']");
-        const searchInput = dropdown.querySelector("[data-dropdown-search]");
-        const optionsContainer = dropdown.querySelector("[data-dropdown-options]");
-
-        if (!dropdownButton || !searchInput || !optionsContainer) {
-            return;
-        }
-
-        dropdownButton.addEventListener("shown.bs.dropdown", function () {
-            if (optionsContainer.querySelector("[data-dropdown-option]") || dropdown.dataset.optionsLoaded === "1") {
-                return;
-            }
-
-            dropdown.dataset.optionsLoaded = "1";
-            searchInput.dispatchEvent(new Event("input", { bubbles: true }));
-        });
-    });
-
-    document.addEventListener("change", function (event) {
-        const toggle = event.target.closest("[data-section-visibility-toggle]");
-
-        if (!toggle || !toggle.checked) {
-            return;
-        }
-
-        const targetSection = toggle.dataset.targetSection;
-        const section = targetSection
-            ? document.querySelector(`[data-load-section="${targetSection}"]`)
-            : null;
-
-        if (!section || section.dataset.browseSectionLoaded === "1") {
-            return;
-        }
-
-        const loadButton = section.querySelector("[data-load-more]");
-
-        if (!loadButton || loadButton.classList.contains("d-none")) {
-            section.dataset.browseSectionLoaded = "1";
-            return;
-        }
-
-        section.dataset.browseSectionLoaded = "1";
-        loadButton.click();
-    });
-});
-</script>
+<script src="{% static 'js/catalog/browse.js' %}?v=section-scroll-20260715"></script>
 {% endblock %}

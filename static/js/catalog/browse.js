@@ -1,6 +1,7 @@
 document.addEventListener("DOMContentLoaded", function () {
     const unfollowStatusValue = "__unfollow__";
     const dropdownOptionPageSize = 10;
+    const sectionPageSize = 10;
     const dropdowns = Array.from(document.querySelectorAll(".searchable-dropdown"));
     const statusModalElement = document.getElementById("tracking-status-modal");
     const statusModalTitle = document.getElementById("tracking-status-modal-title");
@@ -14,43 +15,6 @@ document.addEventListener("DOMContentLoaded", function () {
     let statusModalResolve = null;
     let statusModalContext = null;
     let statusModalControls = null;
-
-    function applySectionVisibilityToggle(toggle) {
-        const targetSection = toggle.dataset.targetSection;
-
-        if (!targetSection) {
-            return;
-        }
-
-        const section = document.querySelector(`[data-load-section="${targetSection}"]`);
-
-        if (!section) {
-            return;
-        }
-
-        const shouldShow = toggle.checked;
-
-        section.classList.toggle("d-none", !shouldShow);
-        section.hidden = !shouldShow;
-    }
-
-    function applyAllSectionVisibilityToggles() {
-        document.querySelectorAll("[data-section-visibility-toggle]").forEach(function (toggle) {
-            applySectionVisibilityToggle(toggle);
-        });
-    }
-
-    document.addEventListener("change", function (event) {
-        const toggle = event.target.closest("[data-section-visibility-toggle]");
-
-        if (!toggle) {
-            return;
-        }
-
-        applySectionVisibilityToggle(toggle);
-    });
-
-    applyAllSectionVisibilityToggles();
 
     function getCsrfToken() {
         const csrfInput = document.querySelector("input[name='csrfmiddlewaretoken']");
@@ -138,7 +102,8 @@ document.addEventListener("DOMContentLoaded", function () {
         let latestRequestNumber = 0;
         let isLoadingOptions = false;
         let nextOffset = countRenderedOptions(optionsContainer);
-        let hasMoreOptions = nextOffset >= dropdownOptionPageSize;
+        let hasMoreOptions = true;
+        let hasLoadedOptions = nextOffset > 0;
 
         function buildOptionsUrl(offset) {
             const url = new URL(optionsUrl, window.location.origin);
@@ -173,6 +138,10 @@ document.addEventListener("DOMContentLoaded", function () {
                 return;
             }
 
+            if (!append && isLoadingOptions) {
+                return;
+            }
+
             latestRequestNumber += 1;
 
             const requestNumber = latestRequestNumber;
@@ -203,6 +172,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
                     nextOffset = Number(data.next_offset || offset + optionRows.length);
                     hasMoreOptions = Boolean(data.has_more);
+                    hasLoadedOptions = true;
                 })
                 .catch(function () {
                     if (noResultsMessage) {
@@ -216,14 +186,16 @@ document.addEventListener("DOMContentLoaded", function () {
                 });
         }
 
+        function resetAndFetchOptions() {
+            nextOffset = 0;
+            hasMoreOptions = true;
+            hasLoadedOptions = false;
+            fetchOptions({ append: false });
+        }
+
         function scheduleFetchOptions() {
             window.clearTimeout(debounceTimer);
-
-            debounceTimer = window.setTimeout(function () {
-                nextOffset = 0;
-                hasMoreOptions = true;
-                fetchOptions({ append: false });
-            }, 150);
+            debounceTimer = window.setTimeout(resetAndFetchOptions, 150);
         }
 
         searchInput.addEventListener("input", scheduleFetchOptions);
@@ -244,17 +216,25 @@ document.addEventListener("DOMContentLoaded", function () {
         dropdownButton.addEventListener("shown.bs.dropdown", function () {
             searchInput.focus();
             searchInput.select();
+
+            if (!hasLoadedOptions && countRenderedOptions(optionsContainer) === 0) {
+                fetchOptions({ append: false });
+            }
+        });
+
+        dropdown.addEventListener("hidden.bs.dropdown", function () {
+            if (!searchInput.value) {
+                return;
+            }
+
+            searchInput.value = "";
+            resetAndFetchOptions();
         });
     });
 
     function getCountFromDataset(source, name) {
         const value = Number(source.dataset[name] || "0");
-
-        if (Number.isNaN(value)) {
-            return 0;
-        }
-
-        return value;
+        return Number.isNaN(value) ? 0 : value;
     }
 
     function issueLabel(count) {
@@ -319,7 +299,6 @@ document.addEventListener("DOMContentLoaded", function () {
             }
 
             const missingIssues = totalIssues - trackedIssues;
-
             return `You follow ${trackedIssues} of ${totalIssues} ${issueLabel(totalIssues)} in this run. Follow the remaining ${missingIssues} and mark all ${totalIssues} as Read too?`;
         }
 
@@ -332,7 +311,6 @@ document.addEventListener("DOMContentLoaded", function () {
         }
 
         const missingIssues = totalIssues - trackedIssues;
-
         return `You follow ${trackedIssues} of ${totalIssues} ${issueLabel(totalIssues)} in this run. Follow the remaining ${missingIssues} and set all ${totalIssues} to ${label}?`;
     }
 
@@ -354,7 +332,6 @@ document.addEventListener("DOMContentLoaded", function () {
 
         choices.forEach(function (choice) {
             const option = document.createElement("option");
-
             option.value = choice.value;
             option.textContent = choice.label;
 
@@ -472,14 +449,12 @@ document.addEventListener("DOMContentLoaded", function () {
 
     function hideStatusModalError() {
         const controls = ensureStatusModalControls();
-
         controls.error.classList.add("d-none");
         controls.error.textContent = "";
     }
 
     function showStatusModalError(message) {
         const controls = ensureStatusModalControls();
-
         controls.error.textContent = message;
         controls.error.classList.remove("d-none");
     }
@@ -496,18 +471,16 @@ document.addEventListener("DOMContentLoaded", function () {
         select.dataset.issueId = String(issue.id);
         populateSelect(select, choices, issue.status || selectedStatus || "planned");
 
+        wrapper.appendChild(label);
+
         if (issue.meta) {
             const meta = document.createElement("small");
             meta.className = "erc-muted";
             meta.textContent = issue.meta;
-            wrapper.appendChild(label);
             wrapper.appendChild(meta);
-        } else {
-            wrapper.appendChild(label);
         }
 
         wrapper.appendChild(select);
-
         return wrapper;
     }
 
@@ -565,11 +538,9 @@ document.addEventListener("DOMContentLoaded", function () {
         };
 
         hideStatusModalError();
-
         statusModalTitle.textContent = `Follow ${itemTypeLabel(itemType)}`;
         statusModalCopy.textContent = `Choose the status to save for this ${itemTypeLabel(itemType)}.`;
         statusModalSelect.value = "planned";
-
         resetRunModalControls(options || {});
 
         if (options && options.error) {
@@ -590,7 +561,6 @@ document.addEventListener("DOMContentLoaded", function () {
 
         const resolve = statusModalResolve;
         statusModalResolve = null;
-
         statusModal.hide();
         resolve(value);
     }
@@ -647,7 +617,6 @@ document.addEventListener("DOMContentLoaded", function () {
 
         if (cellOptions.meta) {
             const meta = document.createElement("span");
-
             meta.className = "erc-muted";
             meta.textContent = " · " + cellOptions.meta;
             cell.appendChild(meta);
@@ -656,22 +625,12 @@ document.addEventListener("DOMContentLoaded", function () {
         row.appendChild(cell);
     }
 
-    function createClickableRow(item) {
-        const row = createClickableRowElement(item);
-
-        bindClickableRow(row);
-
-        return row;
-    }
-
     function createClickableRowElement(item) {
         const row = document.createElement("tr");
-
         row.className = "clickable-row";
         row.dataset.rowUrl = item.row_url;
         row.tabIndex = 0;
         row.setAttribute("aria-label", item.aria_label || "Open details");
-
         return row;
     }
 
@@ -700,17 +659,21 @@ document.addEventListener("DOMContentLoaded", function () {
         });
     }
 
+    function createClickableRow(item) {
+        const row = createClickableRowElement(item);
+        bindClickableRow(row);
+        return row;
+    }
+
     function currentNextValue() {
         return window.location.pathname + window.location.search;
     }
 
     function createHiddenInput(name, value) {
         const input = document.createElement("input");
-
         input.type = "hidden";
         input.name = name;
         input.value = value;
-
         return input;
     }
 
@@ -753,14 +716,12 @@ document.addEventListener("DOMContentLoaded", function () {
             form.dataset.currentStatus = tracking.status || "";
 
             const select = document.createElement("select");
-
             select.name = "status";
             select.className = "form-select form-select-sm";
             select.dataset.autoSubmit = "";
 
             (tracking.status_choices || []).forEach(function (choice) {
                 const option = document.createElement("option");
-
                 option.value = choice.value;
                 option.textContent = choice.label;
 
@@ -783,17 +744,14 @@ document.addEventListener("DOMContentLoaded", function () {
             form.dataset.trackFollow = "";
 
             const button = document.createElement("button");
-
             button.type = "submit";
             button.className = "btn btn-outline-light btn-sm erc-track-button";
             button.textContent = "Follow";
-
             form.appendChild(button);
         }
 
         bindTrackingForm(form);
         cell.appendChild(form);
-
         return cell;
     }
 
@@ -807,75 +765,37 @@ document.addEventListener("DOMContentLoaded", function () {
 
     function createRunRow(item) {
         const row = createClickableRow(item);
-
-        addCell(row, runTitleWithYear(item), {
-            bold: true,
-            linkLike: true,
-            href: item.row_url,
-        });
-        addCell(row, item.publisher, {
-            meta: item.status,
-        });
-        addCell(row, item.issue_count, {
-            muted: item.issue_count_muted,
-        });
+        addCell(row, runTitleWithYear(item), { bold: true, linkLike: true, href: item.row_url });
+        addCell(row, item.publisher, { meta: item.status });
+        addCell(row, item.issue_count, { muted: item.issue_count_muted });
         row.appendChild(createTrackingCell(item.tracking));
-
         return row;
     }
 
     function createVolumeRow(item) {
         const row = createClickableRow(item);
-
-        addCell(row, item.volume, {
-            bold: true,
-            linkLike: true,
-            href: item.row_url,
-        });
-        addCell(row, item.run, {
-            linkLike: true,
-        });
-        addCell(row, item.release_date, {
-            muted: item.release_date_muted,
-        });
+        addCell(row, item.volume, { bold: true, linkLike: true, href: item.row_url });
+        addCell(row, item.run, { linkLike: true });
+        addCell(row, item.release_date, { muted: item.release_date_muted });
         row.appendChild(createTrackingCell(item.tracking));
-
         return row;
     }
 
     function createIssueRow(item) {
         const row = createClickableRow(item);
-
-        addCell(row, item.issue, {
-            bold: true,
-            linkLike: true,
-            href: item.row_url,
-        });
-        addCell(row, item.run, {
-            linkLike: true,
-        });
-        addCell(row, item.published_date, {
-            muted: item.published_date_muted,
-        });
+        addCell(row, item.issue, { bold: true, linkLike: true, href: item.row_url });
+        addCell(row, item.run, { linkLike: true });
+        addCell(row, item.published_date, { muted: item.published_date_muted });
         row.appendChild(createTrackingCell(item.tracking));
-
         return row;
     }
 
     function createOneShotRow(item) {
         const row = createClickableRow(item);
-
-        addCell(row, item.title, {
-            bold: true,
-            linkLike: true,
-            href: item.row_url,
-        });
+        addCell(row, item.title, { bold: true, linkLike: true, href: item.row_url });
         addCell(row, item.publisher);
-        addCell(row, item.published_date, {
-            muted: item.published_date_muted,
-        });
+        addCell(row, item.published_date, { muted: item.published_date_muted });
         row.appendChild(createTrackingCell(item.tracking));
-
         return row;
     }
 
@@ -895,60 +815,195 @@ document.addEventListener("DOMContentLoaded", function () {
         return createOneShotRow(item);
     }
 
-    function updateSectionControls(section) {
+    function rowCount(section) {
         const target = section.querySelector("[data-load-target]");
+        return target ? target.querySelectorAll("tr").length : 0;
+    }
+
+    function updateSectionControls(section) {
         const loadedCount = section.querySelector("[data-loaded-count]");
-        const loadButton = section.querySelector("[data-load-more]");
-        const hideButton = section.querySelector("[data-hide-more]");
+        const visibleCount = rowCount(section);
 
-        if (!target) {
-            return;
-        }
-
-        const visibleCount = target.querySelectorAll("tr").length;
+        section.dataset.offset = String(visibleCount);
 
         if (loadedCount) {
             loadedCount.textContent = "Showing " + visibleCount + " loaded";
         }
-
-        if (loadButton) {
-            loadButton.dataset.offset = String(visibleCount);
-        }
-
-        if (hideButton) {
-            const minVisible = Number(hideButton.dataset.minVisible || "5");
-            hideButton.classList.toggle("d-none", visibleCount <= minVisible);
-        }
     }
 
-    function buildItemsUrl(button) {
-        const url = new URL(button.dataset.itemsUrl, window.location.origin);
+    function buildItemsUrl(section) {
+        const url = new URL(section.dataset.itemsUrl, window.location.origin);
 
-        url.searchParams.set("kind", button.dataset.kind);
-        url.searchParams.set("offset", button.dataset.offset || "0");
+        url.searchParams.set("kind", section.dataset.kind || section.dataset.loadSection || "");
+        url.searchParams.set("offset", section.dataset.offset || "0");
 
-        if (button.dataset.filterPublisherId) {
-            url.searchParams.set("publisher", button.dataset.filterPublisherId);
+        if (section.dataset.filterPublisherId) {
+            url.searchParams.set("publisher", section.dataset.filterPublisherId);
         }
 
-        if (button.dataset.filterRunId) {
-            url.searchParams.set("run", button.dataset.filterRunId);
+        if (section.dataset.filterRunId) {
+            url.searchParams.set("run", section.dataset.filterRunId);
         }
 
-        if (button.dataset.filterIssueId) {
-            url.searchParams.set("issue", button.dataset.filterIssueId);
+        if (section.dataset.filterIssueId) {
+            url.searchParams.set("issue", section.dataset.filterIssueId);
         }
 
-        if (button.dataset.filterVolumeId) {
-            url.searchParams.set("volume", button.dataset.filterVolumeId);
+        if (section.dataset.filterVolumeId) {
+            url.searchParams.set("volume", section.dataset.filterVolumeId);
         }
 
-        if (button.dataset.filterOneShotId) {
-            url.searchParams.set("one_shot", button.dataset.filterOneShotId);
+        if (section.dataset.filterOneShotId) {
+            url.searchParams.set("one_shot", section.dataset.filterOneShotId);
         }
 
         return url;
     }
+
+    function setSectionLoading(section, isLoading) {
+        section.dataset.loading = isLoading ? "1" : "0";
+    }
+
+    function appendEmptyRow(section) {
+        const target = section.querySelector("[data-load-target]");
+        const colCount = section.querySelectorAll("thead th").length || 4;
+        const label = section.dataset.emptyMessage || "No items match this filter.";
+
+        if (!target || target.querySelector("[data-empty-row]")) {
+            return;
+        }
+
+        const row = document.createElement("tr");
+        row.dataset.emptyRow = "";
+
+        const cell = document.createElement("td");
+        cell.colSpan = colCount;
+        cell.className = "text-center erc-muted py-4";
+        cell.textContent = label;
+
+        row.appendChild(cell);
+        target.appendChild(row);
+    }
+
+    function removeEmptyRows(section) {
+        section.querySelectorAll("[data-empty-row]").forEach(function (row) {
+            row.remove();
+        });
+    }
+
+    function loadSectionRows(section) {
+        const target = section.querySelector("[data-load-target]");
+
+        if (!target || section.dataset.loading === "1" || section.dataset.hasMore === "0") {
+            return Promise.resolve();
+        }
+
+        setSectionLoading(section, true);
+
+        return fetch(buildItemsUrl(section).toString(), {
+            headers: {
+                "X-Requested-With": "XMLHttpRequest",
+            },
+        })
+            .then(function (response) {
+                if (!response.ok) {
+                    throw new Error("Could not load more rows.");
+                }
+
+                return response.json();
+            })
+            .then(function (data) {
+                const items = data.items || [];
+
+                removeEmptyRows(section);
+
+                items.forEach(function (item) {
+                    target.appendChild(createRow(section.dataset.kind || section.dataset.loadSection, item));
+                });
+
+                section.dataset.hasMore = data.has_more ? "1" : "0";
+                section.dataset.browseSectionLoaded = "1";
+                updateSectionControls(section);
+
+                if (rowCount(section) === 0) {
+                    appendEmptyRow(section);
+                }
+            })
+            .catch(function (error) {
+                window.alert(error.message);
+            })
+            .finally(function () {
+                setSectionLoading(section, false);
+            });
+    }
+
+    function maybeLoadMoreFromScroll(scrollContainer) {
+        const section = scrollContainer.closest("[data-load-section]");
+
+        if (!section || section.hidden || section.dataset.hasMore === "0") {
+            return;
+        }
+
+        const scrollBottom = scrollContainer.scrollTop + scrollContainer.clientHeight;
+        const nearBottom = scrollBottom >= scrollContainer.scrollHeight - 96;
+
+        if (nearBottom) {
+            loadSectionRows(section);
+        }
+    }
+
+    function ensureSectionLoaded(section) {
+        if (!section || section.dataset.browseSectionLoaded === "1") {
+            return;
+        }
+
+        loadSectionRows(section);
+    }
+
+    function applySectionVisibilityToggle(toggle) {
+        const targetSection = toggle.dataset.targetSection;
+
+        if (!targetSection) {
+            return;
+        }
+
+        const section = document.querySelector(`[data-load-section="${targetSection}"]`);
+
+        if (!section) {
+            return;
+        }
+
+        const shouldShow = toggle.checked;
+
+        section.classList.toggle("d-none", !shouldShow);
+        section.hidden = !shouldShow;
+
+        if (shouldShow) {
+            ensureSectionLoaded(section);
+        }
+    }
+
+    function applyAllSectionVisibilityToggles() {
+        document.querySelectorAll("[data-section-visibility-toggle]").forEach(function (toggle) {
+            applySectionVisibilityToggle(toggle);
+        });
+    }
+
+    document.addEventListener("change", function (event) {
+        const toggle = event.target.closest("[data-section-visibility-toggle]");
+
+        if (!toggle) {
+            return;
+        }
+
+        applySectionVisibilityToggle(toggle);
+    });
+
+    document.querySelectorAll("[data-section-scroll]").forEach(function (scrollContainer) {
+        scrollContainer.addEventListener("scroll", function () {
+            maybeLoadMoreFromScroll(scrollContainer);
+        });
+    });
 
     function setFormDisabled(form, disabled) {
         form.querySelectorAll("button, select, input").forEach(function (control) {
@@ -1018,9 +1073,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
     function runFollowOptionsUrl(actionUrl) {
         const url = new URL(actionUrl, window.location.origin);
-
         url.pathname = url.pathname.replace(/\/status\/?$/, "/follow-options/");
-
         return url;
     }
 
@@ -1154,7 +1207,6 @@ document.addEventListener("DOMContentLoaded", function () {
             }
 
             const formData = new FormData(form);
-
             formData.set("status", modalResult.status || "planned");
 
             if (itemType === "run") {
@@ -1167,11 +1219,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
             const data = await postTrackingForm(form.action, formData);
 
-            if (!data) {
-                return;
-            }
-
-            if (data.tracking) {
+            if (data && data.tracking) {
                 replaceMatchingTrackingCells(form.action, data.tracking);
             }
         } catch (error) {
@@ -1223,77 +1271,6 @@ document.addEventListener("DOMContentLoaded", function () {
     });
 
     document.querySelectorAll(".clickable-row").forEach(bindClickableRow);
-
-    document.addEventListener("click", function (event) {
-        const loadButton = event.target.closest("[data-load-more]");
-
-        if (loadButton) {
-            const section = loadButton.closest("[data-load-section]");
-            const target = section ? section.querySelector("[data-load-target]") : null;
-
-            if (!section || !target) {
-                return;
-            }
-
-            loadButton.disabled = true;
-
-            fetch(buildItemsUrl(loadButton).toString(), {
-                headers: {
-                    "X-Requested-With": "XMLHttpRequest",
-                },
-            })
-                .then(function (response) {
-                    if (!response.ok) {
-                        throw new Error("Could not load more rows.");
-                    }
-
-                    return response.json();
-                })
-                .then(function (data) {
-                    (data.items || []).forEach(function (item) {
-                        target.appendChild(createRow(loadButton.dataset.kind, item));
-                    });
-
-                    loadButton.classList.toggle("d-none", !data.has_more);
-                    updateSectionControls(section);
-                })
-                .catch(function (error) {
-                    window.alert(error.message);
-                })
-                .finally(function () {
-                    loadButton.disabled = false;
-                });
-
-            return;
-        }
-
-        const hideButton = event.target.closest("[data-hide-more]");
-
-        if (hideButton) {
-            const section = hideButton.closest("[data-load-section]");
-            const target = section ? section.querySelector("[data-load-target]") : null;
-
-            if (!section || !target) {
-                return;
-            }
-
-            const rows = Array.from(target.querySelectorAll("tr"));
-            const minVisible = Number(hideButton.dataset.minVisible || "5");
-            const hideCount = Number(hideButton.dataset.hideCount || "10");
-            const removableCount = Math.max(rows.length - minVisible, 0);
-            const countToRemove = Math.min(removableCount, hideCount);
-
-            rows.slice(rows.length - countToRemove).forEach(function (row) {
-                row.remove();
-            });
-
-            const loadButton = section.querySelector("[data-load-more]");
-
-            if (loadButton) {
-                loadButton.classList.remove("d-none");
-            }
-
-            updateSectionControls(section);
-        }
-    });
+    document.querySelectorAll("[data-load-section]").forEach(updateSectionControls);
+    applyAllSectionVisibilityToggles();
 });
