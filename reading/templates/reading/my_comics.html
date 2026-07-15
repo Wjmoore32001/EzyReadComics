@@ -4,7 +4,7 @@
 {% block title %}My Comics - EzyReadComics{% endblock %}
 
 {% block content %}
-<div class="erc-page-shell">
+<div class="erc-page-shell" data-csrf-token="{{ csrf_token }}">
     <section class="erc-hero p-4 p-lg-5">
         <div class="erc-hero-content">
             <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-end gap-4">
@@ -84,18 +84,7 @@
 
                             <div class="dropdown-divider"></div>
 
-                            <div data-dropdown-options style="max-height: 18rem; overflow-y: auto;">
-                                {% for option in publisher_filter_options %}
-                                    <a
-                                        href="{{ option.url }}"
-                                        class="dropdown-item rounded {% if selected_publisher_id == option.publisher.id %}active{% endif %}"
-                                        data-dropdown-option
-                                        data-search-label="{{ option.publisher.name }}"
-                                    >
-                                        <span class="fw-semibold">{{ option.publisher.name }}</span>
-                                    </a>
-                                {% endfor %}
-                            </div>
+                            <div data-dropdown-options style="max-height: 18rem; overflow-y: auto;"></div>
 
                             <p class="dropdown-item-text erc-muted mb-0 d-none" data-no-results>
                                 No matching publishers.
@@ -165,27 +154,7 @@
 
                             <div class="dropdown-divider"></div>
 
-                            <div data-dropdown-options style="max-height: 22rem; overflow-y: auto;">
-                                {% for option in run_filter_options %}
-                                    <a
-                                        href="{{ option.url }}"
-                                        class="dropdown-item rounded {% if selected_run_id == option.run.id %}active{% endif %}"
-                                        data-dropdown-option
-                                        data-search-label="{{ option.run.title }} {{ option.run.start_year }} {{ option.run.publisher.name }}"
-                                    >
-                                        <span class="fw-semibold">
-                                            {% if option.run.start_year %}
-                                                {{ option.run.start_year }}
-                                            {% else %}
-                                                Unknown year
-                                            {% endif %}
-                                        </span>
-                                        —
-                                        {{ option.run.title }}
-                                        <span class="erc-muted">· {{ option.run.publisher.name }}</span>
-                                    </a>
-                                {% endfor %}
-                            </div>
+                            <div data-dropdown-options style="max-height: 22rem; overflow-y: auto;"></div>
 
                             <p class="dropdown-item-text erc-muted mb-0 d-none" data-no-results>
                                 No matching runs.
@@ -262,26 +231,7 @@
 
                             <div class="dropdown-divider"></div>
 
-                            <div data-dropdown-options style="max-height: 22rem; overflow-y: auto;">
-                                {% for option in issue_filter_options %}
-                                    <a
-                                        href="{{ option.url }}"
-                                        class="dropdown-item rounded {% if selected_issue_id == option.issue.id %}active{% endif %}"
-                                        data-dropdown-option
-                                        data-search-label="{{ option.issue.run.title }} {{ option.issue.run.start_year }} {{ option.issue.issue_number }} {{ option.issue.run.publisher.name }}"
-                                    >
-                                        <span class="fw-semibold">
-                                            {{ option.issue.run.title }} #{{ option.issue.issue_number }}
-                                        </span>
-                                        <span class="erc-muted">
-                                            · {{ option.issue.run.publisher.name }}
-                                            {% if option.issue.published_date %}
-                                                · {{ option.issue.published_date|date:"Y-m-d" }}
-                                            {% endif %}
-                                        </span>
-                                    </a>
-                                {% endfor %}
-                            </div>
+                            <div data-dropdown-options style="max-height: 22rem; overflow-y: auto;"></div>
 
                             <p class="dropdown-item-text erc-muted mb-0 d-none" data-no-results>
                                 No matching issues.
@@ -354,18 +304,7 @@
 
                             <div class="dropdown-divider"></div>
 
-                            <div data-dropdown-options style="max-height: 18rem; overflow-y: auto;">
-                                {% for option in status_filter_options %}
-                                    <a
-                                        href="{{ option.url }}"
-                                        class="dropdown-item rounded {% if selected_status == option.value %}active{% endif %}"
-                                        data-dropdown-option
-                                        data-search-label="{{ option.label }}"
-                                    >
-                                        <span class="fw-semibold">{{ option.label }}</span>
-                                    </a>
-                                {% endfor %}
-                            </div>
+                            <div data-dropdown-options style="max-height: 18rem; overflow-y: auto;"></div>
 
                             <p class="dropdown-item-text erc-muted mb-0 d-none" data-no-results>
                                 No matching statuses.
@@ -441,26 +380,7 @@
 
                             <div class="dropdown-divider"></div>
 
-                            <div data-dropdown-options style="max-height: 22rem; overflow-y: auto;">
-                                {% for option in one_shot_filter_options %}
-                                    <a
-                                        href="{{ option.url }}"
-                                        class="dropdown-item rounded {% if selected_one_shot_id == option.one_shot.id %}active{% endif %}"
-                                        data-dropdown-option
-                                        data-search-label="{{ option.one_shot.title }} {{ option.one_shot.start_year }} {{ option.one_shot.publisher.name }}"
-                                    >
-                                        <span class="fw-semibold">{{ option.one_shot.title }}</span>
-                                        <span class="erc-muted">
-                                            · {{ option.one_shot.publisher.name }}
-                                            {% if option.one_shot.published_date %}
-                                                · {{ option.one_shot.published_date|date:"Y-m-d" }}
-                                            {% elif option.one_shot.start_year %}
-                                                · {{ option.one_shot.start_year }}
-                                            {% endif %}
-                                        </span>
-                                    </a>
-                                {% endfor %}
-                            </div>
+                            <div data-dropdown-options style="max-height: 22rem; overflow-y: auto;"></div>
 
                             <p class="dropdown-item-text erc-muted mb-0 d-none" data-no-results>
                                 No matching one-shots.
@@ -531,14 +451,28 @@
         </div>
     </section>
 
-    <section class="card erc-panel erc-data-card" data-my-comics-section="runs">
+    <section
+        class="card erc-panel erc-data-card"
+        data-my-comics-section="runs"
+        data-my-comics-section-loaded="1"
+        data-kind="runs"
+        data-items-url="{% url 'reading:my_comics_items' %}"
+        data-offset="{{ followed_runs|length }}"
+        data-has-more="{% if has_more_runs %}1{% else %}0{% endif %}"
+        data-filter-publisher-id="{{ selected_publisher_id|default_if_none:'' }}"
+        data-filter-run-id="{{ selected_run_id|default_if_none:'' }}"
+        data-filter-issue-id="{{ selected_issue_id|default_if_none:'' }}"
+        data-filter-one-shot-id="{{ selected_one_shot_id|default_if_none:'' }}"
+        data-filter-status="{{ selected_status }}"
+        data-empty-message="{% if filters_active %}No followed runs match these filters.{% else %}You are not following any runs yet.{% endif %}"
+    >
         <div class="card-body">
             <div class="erc-section-header">
                 <h2 class="h3 fw-bold mb-0 erc-section-title">Runs</h2>
-                <p class="erc-muted mb-0">{{ followed_runs|length }} result{% if followed_runs|length != 1 %}s{% endif %}</p>
+                <p class="erc-muted mb-0" data-loaded-count>Showing {{ followed_runs|length }} loaded</p>
             </div>
 
-            <div class="table-responsive">
+            <div class="table-responsive erc-section-scroll" data-my-comics-section-scroll style="max-height: 32rem; overflow: auto;">
                 <table class="table table-dark table-hover align-middle mb-0 erc-data-table">
                     <thead>
                     <tr>
@@ -548,9 +482,9 @@
                         <th scope="col">Issues</th>
                     </tr>
                     </thead>
-                    <tbody>
+                    <tbody data-my-comics-load-target>
                     {% for followed_run in followed_runs %}
-                        <tr>
+                        <tr class="clickable-row" data-row-url="{% url 'catalog:run_details' followed_run.run.id %}" tabindex="0" aria-label="Open run details for {{ followed_run.run }}">
                             <td class="fw-semibold">
                                 <a href="{% url 'catalog:run_details' followed_run.run.id %}" class="erc-data-link">
                                     {{ followed_run.run }}
@@ -588,7 +522,7 @@
                             </td>
                         </tr>
                     {% empty %}
-                        <tr>
+                        <tr data-empty-row>
                             <td colspan="4" class="text-center erc-muted py-4">
                                 {% if filters_active %}
                                     No followed runs match these filters.
@@ -604,14 +538,29 @@
         </div>
     </section>
 
-    <section class="card erc-panel erc-data-card d-none" data-my-comics-section="volumes" hidden>
+    <section
+        class="card erc-panel erc-data-card d-none"
+        data-my-comics-section="volumes"
+        data-my-comics-section-loaded="{% if volumes_initially_loaded %}1{% else %}0{% endif %}"
+        data-kind="volumes"
+        data-items-url="{% url 'reading:my_comics_items' %}"
+        data-offset="{{ volume_progress|length }}"
+        data-has-more="{% if has_more_volumes %}1{% else %}0{% endif %}"
+        data-filter-publisher-id="{{ selected_publisher_id|default_if_none:'' }}"
+        data-filter-run-id="{{ selected_run_id|default_if_none:'' }}"
+        data-filter-issue-id="{{ selected_issue_id|default_if_none:'' }}"
+        data-filter-one-shot-id="{{ selected_one_shot_id|default_if_none:'' }}"
+        data-filter-status="{{ selected_status }}"
+        data-empty-message="{% if filters_active %}No followed volumes match these filters.{% else %}You are not following any volumes yet.{% endif %}"
+        hidden
+    >
         <div class="card-body">
             <div class="erc-section-header">
                 <h2 class="h3 fw-bold mb-0 erc-section-title">Volumes</h2>
-                <p class="erc-muted mb-0">{{ volume_progress|length }} result{% if volume_progress|length != 1 %}s{% endif %}</p>
+                <p class="erc-muted mb-0" data-loaded-count>Showing {{ volume_progress|length }} loaded</p>
             </div>
 
-            <div class="table-responsive">
+            <div class="table-responsive erc-section-scroll" data-my-comics-section-scroll style="max-height: 32rem; overflow: auto;">
                 <table class="table table-dark table-hover align-middle mb-0 erc-data-table">
                     <thead>
                     <tr>
@@ -621,9 +570,9 @@
                         <th scope="col" class="text-end">Status</th>
                     </tr>
                     </thead>
-                    <tbody>
+                    <tbody data-my-comics-load-target>
                     {% for progress in volume_progress %}
-                        <tr>
+                        <tr class="clickable-row" data-row-url="{% url 'catalog:volume_details' progress.volume.id %}" tabindex="0" aria-label="Open volume details for {{ progress.volume }}">
                             <td class="fw-semibold">
                                 <a href="{% url 'catalog:volume_details' progress.volume.id %}" class="erc-data-link">{{ progress.volume }}</a>
                             </td>
@@ -650,16 +599,6 @@
                                 </form>
                             </td>
                         </tr>
-                    {% empty %}
-                        <tr>
-                            <td colspan="4" class="text-center erc-muted py-4">
-                                {% if filters_active %}
-                                    No followed volumes match these filters.
-                                {% else %}
-                                    You are not following any volumes yet.
-                                {% endif %}
-                            </td>
-                        </tr>
                     {% endfor %}
                     </tbody>
                 </table>
@@ -667,14 +606,29 @@
         </div>
     </section>
 
-    <section class="card erc-panel erc-data-card {% if not selected_issue_id %}d-none{% endif %}" data-my-comics-section="issues" {% if not selected_issue_id %}hidden{% endif %}>
+    <section
+        class="card erc-panel erc-data-card {% if not selected_issue_id %}d-none{% endif %}"
+        data-my-comics-section="issues"
+        data-my-comics-section-loaded="{% if issues_initially_loaded %}1{% else %}0{% endif %}"
+        data-kind="issues"
+        data-items-url="{% url 'reading:my_comics_items' %}"
+        data-offset="{{ issue_progress|length }}"
+        data-has-more="{% if has_more_issues %}1{% else %}0{% endif %}"
+        data-filter-publisher-id="{{ selected_publisher_id|default_if_none:'' }}"
+        data-filter-run-id="{{ selected_run_id|default_if_none:'' }}"
+        data-filter-issue-id="{{ selected_issue_id|default_if_none:'' }}"
+        data-filter-one-shot-id="{{ selected_one_shot_id|default_if_none:'' }}"
+        data-filter-status="{{ selected_status }}"
+        data-empty-message="{% if filters_active %}No followed issues match these filters.{% else %}You do not have any issue progress yet.{% endif %}"
+        {% if not selected_issue_id %}hidden{% endif %}
+    >
         <div class="card-body">
             <div class="erc-section-header">
                 <h2 class="h3 fw-bold mb-0 erc-section-title">Issues</h2>
-                <p class="erc-muted mb-0">{{ issue_progress|length }} result{% if issue_progress|length != 1 %}s{% endif %}</p>
+                <p class="erc-muted mb-0" data-loaded-count>Showing {{ issue_progress|length }} loaded</p>
             </div>
 
-            <div class="table-responsive">
+            <div class="table-responsive erc-section-scroll" data-my-comics-section-scroll style="max-height: 32rem; overflow: auto;">
                 <table class="table table-dark table-hover align-middle mb-0 erc-data-table">
                     <thead>
                     <tr>
@@ -684,15 +638,11 @@
                         <th scope="col" class="text-end">Status</th>
                     </tr>
                     </thead>
-                    <tbody>
+                    <tbody data-my-comics-load-target>
                     {% for progress in issue_progress %}
-                        <tr>
-                            <td class="fw-semibold">
-                                <a href="{% url 'catalog:issue_details' progress.issue.id %}" class="erc-data-link">#{{ progress.issue.issue_number }}</a>
-                            </td>
-                            <td>
-                                <a href="{% url 'catalog:run_details' progress.issue.run.id %}" class="erc-data-link">{{ progress.issue.run }}</a>
-                            </td>
+                        <tr class="clickable-row" data-row-url="{% url 'catalog:issue_details' progress.issue.id %}" tabindex="0" aria-label="Open issue details for {{ progress.issue }}">
+                            <td class="fw-semibold"><a href="{% url 'catalog:issue_details' progress.issue.id %}" class="erc-data-link">#{{ progress.issue.issue_number }}</a></td>
+                            <td><a href="{% url 'catalog:run_details' progress.issue.run.id %}" class="erc-data-link">{{ progress.issue.run }}</a></td>
                             <td>
                                 {% if progress.issue.published_date %}
                                     {{ progress.issue.published_date|date:"Y-m-d" }}
@@ -713,16 +663,6 @@
                                 </form>
                             </td>
                         </tr>
-                    {% empty %}
-                        <tr>
-                            <td colspan="4" class="text-center erc-muted py-4">
-                                {% if filters_active %}
-                                    No followed issues match these filters.
-                                {% else %}
-                                    You are not following any issues yet.
-                                {% endif %}
-                            </td>
-                        </tr>
                     {% endfor %}
                     </tbody>
                 </table>
@@ -730,14 +670,29 @@
         </div>
     </section>
 
-    <section class="card erc-panel erc-data-card {% if not selected_one_shot_id %}d-none{% endif %}" data-my-comics-section="one_shots" {% if not selected_one_shot_id %}hidden{% endif %}>
+    <section
+        class="card erc-panel erc-data-card {% if not selected_one_shot_id %}d-none{% endif %}"
+        data-my-comics-section="one_shots"
+        data-my-comics-section-loaded="{% if one_shots_initially_loaded %}1{% else %}0{% endif %}"
+        data-kind="one_shots"
+        data-items-url="{% url 'reading:my_comics_items' %}"
+        data-offset="{{ one_shot_progress|length }}"
+        data-has-more="{% if has_more_one_shots %}1{% else %}0{% endif %}"
+        data-filter-publisher-id="{{ selected_publisher_id|default_if_none:'' }}"
+        data-filter-run-id="{{ selected_run_id|default_if_none:'' }}"
+        data-filter-issue-id="{{ selected_issue_id|default_if_none:'' }}"
+        data-filter-one-shot-id="{{ selected_one_shot_id|default_if_none:'' }}"
+        data-filter-status="{{ selected_status }}"
+        data-empty-message="{% if filters_active %}No followed one-shots match these filters.{% else %}You are not following any one-shots yet.{% endif %}"
+        {% if not selected_one_shot_id %}hidden{% endif %}
+    >
         <div class="card-body">
             <div class="erc-section-header">
                 <h2 class="h3 fw-bold mb-0 erc-section-title">One-shots</h2>
-                <p class="erc-muted mb-0">{{ one_shot_progress|length }} result{% if one_shot_progress|length != 1 %}s{% endif %}</p>
+                <p class="erc-muted mb-0" data-loaded-count>Showing {{ one_shot_progress|length }} loaded</p>
             </div>
 
-            <div class="table-responsive">
+            <div class="table-responsive erc-section-scroll" data-my-comics-section-scroll style="max-height: 32rem; overflow: auto;">
                 <table class="table table-dark table-hover align-middle mb-0 erc-data-table">
                     <thead>
                     <tr>
@@ -747,12 +702,10 @@
                         <th scope="col" class="text-end">Status</th>
                     </tr>
                     </thead>
-                    <tbody>
+                    <tbody data-my-comics-load-target>
                     {% for progress in one_shot_progress %}
-                        <tr>
-                            <td class="fw-semibold">
-                                <a href="{% url 'catalog:one_shot_details' progress.one_shot.id %}" class="erc-data-link">{{ progress.one_shot.title }}</a>
-                            </td>
+                        <tr class="clickable-row" data-row-url="{% url 'catalog:one_shot_details' progress.one_shot.id %}" tabindex="0" aria-label="Open one-shot details for {{ progress.one_shot.title }}">
+                            <td class="fw-semibold"><a href="{% url 'catalog:one_shot_details' progress.one_shot.id %}" class="erc-data-link">{{ progress.one_shot.title }}</a></td>
                             <td>{{ progress.one_shot.publisher.name }}</td>
                             <td>
                                 {% if progress.one_shot.published_date %}
@@ -776,16 +729,6 @@
                                 </form>
                             </td>
                         </tr>
-                    {% empty %}
-                        <tr>
-                            <td colspan="4" class="text-center erc-muted py-4">
-                                {% if filters_active %}
-                                    No followed one-shots match these filters.
-                                {% else %}
-                                    You are not following any one-shots yet.
-                                {% endif %}
-                            </td>
-                        </tr>
                     {% endfor %}
                     </tbody>
                 </table>
@@ -796,5 +739,5 @@
 {% endblock %}
 
 {% block extra_scripts %}
-<script src="{% static 'js/reading/my-comics.js' %}?v=remove-stat-boxes-20260715"></script>
+<script src="{% static 'js/reading/my-comics.js' %}?v=section-scroll-20260715"></script>
 {% endblock %}

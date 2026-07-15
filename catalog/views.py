@@ -685,8 +685,8 @@ def get_browse_querysets(
 
 
 def slice_with_has_more(queryset, *, limit, offset=0):
-    items = list(queryset[offset : offset + limit])
-    return items, len(items) == limit
+    items = list(queryset[offset : offset + limit + 1])
+    return items[:limit], len(items) > limit
 
 
 def get_option_page(queryset, *, offset=0):
