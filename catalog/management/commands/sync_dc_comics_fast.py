@@ -13,8 +13,10 @@ from catalog.dc.writer import (
     add_results,
     run_identity_from_detail,
     run_status_from_detail,
+    source_key,
     write_dc_detail,
 )
+from catalog.models import ComicIssue, ComicOneShot, ComicVolume
 
 
 class Command(BaseCommand):
@@ -40,6 +42,11 @@ class Command(BaseCommand):
             "--detail-url",
             default="",
             help="Specific DC detail URL to sync. When set, Browse Comics is skipped.",
+        )
+        parser.add_argument(
+            "--rescan-existing",
+            action="store_true",
+            help="Re-read seed detail pages even when the exact source URL or normalized source key already exists locally.",
         )
         parser.add_argument(
             "--dry-run",
@@ -69,11 +76,14 @@ class Command(BaseCommand):
         start_page = options["page"]
         page_count = options["page_count"]
         detail_url = options["detail_url"].strip()
+        rescan_existing = options["rescan_existing"]
         dry_run = options["dry_run"]
         headed = options["headed"]
         timeout_ms = options["timeout"]
         verbose = options["verbose"]
         self.skipped_details = []
+        self.existing_exact_url_skipped = 0
+        self.existing_source_key_skipped = 0
 
         if start_page < 1:
             raise CommandError("--page must be at least 1.")
@@ -88,6 +98,7 @@ class Command(BaseCommand):
             start_page=start_page,
             page_count=page_count,
             detail_url=detail_url,
+            rescan_existing=rescan_existing,
             dry_run=dry_run,
             headed=headed,
             timeout_ms=timeout_ms,
@@ -96,6 +107,7 @@ class Command(BaseCommand):
         if detail_url:
             total = self.sync_direct_detail_url(
                 detail_url=detail_url,
+                rescan_existing=rescan_existing,
                 dry_run=dry_run,
                 headed=headed,
                 timeout_ms=timeout_ms,
@@ -105,6 +117,7 @@ class Command(BaseCommand):
             total = self.sync_browse_pages(
                 start_page=start_page,
                 page_count=page_count,
+                rescan_existing=rescan_existing,
                 dry_run=dry_run,
                 headed=headed,
                 timeout_ms=timeout_ms,
@@ -115,7 +128,43 @@ class Command(BaseCommand):
         self.print_totals(total)
         close_old_connections()
 
-    def sync_direct_detail_url(self, *, detail_url, dry_run, headed, timeout_ms, verbose):
+    def sync_direct_detail_url(
+        self,
+        *,
+        detail_url,
+        rescan_existing,
+        dry_run,
+        headed,
+        timeout_ms,
+        verbose,
+    ):
+        if not rescan_existing:
+            existing_sources = get_existing_dc_sources([detail_url])
+            existing_match = dc_existing_match_kind(
+                seed_url=detail_url,
+                existing_sources=existing_sources,
+            )
+
+            if existing_match == "exact_url":
+                self.existing_exact_url_skipped += 1
+                self.stdout.write(
+                    self.style.WARNING(
+                        f"Direct detail URL skipped because exact URL already exists locally: {detail_url}"
+                    )
+                )
+                self.stdout.write("Detail pages read: 0")
+                return DcWriteResult()
+
+            if existing_match == "source_key":
+                self.existing_source_key_skipped += 1
+                self.stdout.write(
+                    self.style.WARNING(
+                        f"Direct detail URL skipped because normalized source key already exists locally: {detail_url}"
+                    )
+                )
+                self.stdout.write("Detail pages read: 0")
+                return DcWriteResult()
+
         detail = self.read_seed_detail(
             detail_url=detail_url,
             headed=headed,
@@ -132,7 +181,17 @@ class Command(BaseCommand):
         close_old_connections()
         return total
 
-    def sync_browse_pages(self, *, start_page, page_count, dry_run, headed, timeout_ms, verbose):
+    def sync_browse_pages(
+        self,
+        *,
+        start_page,
+        page_count,
+        rescan_existing,
+        dry_run,
+        headed,
+        timeout_ms,
+        verbose,
+    ):
         total = DcWriteResult()
         processed_detail_keys = set()
 
@@ -160,9 +219,38 @@ class Command(BaseCommand):
                     )
                 )
 
+            existing_sources = empty_existing_sources()
+
+            if not rescan_existing:
+                close_old_connections()
+                existing_sources = get_existing_dc_sources(
+                    seed_link.get("href")
+                    for seed_link in seed_links
+                )
+                close_old_connections()
+
+                precheck = summarize_seed_precheck(
+                    seed_links=seed_links,
+                    existing_sources=existing_sources,
+                    processed_detail_keys=processed_detail_keys,
+                )
+                self.stdout.write(
+                    f"Browse page {page_number}: "
+                    f"{precheck['exact_url']} exact URLs already exist, "
+                    f"{precheck['source_key']} source-key fallback matches, "
+                    f"{precheck['pending']} pending detail reads, "
+                    f"{precheck['duplicates']} duplicate URLs skipped"
+                )
+            else:
+                self.stdout.write(
+                    f"Browse page {page_number}: existing-source precheck disabled by --rescan-existing"
+                )
+
             page_result = DcWriteResult()
             page_details_read = 0
             page_duplicate_skipped = 0
+            page_existing_exact_skipped = 0
+            page_existing_key_skipped = 0
 
             for seed_index, seed_link in enumerate(seed_links, start=1):
                 seed_url = clean_text(seed_link.get("href"))
@@ -170,13 +258,44 @@ class Command(BaseCommand):
                 if not seed_url:
                     continue
 
-                seed_key = normalize_url_for_compare(seed_url)
+                duplicate_key = normalize_url_for_compare(seed_url)
 
-                if seed_key in processed_detail_keys:
+                if duplicate_key in processed_detail_keys:
                     page_duplicate_skipped += 1
                     continue
 
-                processed_detail_keys.add(seed_key)
+                processed_detail_keys.add(duplicate_key)
+
+                if not rescan_existing:
+                    existing_match = dc_existing_match_kind(
+                        seed_url=seed_url,
+                        existing_sources=existing_sources,
+                    )
+
+                    if existing_match == "exact_url":
+                        page_existing_exact_skipped += 1
+                        self.existing_exact_url_skipped += 1
+
+                        if verbose:
+                            self.stdout.write(
+                                self.style.WARNING(
+                                    f"Browse page {page_number} [{seed_index}/{seed_count}]: skipped exact existing URL {seed_url}"
+                                )
+                            )
+                        continue
+
+                    if existing_match == "source_key":
+                        page_existing_key_skipped += 1
+                        self.existing_source_key_skipped += 1
+
+                        if verbose:
+                            self.stdout.write(
+                                self.style.WARNING(
+                                    f"Browse page {page_number} [{seed_index}/{seed_count}]: skipped existing source key for {seed_url}"
+                                )
+                            )
+                        continue
+
                 detail = self.read_seed_detail(
                     detail_url=seed_url,
                     headed=headed,
@@ -209,6 +328,8 @@ class Command(BaseCommand):
             self.stdout.write(
                 f"Browse page {page_number}: page complete "
                 f"({page_details_read} seed detail pages read, "
+                f"exact existing URLs skipped {page_existing_exact_skipped}, "
+                f"source-key existing matches skipped {page_existing_key_skipped}, "
                 f"duplicates skipped {page_duplicate_skipped}, "
                 f"runs +{page_result.runs_created}/~{page_result.runs_updated}, "
                 f"issues +{page_result.issues_created}/~{page_result.issues_updated}, "
@@ -280,6 +401,7 @@ class Command(BaseCommand):
         start_page,
         page_count,
         detail_url,
+        rescan_existing,
         dry_run,
         headed,
         timeout_ms,
@@ -302,6 +424,14 @@ class Command(BaseCommand):
         self.stdout.write("Series expansion: off")
         self.stdout.write("More From This Series scan: off")
         self.stdout.write("Write cadence: per seed detail page")
+        self.stdout.write(
+            "Existing source behavior: "
+            + (
+                "rescan existing URLs/source keys"
+                if rescan_existing
+                else "skip exact full URLs first, then source-key fallback, before browser detail reads"
+            )
+        )
         self.stdout.write("Duplicate behavior: keep a small URL set to avoid repeat seed reads across pages")
         self.stdout.write("")
 
@@ -407,6 +537,8 @@ class Command(BaseCommand):
     def print_totals(self, total):
         self.stdout.write("")
         self.stdout.write(self.style.SUCCESS("DC fast sync totals"))
+        self.stdout.write(f"Exact existing source URLs skipped: {self.existing_exact_url_skipped}")
+        self.stdout.write(f"Existing source-key fallback matches skipped: {self.existing_source_key_skipped}")
         self.stdout.write(f"Runs created: {total.runs_created}")
         self.stdout.write(f"Runs updated: {total.runs_updated}")
         self.stdout.write(f"Run stats updated: {total.run_stats_updated}")
@@ -436,6 +568,111 @@ def detail_write_priority(detail):
         "standalone_graphic_novel_or_one_shot": 30,
     }
     return priorities.get(detail.classification, 90)
+
+
+def empty_existing_sources():
+    return {
+        "urls": set(),
+        "keys": set(),
+    }
+
+
+def get_existing_dc_sources(urls):
+    exact_urls = set()
+    source_keys = set()
+
+    for url in urls:
+        url = clean_text(url)
+
+        if not url:
+            continue
+
+        exact_urls.add(url)
+
+        key = source_key(url)
+
+        if key:
+            source_keys.add(key)
+
+    existing_sources = empty_existing_sources()
+
+    if exact_urls:
+        for model in dc_source_models():
+            existing_sources["urls"].update(
+                clean_text(value)
+                for value in model.objects.filter(
+                    official_source_url__in=exact_urls,
+                ).values_list("official_source_url", flat=True)
+                if clean_text(value)
+            )
+
+    if source_keys:
+        for model in dc_source_models():
+            existing_sources["keys"].update(
+                clean_text(value)
+                for value in model.objects.filter(
+                    official_source_key__in=source_keys,
+                ).values_list("official_source_key", flat=True)
+                if clean_text(value)
+            )
+
+    return existing_sources
+
+
+def dc_source_models():
+    return (ComicIssue, ComicVolume, ComicOneShot)
+
+
+def summarize_seed_precheck(*, seed_links, existing_sources, processed_detail_keys):
+    counts = {
+        "exact_url": 0,
+        "source_key": 0,
+        "pending": 0,
+        "duplicates": 0,
+    }
+    page_seen_duplicate_keys = set()
+
+    for seed_link in seed_links:
+        seed_url = clean_text(seed_link.get("href"))
+
+        if not seed_url:
+            continue
+
+        duplicate_key = normalize_url_for_compare(seed_url)
+
+        if duplicate_key in processed_detail_keys or duplicate_key in page_seen_duplicate_keys:
+            counts["duplicates"] += 1
+            continue
+
+        page_seen_duplicate_keys.add(duplicate_key)
+        existing_match = dc_existing_match_kind(
+            seed_url=seed_url,
+            existing_sources=existing_sources,
+        )
+
+        if existing_match:
+            counts[existing_match] += 1
+        else:
+            counts["pending"] += 1
+
+    return counts
+
+
+def dc_existing_match_kind(*, seed_url, existing_sources):
+    seed_url = clean_text(seed_url)
+
+    if not seed_url:
+        return ""
+
+    if seed_url in existing_sources["urls"]:
+        return "exact_url"
+
+    key = source_key(seed_url)
+
+    if key and key in existing_sources["keys"]:
+        return "source_key"
+
+    return ""
 
 
 def normalize_url_for_compare(value):
