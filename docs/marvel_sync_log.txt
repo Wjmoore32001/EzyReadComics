@@ -1,2 +1,10 @@
 Processing Marvel release calendar window: 2023-12-20 to 2023-12-26 - Not done
 Processing Marvel release calendar window: 2023-10-25 to 2023-10-31 - Not done
+Processing Marvel release calendar window: 2023-06-21 to 2023-06-27
+Processing Marvel release calendar window: 2023-04-05 to 2023-04-11
+
+
+
+Browse page 72 [14/20]: 12 detail pages read
+Browse page 72 [14/20]: batch complete (runs +1/~1, issues +11/~0, volumes +1/~0, one-shots +0/~0, skipped 0)
+Browse page 72 [15/20]: 19 detail pages read

@@ -63,13 +63,14 @@ class SeriesReadRecord:
     series_url: str
     series: object = None
     error: str = ""
+    duplicate: bool = False
+    series_key: str = ""
 
 
 class Command(BaseCommand):
     help = (
         "Sync current Marvel release calendar issues from Marvel.com. "
-        "Series-first flow: release calendar issue -> Back to Series -> full series issue map -> needed issue details. "
-        "No AI calls. No Comic Vine calls."
+        "Series-first flow: release calendar issue -> Back to Series -> full series issue map -> needed issue details."
     )
 
     def add_arguments(self, parser):
@@ -138,12 +139,12 @@ class Command(BaseCommand):
         parser.add_argument(
             "--raw",
             action="store_true",
-            help="Print rendered calendar and series/debug data.",
+            help="Print rendered calendar debug data.",
         )
         parser.add_argument(
             "--verbose",
             action="store_true",
-            help="Print each series and issue-level action.",
+            help="Print issue-level write actions.",
         )
 
     def handle(self, *args, **options):
@@ -190,7 +191,6 @@ class Command(BaseCommand):
             detail_limit=detail_limit,
             skip_details=skip_details,
             skip_missing_issues=skip_missing_issues,
-            missing_issue_limit=missing_issue_limit,
             calendar_start_date=calendar_start_date,
             calendar_end_date=calendar_end_date,
             calendar_url=calendar_url,
@@ -200,13 +200,13 @@ class Command(BaseCommand):
         )
 
         totals = new_totals()
+        close_old_connections()
 
-        read_result = read_calendar_and_series_pages(
+        read_result = read_calendar_seed_issues(
             calendar_url=calendar_url,
             limit=limit,
             headed=headed,
-            calendar_timeout=calendar_timeout,
-            detail_timeout=detail_timeout,
+            timeout_ms=calendar_timeout,
         )
 
         rendered_calendar = read_result["rendered_calendar"]
@@ -214,8 +214,6 @@ class Command(BaseCommand):
         kept_calendar_issues = read_result["kept_calendar_issues"]
         keyword_skipped_issues = read_result["keyword_skipped_issues"]
         limit_skipped_issues = read_result["limit_skipped_issues"]
-        duplicate_series_seed_issues = read_result["duplicate_series_seed_issues"]
-        series_records = read_result["series_records"]
 
         totals["calendar_browser_reads"] = 1
         totals["calendar_found"] = len(calendar_issues)
@@ -223,37 +221,6 @@ class Command(BaseCommand):
         totals["keyword_skipped"] = len(keyword_skipped_issues)
         totals["limit_skipped"] = read_result["limit_skipped"]
         totals["calendar_processed"] = len(kept_calendar_issues)
-        totals["series_page_reads"] = read_result["series_page_reads"]
-        totals["series_found"] = len(
-            [
-                record
-                for record in series_records
-                if record.series is not None and not record.series.errors
-            ]
-        )
-        totals["series_read_failures"] = len(
-            [
-                record
-                for record in series_records
-                if record.error or (record.series is not None and record.series.errors)
-            ]
-        )
-        totals["duplicate_series_seeds"] = read_result["duplicate_series_seeds"]
-        totals["raw_series_issue_links"] = sum(
-            record.series.raw_issue_link_count
-            for record in series_records
-            if record.series is not None
-        )
-        totals["unique_series_issue_links"] = sum(
-            len(record.series.issues)
-            for record in series_records
-            if record.series is not None
-        )
-        totals["load_more_clicks"] = sum(
-            record.series.load_more_clicks
-            for record in series_records
-            if record.series is not None
-        )
 
         for issue in keyword_skipped_issues:
             totals["skipped_reports"].append(
@@ -273,71 +240,76 @@ class Command(BaseCommand):
                 )
             )
 
-        for issue in duplicate_series_seed_issues:
-            totals["skipped_reports"].append(
-                build_skip_report(
-                    item=format_calendar_issue(issue),
-                    reason="duplicate series seed already processed in this run",
-                    url=get_object_value(issue, "detail_url"),
-                )
-            )
-
-        for record in series_records:
-            if record.error:
-                totals["skipped_reports"].append(
-                    build_skip_report(
-                        item=format_calendar_issue(record.seed_issue),
-                        reason=record.error,
-                        url=get_object_value(record.seed_issue, "detail_url"),
-                        series_url=record.series_url,
-                    )
-                )
-            elif record.series is not None and record.series.errors:
-                totals["skipped_reports"].append(
-                    build_skip_report(
-                        item=format_calendar_issue(record.seed_issue),
-                        reason="; ".join(record.series.errors),
-                        url=get_object_value(record.seed_issue, "detail_url"),
-                        series_url=record.series_url,
-                    )
-                )
-
         if raw:
             self.print_raw_calendar(rendered_calendar)
 
-        if verbose and calendar_issues:
-            self.stdout.write("")
-            self.stdout.write(self.style.SUCCESS("Calendar issues parsed"))
+        if not kept_calendar_issues:
+            self.stdout.write("No kept calendar issues to process.")
+            self.print_summary(totals=totals, dry_run=dry_run)
+            return
 
-            for issue in calendar_issues:
-                self.stdout.write(format_calendar_issue(issue))
-
-        if verbose and keyword_skipped_issues:
-            self.stdout.write("")
-            self.stdout.write(self.style.WARNING("Skipped by keyword"))
-
-            for issue in keyword_skipped_issues:
-                self.stdout.write(format_calendar_issue(issue))
-
-        series_plans = []
         seed_issue_identities = {
             issue_number_identity(issue)
             for issue in kept_calendar_issues
         }
+        seen_series_keys = set()
+        detail_reads_used = 0
+        seed_count = len(kept_calendar_issues)
 
-        close_old_connections()
+        for seed_index, calendar_issue in enumerate(kept_calendar_issues, start=1):
+            record = read_unique_series_record_for_seed(
+                calendar_issue=calendar_issue,
+                seen_series_keys=seen_series_keys,
+                headed=headed,
+                timeout_ms=detail_timeout,
+            )
 
-        for record in series_records:
-            if record.error:
+            if record.duplicate:
+                totals["duplicate_series_seeds"] += 1
+                totals["skipped_reports"].append(
+                    build_skip_report(
+                        item=format_calendar_issue(record.seed_issue),
+                        reason="duplicate series seed already processed in this run",
+                        url=get_object_value(record.seed_issue, "detail_url"),
+                        series_url=record.series_url,
+                    )
+                )
+                self.print_duplicate_seed(
+                    seed_index=seed_index,
+                    seed_count=seed_count,
+                    record=record,
+                )
                 continue
 
-            if record.series is None:
+            if record.series is not None:
+                totals["series_page_reads"] += 1
+
+            if record.error or record.series is None or record.series.errors:
+                totals["series_read_failures"] += 1
+                totals["skipped_reports"].append(
+                    build_skip_report(
+                        item=format_calendar_issue(record.seed_issue),
+                        reason=record_error_text(record),
+                        url=get_object_value(record.seed_issue, "detail_url"),
+                        series_url=record.series_url,
+                    )
+                )
+                self.print_seed_skipped(
+                    seed_index=seed_index,
+                    seed_count=seed_count,
+                    record=record,
+                )
                 continue
 
-            if record.series.errors:
-                continue
+            series = record.series
+            totals["series_found"] += 1
+            totals["load_more_clicks"] += series.load_more_clicks
+            totals["raw_series_issue_links"] += series.raw_issue_link_count
+            totals["unique_series_issue_links"] += len(series.issues)
 
-            series_plan = build_series_sync_plan(record.series)
+            close_old_connections()
+            series_plan = build_series_sync_plan(series)
+            close_old_connections()
 
             if skip_missing_issues:
                 series_plan.issue_detail_plans = [
@@ -349,81 +321,59 @@ class Command(BaseCommand):
                     )
                 ]
 
-            series_plans.append(series_plan)
+            planned_detail_reads = len(series_plan.issue_detail_plans)
+            totals["planned_issue_detail_reads"] += planned_detail_reads
 
-        detail_targets = []
+            detail_targets = []
+            skipped_detail_targets = []
 
-        if not skip_details:
-            for series_plan in series_plans:
-                detail_targets.extend(series_plan.issue_detail_plans)
-
-        totals["planned_issue_detail_reads"] = len(detail_targets)
-
-        if detail_limit is not None and len(detail_targets) > detail_limit:
-            skipped_detail_targets = detail_targets[detail_limit:]
-            totals["detail_limit_skipped"] = len(skipped_detail_targets)
-            detail_targets = detail_targets[:detail_limit]
-
-            for issue_plan in skipped_detail_targets:
-                totals["skipped_reports"].append(
-                    build_skip_report(
-                        item=format_series_issue(issue_plan.series_issue),
-                        reason="skipped by detail limit",
-                        url=get_object_value(issue_plan.series_issue, "detail_url"),
-                    )
+            if not skip_details:
+                detail_targets, skipped_detail_targets, detail_reads_used = apply_detail_limit(
+                    issue_detail_plans=series_plan.issue_detail_plans,
+                    detail_limit=detail_limit,
+                    detail_reads_used=detail_reads_used,
                 )
 
-        detail_map = {}
+            if skipped_detail_targets:
+                totals["detail_limit_skipped"] += len(skipped_detail_targets)
 
-        if detail_targets:
-            detail_map = read_planned_issue_details(
-                detail_targets=detail_targets,
-                headed=headed,
-                timeout_ms=detail_timeout,
-            )
+                for issue_plan in skipped_detail_targets:
+                    totals["skipped_reports"].append(
+                        build_skip_report(
+                            item=format_series_issue(issue_plan.series_issue),
+                            reason="skipped by detail limit",
+                            url=get_object_value(issue_plan.series_issue, "detail_url"),
+                        )
+                    )
 
-        totals["detail_browser_reads"] = len(detail_map)
+            detail_map = {}
 
-        for detail in detail_map.values():
-            if get_detail_value(detail, "error"):
-                totals["detail_read_failures"] += 1
+            if detail_targets:
+                detail_map = read_planned_issue_details(
+                    detail_targets=detail_targets,
+                    headed=headed,
+                    timeout_ms=detail_timeout,
+                )
 
-            missing_fields = get_detail_missing_fields(detail)
+            totals["detail_browser_reads"] += len(detail_map)
+            detail_stats = summarize_detail_map(detail_map)
+            merge_detail_stats(totals, detail_stats)
 
-            if missing_fields:
-                totals["incomplete_details"] += 1
-            else:
-                totals["complete_details"] += 1
-
-            if "description" in missing_fields:
-                totals["missing_description"] += 1
-
-            if "writer" in missing_fields:
-                totals["missing_writer"] += 1
-
-        for series_plan in series_plans:
             close_old_connections()
+            write_result = WriteResult()
 
-            series = series_plan.series
             run, run_result = upsert_run_from_series(
                 series=series,
                 dry_run=dry_run,
             )
             merge_write_result(totals, run_result)
-
-            if verbose:
-                self.print_series_result(
-                    series=series,
-                    series_plan=series_plan,
-                    run_result=run_result,
-                    dry_run=dry_run,
-                )
+            add_write_result(write_result, run_result)
 
             for issue_plan in series_plan.issue_detail_plans:
-                detail = detail_map.get(series_issue_key(issue_plan.series_issue))
-
                 if skip_details:
                     continue
+
+                detail = detail_map.get(series_issue_key(issue_plan.series_issue))
 
                 if detail is None:
                     continue
@@ -458,6 +408,7 @@ class Command(BaseCommand):
                     dry_run=dry_run,
                 )
                 merge_write_result(totals, issue_result)
+                add_write_result(write_result, issue_result)
 
                 if verbose:
                     self.print_issue_result(
@@ -467,6 +418,27 @@ class Command(BaseCommand):
                         dry_run=dry_run,
                     )
 
+            close_old_connections()
+
+            self.print_series_result(
+                seed_index=seed_index,
+                seed_count=seed_count,
+                series=series,
+                series_plan=series_plan,
+                detail_read_count=len(detail_map),
+                detail_stats=detail_stats,
+                write_result=write_result,
+                dry_run=dry_run,
+            )
+
+            del detail_map
+            del detail_targets
+            del skipped_detail_targets
+            del series_plan
+            del series
+            del record
+
+        close_old_connections()
         self.print_summary(totals=totals, dry_run=dry_run)
 
     def write_header(
@@ -477,7 +449,6 @@ class Command(BaseCommand):
         detail_limit,
         skip_details,
         skip_missing_issues,
-        missing_issue_limit,
         calendar_start_date,
         calendar_end_date,
         calendar_url,
@@ -498,9 +469,6 @@ class Command(BaseCommand):
         self.stdout.write(f"Browser mode: {'headed' if headed else 'headless'}")
         self.stdout.write(f"Calendar timeout: {calendar_timeout} ms")
         self.stdout.write(f"Detail/series timeout: {detail_timeout} ms")
-        self.stdout.write("AI calls: 0")
-        self.stdout.write("Publisher: Marvel")
-        self.stdout.write("Navigation: release calendar issue -> Back to Series -> full series issue map")
         self.stdout.write(
             "Calendar seed limit: "
             + (str(limit) if limit is not None else "unlimited")
@@ -513,13 +481,6 @@ class Command(BaseCommand):
         self.stdout.write(
             f"Full-series missing issue fill: {'off' if skip_missing_issues else 'on'}"
         )
-        self.stdout.write(
-            "Compatibility missing issue limit: "
-            + (str(missing_issue_limit) if missing_issue_limit is not None else "unlimited")
-        )
-        self.stdout.write("Skip keywords: " + (", ".join(SKIP_KEYWORDS) if SKIP_KEYWORDS else "none"))
-        self.stdout.write("Creates collections: no")
-        self.stdout.write("Uses Comic Vine: no")
         self.stdout.write("")
 
     def print_raw_calendar(self, rendered_calendar):
@@ -539,22 +500,63 @@ class Command(BaseCommand):
             for link in rendered_calendar["links"][:50]:
                 self.stdout.write(f"- {link['text']} -> {link['href']}")
 
-    def print_series_result(self, *, series, series_plan, run_result, dry_run):
-        action_prefix = "Would" if dry_run else "Did"
+    def print_duplicate_seed(self, *, seed_index, seed_count, record):
+        self.stdout.write("")
+        self.stdout.write(
+            self.style.WARNING(
+                f"[{seed_index}/{seed_count}] Skipped duplicate series seed: "
+                f"{format_calendar_issue_without_date(record.seed_issue)}"
+            )
+        )
+        self.stdout.write(f"  Series URL: {record.series_url or 'none'}")
+
+    def print_seed_skipped(self, *, seed_index, seed_count, record):
+        self.stdout.write("")
+        self.stdout.write(
+            self.style.WARNING(
+                f"[{seed_index}/{seed_count}] Skipped: "
+                f"{format_calendar_issue_without_date(record.seed_issue)}"
+            )
+        )
+        self.stdout.write(f"  Reason: {record_error_text(record)}")
+        self.stdout.write(f"  URL: {get_object_value(record.seed_issue, 'detail_url') or 'none'}")
+
+        if record.series_url:
+            self.stdout.write(f"  Series URL: {record.series_url}")
+
+    def print_series_result(
+        self,
+        *,
+        seed_index,
+        seed_count,
+        series,
+        series_plan,
+        detail_read_count,
+        detail_stats,
+        write_result,
+        dry_run,
+    ):
+        change_label = "Would change" if dry_run else "Changes"
         reason_counts = Counter(
             issue_plan.reason
             for issue_plan in series_plan.issue_detail_plans
         )
 
         self.stdout.write("")
-        self.stdout.write(self.style.SUCCESS(f"{series.title} ({series.start_year})"))
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"[{seed_index}/{seed_count}] {series.title} ({series.start_year})"
+            )
+        )
         self.stdout.write(f"  Series URL: {series.url}")
-        self.stdout.write(f"  Marvel series ID: {series.marvel_series_id or 'none'}")
-        self.stdout.write(f"  Series status: {series.status}")
+        self.stdout.write(f"  Status: {series.status}")
         self.stdout.write(f"  Load More clicks: {series.load_more_clicks}")
-        self.stdout.write(f"  Raw issue links: {series.raw_issue_link_count}")
         self.stdout.write(f"  Unique issue links: {len(series.issues)}")
         self.stdout.write(f"  Planned detail reads: {len(series_plan.issue_detail_plans)}")
+        self.stdout.write(f"  Detail reads complete: {detail_read_count}")
+
+        if detail_stats["detail_read_failures"]:
+            self.stdout.write(f"  Detail read failures: {detail_stats['detail_read_failures']}")
 
         if reason_counts:
             self.stdout.write(
@@ -565,11 +567,12 @@ class Command(BaseCommand):
                 )
             )
 
-        if run_result.run_created:
-            self.stdout.write(f"  {action_prefix} create run")
-
-        if run_result.run_updated:
-            self.stdout.write(f"  {action_prefix} update run")
+        self.stdout.write(
+            f"  {change_label}: "
+            f"runs +{write_result.run_created}/~{write_result.run_updated}, "
+            f"issues +{write_result.issue_created}/~{write_result.issue_updated}, "
+            f"credits +{write_result.credits_added}"
+        )
 
     def print_issue_result(self, *, issue_plan, detail, issue_result, dry_run):
         action_prefix = "Would" if dry_run else "Did"
@@ -578,7 +581,6 @@ class Command(BaseCommand):
         self.stdout.write("")
         self.stdout.write(f"  {format_series_issue(issue_plan.series_issue)}")
         self.stdout.write(f"    Reason: {issue_plan.reason}")
-        self.stdout.write("    Detail lookup: checked")
         self.stdout.write(
             "    Detail complete: "
             + ("yes" if not missing_fields else "no")
@@ -616,7 +618,6 @@ class Command(BaseCommand):
         self.stdout.write(f"Series page reads: {totals['series_page_reads']}")
         self.stdout.write(f"Issue detail browser reads: {totals['detail_browser_reads']}")
         self.stdout.write(f"Issue detail read failures: {totals['detail_read_failures']}")
-        self.stdout.write("AI calls: 0")
         self.stdout.write(f"Calendar issues found: {totals['calendar_found']}")
         self.stdout.write(
             f"Skipped incomplete calendar rows: {totals['calendar_incomplete_skipped']}"
@@ -628,7 +629,6 @@ class Command(BaseCommand):
         self.stdout.write(f"Series found: {totals['series_found']}")
         self.stdout.write(f"Series read failures: {totals['series_read_failures']}")
         self.stdout.write(f"Load More clicks: {totals['load_more_clicks']}")
-        self.stdout.write(f"Raw series issue links: {totals['raw_series_issue_links']}")
         self.stdout.write(f"Unique series issue links: {totals['unique_series_issue_links']}")
         self.stdout.write(f"Planned issue detail reads: {totals['planned_issue_detail_reads']}")
         self.stdout.write(f"Skipped by detail limit: {totals['detail_limit_skipped']}")
@@ -676,107 +676,122 @@ class Command(BaseCommand):
                 self.stdout.write(f"  Missing fields: {report['missing_fields']}")
 
 
-def read_calendar_and_series_pages(
-    *,
-    calendar_url,
-    limit,
-    headed,
-    calendar_timeout,
-    detail_timeout,
-):
+def read_calendar_seed_issues(*, calendar_url, limit, headed, timeout_ms):
     with marvel_browser_context(headed=headed) as context:
         rendered_calendar = read_release_calendar_page(
             context=context,
             calendar_url=calendar_url,
-            timeout_ms=calendar_timeout,
+            timeout_ms=timeout_ms,
         )
 
-        calendar_issues, incomplete_count = extract_release_calendar_issues_dataclasses(
-            rendered_calendar=rendered_calendar,
+    calendar_issues, incomplete_count = extract_release_calendar_issues_dataclasses(
+        rendered_calendar=rendered_calendar,
+    )
+    calendar_issues = sorted(calendar_issues, key=calendar_issue_sort_key)
+
+    kept_calendar_issues, keyword_skipped_issues = filter_skipped_calendar_issues(
+        calendar_issues
+    )
+
+    limit_skipped_issues = []
+
+    if limit is not None and len(kept_calendar_issues) > limit:
+        limit_skipped_issues = kept_calendar_issues[limit:]
+        kept_calendar_issues = kept_calendar_issues[:limit]
+
+    return {
+        "rendered_calendar": rendered_calendar,
+        "calendar_issues": calendar_issues,
+        "kept_calendar_issues": kept_calendar_issues,
+        "keyword_skipped_issues": keyword_skipped_issues,
+        "incomplete_count": incomplete_count,
+        "limit_skipped": len(limit_skipped_issues),
+        "limit_skipped_issues": limit_skipped_issues,
+    }
+
+
+def read_unique_series_record_for_seed(
+    *,
+    calendar_issue,
+    seen_series_keys,
+    headed,
+    timeout_ms,
+):
+    detail_url = clean_text(get_object_value(calendar_issue, "detail_url"))
+
+    if not detail_url:
+        return SeriesReadRecord(
+            seed_issue=calendar_issue,
+            series_url="",
+            error="calendar issue is missing detail URL",
         )
-        calendar_issues = sorted(calendar_issues, key=calendar_issue_sort_key)
 
-        kept_calendar_issues, keyword_skipped_issues = filter_skipped_calendar_issues(
-            calendar_issues
+    with marvel_browser_context(headed=headed) as context:
+        series_url = read_issue_page_series_url(
+            context=context,
+            issue_url=detail_url,
+            timeout_ms=timeout_ms,
         )
 
-        limit_skipped_issues = []
-
-        if limit is not None and len(kept_calendar_issues) > limit:
-            limit_skipped_issues = kept_calendar_issues[limit:]
-            kept_calendar_issues = kept_calendar_issues[:limit]
-
-        series_records = []
-        seen_series_keys = set()
-        duplicate_series_seeds = 0
-        duplicate_series_seed_issues = []
-        series_page_reads = 0
-
-        for calendar_issue in kept_calendar_issues:
-            if not clean_text(calendar_issue.detail_url):
-                series_records.append(
-                    SeriesReadRecord(
-                        seed_issue=calendar_issue,
-                        series_url="",
-                        error="calendar issue is missing detail URL",
-                    )
-                )
-                continue
-
-            series_url = read_issue_page_series_url(
-                context=context,
-                issue_url=calendar_issue.detail_url,
-                timeout_ms=detail_timeout,
+        if not series_url:
+            return SeriesReadRecord(
+                seed_issue=calendar_issue,
+                series_url="",
+                error="issue page did not expose Back to Series URL",
             )
 
-            if not series_url:
-                series_records.append(
-                    SeriesReadRecord(
-                        seed_issue=calendar_issue,
-                        series_url="",
-                        error="issue page did not expose Back to Series URL",
-                    )
-                )
-                continue
+        series_key = normalize_series_url_key(series_url)
 
-            series_key = normalize_series_url_key(series_url)
-
-            if series_key in seen_series_keys:
-                duplicate_series_seeds += 1
-                duplicate_series_seed_issues.append(calendar_issue)
-                continue
-
-            seen_series_keys.add(series_key)
-
-            series = read_series_page(
-                context=context,
+        if series_key in seen_series_keys:
+            return SeriesReadRecord(
+                seed_issue=calendar_issue,
                 series_url=series_url,
-                timeout_ms=detail_timeout,
-            )
-            series_page_reads += 1
-
-            series_records.append(
-                SeriesReadRecord(
-                    seed_issue=calendar_issue,
-                    series_url=series_url,
-                    series=series,
-                    error="",
-                )
+                duplicate=True,
+                series_key=series_key,
             )
 
-        return {
-            "rendered_calendar": rendered_calendar,
-            "calendar_issues": calendar_issues,
-            "kept_calendar_issues": kept_calendar_issues,
-            "keyword_skipped_issues": keyword_skipped_issues,
-            "incomplete_count": incomplete_count,
-            "limit_skipped": len(limit_skipped_issues),
-            "limit_skipped_issues": limit_skipped_issues,
-            "series_records": series_records,
-            "duplicate_series_seeds": duplicate_series_seeds,
-            "duplicate_series_seed_issues": duplicate_series_seed_issues,
-            "series_page_reads": series_page_reads,
-        }
+        seen_series_keys.add(series_key)
+
+        series = read_series_page(
+            context=context,
+            series_url=series_url,
+            timeout_ms=timeout_ms,
+        )
+
+    return SeriesReadRecord(
+        seed_issue=calendar_issue,
+        series_url=series_url,
+        series=series,
+        error="",
+        series_key=series_key,
+    )
+
+
+def record_error_text(record):
+    if record.error:
+        return record.error
+
+    if record.series is not None and record.series.errors:
+        return "; ".join(record.series.errors)
+
+    return "series page could not be read"
+
+
+def apply_detail_limit(*, issue_detail_plans, detail_limit, detail_reads_used):
+    if detail_limit is None:
+        return list(issue_detail_plans), [], detail_reads_used + len(issue_detail_plans)
+
+    remaining = detail_limit - detail_reads_used
+
+    if remaining <= 0:
+        return [], list(issue_detail_plans), detail_reads_used
+
+    if len(issue_detail_plans) <= remaining:
+        return list(issue_detail_plans), [], detail_reads_used + len(issue_detail_plans)
+
+    selected = list(issue_detail_plans[:remaining])
+    skipped = list(issue_detail_plans[remaining:])
+    return selected, skipped, detail_reads_used + len(selected)
 
 
 def read_planned_issue_details(*, detail_targets, headed, timeout_ms):
@@ -792,6 +807,43 @@ def read_planned_issue_details(*, detail_targets, headed, timeout_ms):
             detail_map[series_issue_key(issue_plan.series_issue)] = detail
 
     return detail_map
+
+
+def summarize_detail_map(detail_map):
+    stats = {
+        "detail_read_failures": 0,
+        "complete_details": 0,
+        "incomplete_details": 0,
+        "missing_description": 0,
+        "missing_writer": 0,
+    }
+
+    for detail in detail_map.values():
+        if get_detail_value(detail, "error"):
+            stats["detail_read_failures"] += 1
+
+        missing_fields = get_detail_missing_fields(detail)
+
+        if missing_fields:
+            stats["incomplete_details"] += 1
+        else:
+            stats["complete_details"] += 1
+
+        if "description" in missing_fields:
+            stats["missing_description"] += 1
+
+        if "writer" in missing_fields:
+            stats["missing_writer"] += 1
+
+    return stats
+
+
+def merge_detail_stats(totals, stats):
+    totals["detail_read_failures"] += stats["detail_read_failures"]
+    totals["complete_details"] += stats["complete_details"]
+    totals["incomplete_details"] += stats["incomplete_details"]
+    totals["missing_description"] += stats["missing_description"]
+    totals["missing_writer"] += stats["missing_writer"]
 
 
 def should_skip_issue_write_for_failed_missing_detail(*, issue_plan, detail):
@@ -835,6 +887,17 @@ def merge_write_result(totals, result):
     totals["issues_created"] += result.issue_created
     totals["issues_updated"] += result.issue_updated
     totals["credits_added"] += result.credits_added
+
+
+def add_write_result(total, result):
+    if result is None:
+        return
+
+    total.run_created += result.run_created
+    total.run_updated += result.run_updated
+    total.issue_created += result.issue_created
+    total.issue_updated += result.issue_updated
+    total.credits_added += result.credits_added
 
 
 def new_totals():
@@ -1073,7 +1136,7 @@ def calendar_issue_to_dict(issue):
         "issue_number": issue.issue_number,
         "published_date": issue.published_date,
         "detail_url": issue.detail_url,
-        "marvel_issue_id": issue.official_source_key,
+        "marvel_issue_id": issue.marvel_issue_id,
         "issue_slug": issue.issue_slug,
     }
 

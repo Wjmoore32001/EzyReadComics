@@ -47,7 +47,6 @@ WINDOW_DAYS = 7
 YEAR_FLAG_RE = re.compile(r"^--(?P<year>\d{4})$")
 
 DEFAULT_LIMIT = None
-DEFAULT_MISSING_ISSUE_LIMIT = None
 
 SKIP_KEYWORDS = ()
 
@@ -60,12 +59,18 @@ class SeriesReadRecord:
     error: str = ""
 
 
+@dataclass
+class RequestedRange:
+    start_date: date
+    end_date: date
+    label: str = "custom date range"
+
+
 class Command(BaseCommand):
     help = (
         "Backfill old Marvel release calendar issues by walking weekly Wednesday windows. "
         "Each backfill window uses dateStart=Wednesday and dateEnd=Wednesday+6 days. "
-        "Series-first flow: calendar issue -> Back to Series -> full series issue map -> needed issue details. "
-        "No AI calls. No Comic Vine calls."
+        "Series-first flow: calendar issue -> Back to Series -> full series issue map -> needed issue details."
     )
 
     def add_arguments(self, parser):
@@ -81,12 +86,24 @@ class Command(BaseCommand):
             ),
         )
         parser.add_argument(
+            "--start-year",
+            type=int,
+            default=None,
+            help="First calendar year to backfill, inclusive. Example: --start-year 2020 --end-year 2025.",
+        )
+        parser.add_argument(
+            "--end-year",
+            type=int,
+            default=None,
+            help="Last calendar year to backfill, inclusive. Example: --start-year 2020 --end-year 2025.",
+        )
+        parser.add_argument(
             "--start-date",
-            help="Oldest date in the backfill range, YYYY-MM-DD. Prompted if omitted and no year is provided.",
+            help="Oldest date in the backfill range, YYYY-MM-DD. Prompted if omitted and no year option is provided.",
         )
         parser.add_argument(
             "--end-date",
-            help="Newest date in the backfill range, YYYY-MM-DD. Prompted if omitted and no year is provided.",
+            help="Newest date in the backfill range, YYYY-MM-DD. Prompted if omitted and no year option is provided.",
         )
         parser.add_argument(
             "--limit",
@@ -121,7 +138,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "--missing-issue-limit",
             type=int,
-            default=DEFAULT_MISSING_ISSUE_LIMIT,
+            default=None,
             help=(
                 "Compatibility flag. Series-first backfill does not walk previous links; "
                 "the series page supplies the full issue map. Default: unlimited."
@@ -165,26 +182,12 @@ class Command(BaseCommand):
         ensure_playwright()
         close_old_connections()
 
-        requested_year = resolve_requested_year(options)
-
-        if requested_year is not None:
-            start_date, end_date = year_date_range(
-                year=requested_year,
-                start_date_value=options.get("start_date"),
-                end_date_value=options.get("end_date"),
-            )
-        else:
-            start_date = get_range_date(
-                value=options.get("start_date"),
-                prompt_label="Oldest date in range",
-            )
-            end_date = get_range_date(
-                value=options.get("end_date"),
-                prompt_label="Newest date in range",
-            )
+        requested_range = resolve_requested_range(options)
+        start_date = requested_range.start_date
+        end_date = requested_range.end_date
 
         if start_date > end_date:
-            raise CommandError("--start-date must be earlier than or equal to --end-date.")
+            raise CommandError("The requested start date must be earlier than or equal to the end date.")
 
         limit = options["limit"]
         calendar_timeout = options["calendar_timeout"]
@@ -232,15 +235,12 @@ class Command(BaseCommand):
 
         self.write_header(
             dry_run=dry_run,
-            requested_year=requested_year,
-            start_date=start_date,
-            end_date=end_date,
+            requested_range=requested_range,
             week_start_dates=week_start_dates,
             limit=limit,
             detail_limit=detail_limit,
             skip_details=skip_details,
             skip_missing_issues=skip_missing_issues,
-            missing_issue_limit=missing_issue_limit,
             headed=headed,
             calendar_timeout=calendar_timeout,
             detail_timeout=detail_timeout,
@@ -302,20 +302,17 @@ class Command(BaseCommand):
             end_date=calendar_end_date,
         )
 
-        read_result = read_calendar_and_series_pages_for_window(
+        read_result = read_calendar_for_window(
             calendar_url=calendar_url,
             limit=limit,
             headed=headed,
             calendar_timeout=calendar_timeout,
-            detail_timeout=detail_timeout,
-            globally_seen_series_keys=globally_seen_series_keys,
         )
 
         rendered_calendar = read_result["rendered_calendar"]
         calendar_issues = read_result["calendar_issues"]
         kept_calendar_issues = read_result["kept_calendar_issues"]
         keyword_skipped_issues = read_result["keyword_skipped_issues"]
-        series_records = read_result["series_records"]
 
         totals["calendar_browser_reads"] = 1
         totals["calendar_found"] = len(calendar_issues)
@@ -323,37 +320,6 @@ class Command(BaseCommand):
         totals["keyword_skipped"] = len(keyword_skipped_issues)
         totals["limit_skipped"] = read_result["limit_skipped"]
         totals["calendar_processed"] = len(kept_calendar_issues)
-        totals["duplicate_series_seeds"] = read_result["duplicate_series_seeds"]
-        totals["series_page_reads"] = read_result["series_page_reads"]
-        totals["series_found"] = len(
-            [
-                record
-                for record in series_records
-                if record.series is not None and not record.series.errors
-            ]
-        )
-        totals["series_read_failures"] = len(
-            [
-                record
-                for record in series_records
-                if record.error or (record.series is not None and record.series.errors)
-            ]
-        )
-        totals["load_more_clicks"] = sum(
-            record.series.load_more_clicks
-            for record in series_records
-            if record.series is not None
-        )
-        totals["raw_series_issue_links"] = sum(
-            record.series.raw_issue_link_count
-            for record in series_records
-            if record.series is not None
-        )
-        totals["unique_series_issue_links"] = sum(
-            len(record.series.issues)
-            for record in series_records
-            if record.series is not None
-        )
 
         if raw:
             self.print_raw_calendar(rendered_calendar)
@@ -381,29 +347,69 @@ class Command(BaseCommand):
             issue_number_identity(issue)
             for issue in kept_calendar_issues
         }
+        seed_count = len(kept_calendar_issues)
+        remaining_detail_limit = detail_limit
 
-        series_plans = []
+        for seed_index, calendar_issue in enumerate(kept_calendar_issues, start=1):
+            close_old_connections()
 
-        close_old_connections()
+            series_read_result = read_series_for_calendar_issue(
+                calendar_issue=calendar_issue,
+                headed=headed,
+                detail_timeout=detail_timeout,
+                globally_seen_series_keys=globally_seen_series_keys,
+            )
 
-        for record in series_records:
+            if series_read_result["duplicate_series_seed"]:
+                totals["duplicate_series_seeds"] += 1
+                self.print_duplicate_series_seed(
+                    seed_index=seed_index,
+                    seed_count=seed_count,
+                    calendar_issue=calendar_issue,
+                    series_url=series_read_result["series_url"],
+                )
+                continue
+
+            record = series_read_result["record"]
+            totals["series_page_reads"] += series_read_result["series_page_reads"]
+
             if record.error:
-                if verbose:
-                    self.print_series_read_error(record)
+                totals["series_read_failures"] += 1
+                self.print_seed_skipped(
+                    seed_index=seed_index,
+                    seed_count=seed_count,
+                    record=record,
+                )
                 continue
 
             if record.series is None:
+                totals["series_read_failures"] += 1
+                record.error = "series page did not return parsed series data"
+                self.print_seed_skipped(
+                    seed_index=seed_index,
+                    seed_count=seed_count,
+                    record=record,
+                )
                 continue
 
             if record.series.errors:
-                if verbose:
-                    self.print_series_read_error(record)
+                totals["series_read_failures"] += 1
+                self.print_seed_skipped(
+                    seed_index=seed_index,
+                    seed_count=seed_count,
+                    record=record,
+                )
                 continue
 
-            series_plan = db_call(
-                build_series_sync_plan,
-                record.series,
-            )
+            series_totals = new_totals()
+            series = record.series
+            series_totals["series_found"] = 1
+            series_totals["load_more_clicks"] = series.load_more_clicks
+            series_totals["raw_series_issue_links"] = series.raw_issue_link_count
+            series_totals["unique_series_issue_links"] = len(series.issues)
+
+            close_old_connections()
+            series_plan = db_call(build_series_sync_plan, series)
 
             if skip_missing_issues:
                 series_plan.issue_detail_plans = [
@@ -415,64 +421,50 @@ class Command(BaseCommand):
                     )
                 ]
 
-            series_plans.append(series_plan)
+            detail_targets = []
 
-        detail_targets = []
+            if not skip_details:
+                detail_targets = list(series_plan.issue_detail_plans)
 
-        if not skip_details:
-            for series_plan in series_plans:
-                detail_targets.extend(series_plan.issue_detail_plans)
+            series_totals["planned_issue_detail_reads"] = len(detail_targets)
 
-        totals["planned_issue_detail_reads"] = len(detail_targets)
+            if remaining_detail_limit is not None:
+                allowed_detail_reads = max(remaining_detail_limit, 0)
 
-        if detail_limit is not None and len(detail_targets) > detail_limit:
-            totals["detail_limit_skipped"] = len(detail_targets) - detail_limit
-            detail_targets = detail_targets[:detail_limit]
+                if len(detail_targets) > allowed_detail_reads:
+                    series_totals["detail_limit_skipped"] = len(detail_targets) - allowed_detail_reads
+                    detail_targets = detail_targets[:allowed_detail_reads]
 
-        close_old_connections()
+                remaining_detail_limit -= len(detail_targets)
 
-        detail_map = {}
-
-        if detail_targets:
-            detail_map = read_planned_issue_details(
-                detail_targets=detail_targets,
-                headed=headed,
-                timeout_ms=detail_timeout,
-            )
-
-        totals["detail_browser_reads"] = len(detail_map)
-
-        for detail in detail_map.values():
-            if get_detail_value(detail, "error"):
-                totals["detail_read_failures"] += 1
-
-            missing_fields = get_detail_missing_fields(detail)
-
-            if missing_fields:
-                totals["incomplete_details"] += 1
-            else:
-                totals["complete_details"] += 1
-
-            if "description" in missing_fields:
-                totals["missing_description"] += 1
-
-            if "writer" in missing_fields:
-                totals["missing_writer"] += 1
-
-            if raw:
-                self.print_raw_detail(detail)
-
-        for series_plan in series_plans:
             close_old_connections()
 
-            series = series_plan.series
+            detail_map = {}
+
+            if detail_targets:
+                detail_map = read_planned_issue_details(
+                    detail_targets=detail_targets,
+                    headed=headed,
+                    timeout_ms=detail_timeout,
+                )
+
+            series_totals["detail_browser_reads"] = len(detail_map)
+
+            for detail in detail_map.values():
+                self.add_detail_totals(
+                    totals=series_totals,
+                    detail=detail,
+                    raw=raw,
+                )
+
+            close_old_connections()
             run, run_result = db_call(
                 upsert_run_from_series,
                 retry=False,
                 series=series,
                 dry_run=dry_run,
             )
-            merge_write_result(totals, run_result)
+            merge_write_result(series_totals, run_result)
 
             if verbose:
                 self.print_series_result(
@@ -495,7 +487,7 @@ class Command(BaseCommand):
                     issue_plan=issue_plan,
                     detail=detail,
                 ):
-                    totals["issue_writes_skipped_no_detail"] += 1
+                    series_totals["issue_writes_skipped_no_detail"] += 1
 
                     if verbose:
                         self.print_issue_skipped(
@@ -513,7 +505,7 @@ class Command(BaseCommand):
                     detail=detail,
                     dry_run=dry_run,
                 )
-                merge_write_result(totals, issue_result)
+                merge_write_result(series_totals, issue_result)
 
                 if verbose:
                     self.print_issue_result(
@@ -523,23 +515,57 @@ class Command(BaseCommand):
                         dry_run=dry_run,
                     )
 
+            merge_totals(totals, series_totals)
+
+            if not verbose:
+                self.print_series_progress_result(
+                    seed_index=seed_index,
+                    seed_count=seed_count,
+                    series=series,
+                    totals=series_totals,
+                    dry_run=dry_run,
+                )
+
+            del detail_map
+            del detail_targets
+            del series_plan
+            del series_totals
+            close_old_connections()
+
         close_old_connections()
         self.print_window_summary(totals)
         return totals
+
+    def add_detail_totals(self, *, totals, detail, raw):
+        if get_detail_value(detail, "error"):
+            totals["detail_read_failures"] += 1
+
+        missing_fields = get_detail_missing_fields(detail)
+
+        if missing_fields:
+            totals["incomplete_details"] += 1
+        else:
+            totals["complete_details"] += 1
+
+        if "description" in missing_fields:
+            totals["missing_description"] += 1
+
+        if "writer" in missing_fields:
+            totals["missing_writer"] += 1
+
+        if raw:
+            self.print_raw_detail(detail)
 
     def write_header(
         self,
         *,
         dry_run,
-        requested_year,
-        start_date,
-        end_date,
+        requested_range,
         week_start_dates,
         limit,
         detail_limit,
         skip_details,
         skip_missing_issues,
-        missing_issue_limit,
         headed,
         calendar_timeout,
         detail_timeout,
@@ -550,12 +576,9 @@ class Command(BaseCommand):
         self.stdout.write("")
         self.stdout.write(self.style.SUCCESS("Marvel release calendar backfill"))
         self.stdout.write(f"Mode: {'dry run' if dry_run else 'apply'}")
-
-        if requested_year is not None:
-            self.stdout.write(f"Requested year: {requested_year}")
-
-        self.stdout.write(f"Requested range oldest date: {start_date.isoformat()}")
-        self.stdout.write(f"Requested range newest date: {end_date.isoformat()}")
+        self.stdout.write(f"Requested range: {requested_range.label}")
+        self.stdout.write(f"Requested range oldest date: {requested_range.start_date.isoformat()}")
+        self.stdout.write(f"Requested range newest date: {requested_range.end_date.isoformat()}")
         self.stdout.write(f"Weekly windows to process: {len(week_start_dates)}")
         self.stdout.write(
             f"First processed window: {week_start_dates[0].isoformat()} to {first_window_end.isoformat()}"
@@ -569,10 +592,7 @@ class Command(BaseCommand):
         self.stdout.write(f"Browser mode: {'headed' if headed else 'headless'}")
         self.stdout.write(f"Calendar timeout: {calendar_timeout} ms")
         self.stdout.write(f"Detail/series timeout: {detail_timeout} ms")
-        self.stdout.write("AI calls: 0")
-        self.stdout.write("Publisher: Marvel")
-        self.stdout.write("Navigation: release calendar issue -> Back to Series -> full series issue map")
-        self.stdout.write("Run status behavior: series page Present => ongoing")
+        self.stdout.write("Write cadence: per unique series seed")
         self.stdout.write(
             "Calendar seed limit per weekly window: "
             + (str(limit) if limit is not None else "unlimited")
@@ -585,13 +605,6 @@ class Command(BaseCommand):
         self.stdout.write(
             f"Full-series missing issue fill: {'off' if skip_missing_issues else 'on'}"
         )
-        self.stdout.write(
-            "Compatibility missing issue limit: "
-            + (str(missing_issue_limit) if missing_issue_limit is not None else "unlimited")
-        )
-        self.stdout.write("Skip keywords: " + (", ".join(SKIP_KEYWORDS) if SKIP_KEYWORDS else "none"))
-        self.stdout.write("Creates collections: no")
-        self.stdout.write("Uses Comic Vine: no")
 
     def print_raw_calendar(self, rendered_calendar):
         self.stdout.write("")
@@ -632,18 +645,28 @@ class Command(BaseCommand):
         self.stdout.write("Text preview:")
         self.stdout.write(get_detail_value(detail, "text_preview") or "")
 
-    def print_series_read_error(self, record):
-        self.stdout.write("")
-        self.stdout.write(self.style.WARNING("Series read failed"))
-        self.stdout.write(f"  Seed: {format_calendar_issue(record.seed_issue)}")
+    def print_duplicate_series_seed(self, *, seed_index, seed_count, calendar_issue, series_url):
+        self.stdout.write(
+            self.style.WARNING(
+                f"[{seed_index}/{seed_count}] Skipped duplicate series seed: {format_calendar_issue(calendar_issue)}"
+            )
+        )
+        self.stdout.write(f"  Series URL: {series_url or 'none'}")
+
+    def print_seed_skipped(self, *, seed_index, seed_count, record):
+        self.stdout.write(
+            self.style.WARNING(
+                f"[{seed_index}/{seed_count}] Skipped: {format_calendar_issue(record.seed_issue)}"
+            )
+        )
         self.stdout.write(f"  Series URL: {record.series_url or 'none'}")
 
         if record.error:
-            self.stdout.write(f"  Error: {record.error}")
+            self.stdout.write(f"  Reason: {record.error}")
 
         if record.series is not None and record.series.errors:
             for error in record.series.errors:
-                self.stdout.write(f"  Error: {error}")
+                self.stdout.write(f"  Reason: {error}")
 
     def print_series_result(self, *, series, series_plan, run_result, dry_run):
         action_prefix = "Would" if dry_run else "Did"
@@ -712,6 +735,30 @@ class Command(BaseCommand):
         self.stdout.write("    Skipped write: missing local issue and detail read failed/incomplete enough to avoid skeleton issue")
         self.stdout.write(f"    Detail error: {get_detail_value(detail, 'error') or 'none'}")
 
+    def print_series_progress_result(self, *, seed_index, seed_count, series, totals, dry_run):
+        created_label = "would create" if dry_run else "created"
+        updated_label = "would update" if dry_run else "updated"
+
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"[{seed_index}/{seed_count}] {series.title} ({series.start_year}) complete"
+            )
+        )
+        self.stdout.write(
+            "  "
+            f"Issue links: {totals['unique_series_issue_links']}; "
+            f"detail reads: {totals['detail_browser_reads']}/{totals['planned_issue_detail_reads']}; "
+            f"runs {created_label} {totals['runs_created']}, {updated_label} {totals['runs_updated']}; "
+            f"issues {created_label} {totals['issues_created']}, {updated_label} {totals['issues_updated']}; "
+            f"credits added: {totals['credits_added']}"
+        )
+
+        if totals["detail_limit_skipped"]:
+            self.stdout.write(f"  Detail reads skipped by limit: {totals['detail_limit_skipped']}")
+
+        if totals["issue_writes_skipped_no_detail"]:
+            self.stdout.write(f"  Issue writes skipped because detail failed: {totals['issue_writes_skipped_no_detail']}")
+
     def print_window_summary(self, totals):
         self.stdout.write("")
         self.stdout.write("Weekly window summary:")
@@ -719,6 +766,7 @@ class Command(BaseCommand):
         self.stdout.write(f"  Calendar issues used as seeds: {totals['calendar_processed']}")
         self.stdout.write(f"  Duplicate series seeds skipped: {totals['duplicate_series_seeds']}")
         self.stdout.write(f"  Series found: {totals['series_found']}")
+        self.stdout.write(f"  Series read failures: {totals['series_read_failures']}")
         self.stdout.write(f"  Unique series issue links: {totals['unique_series_issue_links']}")
         self.stdout.write(f"  Planned issue detail reads: {totals['planned_issue_detail_reads']}")
         self.stdout.write(f"  Issue detail browser reads: {totals['detail_browser_reads']}")
@@ -735,7 +783,6 @@ class Command(BaseCommand):
         self.stdout.write(f"Series page reads: {totals['series_page_reads']}")
         self.stdout.write(f"Issue detail browser reads: {totals['detail_browser_reads']}")
         self.stdout.write(f"Issue detail read failures: {totals['detail_read_failures']}")
-        self.stdout.write("AI calls: 0")
         self.stdout.write(f"Calendar issues found: {totals['calendar_found']}")
         self.stdout.write(
             f"Skipped incomplete calendar rows: {totals['calendar_incomplete_skipped']}"
@@ -766,14 +813,12 @@ class Command(BaseCommand):
             self.stdout.write("Dry run only. No catalog data was created or updated.")
 
 
-def read_calendar_and_series_pages_for_window(
+def read_calendar_for_window(
     *,
     calendar_url,
     limit,
     headed,
     calendar_timeout,
-    detail_timeout,
-    globally_seen_series_keys,
 ):
     with marvel_browser_context(headed=headed) as context:
         rendered_calendar = read_release_calendar_page(
@@ -782,87 +827,99 @@ def read_calendar_and_series_pages_for_window(
             timeout_ms=calendar_timeout,
         )
 
-        calendar_issues, incomplete_count = extract_release_calendar_issues(
-            rendered_calendar=rendered_calendar,
+    calendar_issues, incomplete_count = extract_release_calendar_issues(
+        rendered_calendar=rendered_calendar,
+    )
+    calendar_issues = sorted(calendar_issues, key=calendar_issue_sort_key)
+
+    kept_calendar_issues, keyword_skipped_issues = filter_skipped_calendar_issues(
+        calendar_issues
+    )
+
+    limit_skipped = 0
+
+    if limit is not None and len(kept_calendar_issues) > limit:
+        limit_skipped = len(kept_calendar_issues) - limit
+        kept_calendar_issues = kept_calendar_issues[:limit]
+
+    return {
+        "rendered_calendar": rendered_calendar,
+        "calendar_issues": calendar_issues,
+        "kept_calendar_issues": kept_calendar_issues,
+        "keyword_skipped_issues": keyword_skipped_issues,
+        "incomplete_count": incomplete_count,
+        "limit_skipped": limit_skipped,
+    }
+
+
+def read_series_for_calendar_issue(
+    *,
+    calendar_issue,
+    headed,
+    detail_timeout,
+    globally_seen_series_keys,
+):
+    if not clean_text(calendar_issue.detail_url):
+        return {
+            "record": SeriesReadRecord(
+                seed_issue=calendar_issue,
+                series_url="",
+                error="calendar issue is missing detail URL",
+            ),
+            "duplicate_series_seed": False,
+            "series_url": "",
+            "series_page_reads": 0,
+        }
+
+    with marvel_browser_context(headed=headed) as context:
+        series_url = read_issue_page_series_url(
+            context=context,
+            issue_url=calendar_issue.detail_url,
+            timeout_ms=detail_timeout,
         )
-        calendar_issues = sorted(calendar_issues, key=calendar_issue_sort_key)
 
-        kept_calendar_issues, keyword_skipped_issues = filter_skipped_calendar_issues(
-            calendar_issues
+        if not series_url:
+            return {
+                "record": SeriesReadRecord(
+                    seed_issue=calendar_issue,
+                    series_url="",
+                    error="issue page did not expose Back to Series URL",
+                ),
+                "duplicate_series_seed": False,
+                "series_url": "",
+                "series_page_reads": 0,
+            }
+
+        series_key = normalize_series_url_key(series_url)
+
+        if series_key in globally_seen_series_keys:
+            return {
+                "record": None,
+                "duplicate_series_seed": True,
+                "series_url": series_url,
+                "series_page_reads": 0,
+            }
+
+        series = read_series_page(
+            context=context,
+            series_url=series_url,
+            timeout_ms=detail_timeout,
         )
 
-        limit_skipped = 0
-
-        if limit is not None and len(kept_calendar_issues) > limit:
-            limit_skipped = len(kept_calendar_issues) - limit
-            kept_calendar_issues = kept_calendar_issues[:limit]
-
-        series_records = []
-        duplicate_series_seeds = 0
-        series_page_reads = 0
-
-        for calendar_issue in kept_calendar_issues:
-            if not clean_text(calendar_issue.detail_url):
-                series_records.append(
-                    SeriesReadRecord(
-                        seed_issue=calendar_issue,
-                        series_url="",
-                        error="calendar issue is missing detail URL",
-                    )
-                )
-                continue
-
-            series_url = read_issue_page_series_url(
-                context=context,
-                issue_url=calendar_issue.detail_url,
-                timeout_ms=detail_timeout,
-            )
-
-            if not series_url:
-                series_records.append(
-                    SeriesReadRecord(
-                        seed_issue=calendar_issue,
-                        series_url="",
-                        error="issue page did not expose Back to Series URL",
-                    )
-                )
-                continue
-
-            series_key = normalize_series_url_key(series_url)
-
-            if series_key in globally_seen_series_keys:
-                duplicate_series_seeds += 1
-                continue
-
+        if series is not None and not series.errors:
             globally_seen_series_keys.add(series_key)
 
-            series = read_series_page(
-                context=context,
-                series_url=series_url,
-                timeout_ms=detail_timeout,
-            )
-            series_page_reads += 1
-
-            series_records.append(
-                SeriesReadRecord(
-                    seed_issue=calendar_issue,
-                    series_url=series_url,
-                    series=series,
-                    error="",
-                )
-            )
-
-        return {
-            "rendered_calendar": rendered_calendar,
-            "calendar_issues": calendar_issues,
-            "kept_calendar_issues": kept_calendar_issues,
-            "keyword_skipped_issues": keyword_skipped_issues,
-            "incomplete_count": incomplete_count,
-            "limit_skipped": limit_skipped,
-            "series_records": series_records,
-            "duplicate_series_seeds": duplicate_series_seeds,
-            "series_page_reads": series_page_reads,
-        }
+    return {
+        "record": SeriesReadRecord(
+            seed_issue=calendar_issue,
+            series_url=series_url,
+            series=series,
+            error="",
+        ),
+        "duplicate_series_seed": False,
+        "series_url": series_url,
+        "series_page_reads": 1,
+    }
 
 
 def read_planned_issue_details(*, detail_targets, headed, timeout_ms):
@@ -934,25 +991,101 @@ def add_detected_year_flags(parser):
         )
 
 
-def resolve_requested_year(options):
-    years = []
+def resolve_requested_range(options):
+    explicit_start_date = clean_text(options.get("start_date"))
+    explicit_end_date = clean_text(options.get("end_date"))
+    start_year = options.get("start_year")
+    end_year = options.get("end_year")
+    requested_years = []
 
     if options.get("year") is not None:
-        years.append(options["year"])
+        requested_years.append(options["year"])
 
-    years.extend(options.get("year_flags") or [])
+    requested_years.extend(options.get("year_flags") or [])
+    requested_years = sorted(set(requested_years))
 
-    unique_years = sorted(set(years))
+    has_date_range = bool(explicit_start_date or explicit_end_date)
+    has_year_range = start_year is not None or end_year is not None
+    has_year = bool(requested_years)
 
-    if len(unique_years) > 1:
-        raise CommandError("Use only one year value per backfill run.")
+    selected_modes = sum(
+        1
+        for selected in (has_date_range, has_year_range, has_year)
+        if selected
+    )
 
-    if not unique_years:
-        return None
+    if selected_modes > 1:
+        raise CommandError(
+            "Use only one range style: --year/--YYYY, --start-year/--end-year, or --start-date/--end-date."
+        )
 
-    year = unique_years[0]
-    validate_year(year)
-    return year
+    if has_year_range:
+        if start_year is None or end_year is None:
+            raise CommandError("Use both --start-year and --end-year for a year range.")
+
+        validate_year(start_year)
+        validate_year(end_year)
+
+        if start_year > end_year:
+            raise CommandError("--start-year must be earlier than or equal to --end-year.")
+
+        return RequestedRange(
+            start_date=date(start_year, 1, 1),
+            end_date=date(end_year, 12, 31),
+            label=f"{start_year}-{end_year}",
+        )
+
+    if has_year:
+        if len(requested_years) == 1:
+            year = requested_years[0]
+            validate_year(year)
+
+            return RequestedRange(
+                start_date=date(year, 1, 1),
+                end_date=date(year, 12, 31),
+                label=str(year),
+            )
+
+        if len(requested_years) == 2:
+            start_year = requested_years[0]
+            end_year = requested_years[1]
+            validate_year(start_year)
+            validate_year(end_year)
+
+            return RequestedRange(
+                start_date=date(start_year, 1, 1),
+                end_date=date(end_year, 12, 31),
+                label=f"{start_year}-{end_year}",
+            )
+
+        raise CommandError(
+            "Use --start-year and --end-year for multi-year ranges longer than two year flags."
+        )
+
+    if has_date_range:
+        if not explicit_start_date or not explicit_end_date:
+            raise CommandError("Use both --start-date and --end-date for a date range.")
+
+        return RequestedRange(
+            start_date=parse_date_value(explicit_start_date),
+            end_date=parse_date_value(explicit_end_date),
+            label="custom date range",
+        )
+
+    start_date = get_range_date(
+        value=None,
+        prompt_label="Oldest date in range",
+    )
+    end_date = get_range_date(
+        value=None,
+        prompt_label="Newest date in range",
+    )
+
+    return RequestedRange(
+        start_date=start_date,
+        end_date=end_date,
+        label="custom date range",
+    )
 
 
 def validate_year(year):
@@ -960,17 +1093,14 @@ def validate_year(year):
         raise CommandError("Year must be between 1 and 9999.")
 
 
-def year_date_range(*, year, start_date_value, end_date_value):
-    if start_date_value or end_date_value:
-        raise CommandError("Use either a year flag/--year or --start-date/--end-date, not both.")
-
-    return date(year, 1, 1), date(year, 12, 31)
-
-
 def get_range_date(*, value, prompt_label):
     if not value:
         value = input(f"{prompt_label} YYYY-MM-DD: ").strip()
 
+    return parse_date_value(value)
+
+
+def parse_date_value(value):
     try:
         return datetime.strptime(value, "%Y-%m-%d").date()
     except ValueError as exc:
