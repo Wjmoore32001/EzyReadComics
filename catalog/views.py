@@ -18,7 +18,7 @@ from catalog.models import (
 from reading.models import FollowedRun, IssueProgress, OneShotProgress, VolumeProgress
 
 
-BROWSE_INITIAL_RESULT_LIMIT = 5
+BROWSE_INITIAL_RESULT_LIMIT = 10
 BROWSE_LOAD_MORE_LIMIT = 10
 BROWSE_OPTION_LIMIT = 10
 
@@ -74,41 +74,11 @@ def browse(request):
     selected_volume_id = selected_volume.id if selected_volume else None
     selected_one_shot_id = selected_one_shot.id if selected_one_shot else None
 
-    publishers = list(get_option_page(get_publisher_options(""))[0])
-    run_options = list(
-        get_option_page(
-            get_run_options(
-                "",
-                publisher_id=selected_publisher_id,
-            )
-        )[0]
-    )
-    issue_options = list(
-        get_option_page(
-            get_issue_options(
-                "",
-                publisher_id=selected_publisher_id,
-                run_id=selected_run_id,
-            )
-        )[0]
-    )
-    volume_options = list(
-        get_option_page(
-            get_volume_options(
-                "",
-                publisher_id=selected_publisher_id,
-                run_id=selected_run_id,
-            )
-        )[0]
-    )
-    one_shot_options = list(
-        get_option_page(
-            get_one_shot_options(
-                "",
-                publisher_id=selected_publisher_id,
-            )
-        )[0]
-    )
+    publishers = []
+    run_options = []
+    issue_options = []
+    volume_options = []
+    one_shot_options = []
 
     runs_queryset, volumes_queryset, issues_queryset, one_shots_queryset = get_browse_querysets(
         selected_publisher=selected_publisher,
@@ -118,22 +88,38 @@ def browse(request):
         selected_one_shot=selected_one_shot,
     )
 
+    volumes_initially_loaded = bool(selected_volume)
+    issues_initially_loaded = bool(selected_issue)
+    one_shots_initially_loaded = bool(selected_one_shot)
+
     runs, has_more_runs = slice_with_has_more(
         runs_queryset,
         limit=BROWSE_INITIAL_RESULT_LIMIT,
     )
-    volumes, has_more_volumes = slice_with_has_more(
-        volumes_queryset,
-        limit=BROWSE_INITIAL_RESULT_LIMIT,
-    )
-    issue_list, has_more_issues = slice_with_has_more(
-        issues_queryset,
-        limit=BROWSE_INITIAL_RESULT_LIMIT,
-    )
-    one_shot_list, has_more_one_shots = slice_with_has_more(
-        one_shots_queryset,
-        limit=BROWSE_INITIAL_RESULT_LIMIT,
-    )
+    volumes = []
+    issue_list = []
+    one_shot_list = []
+    has_more_volumes = True
+    has_more_issues = True
+    has_more_one_shots = True
+
+    if volumes_initially_loaded:
+        volumes, has_more_volumes = slice_with_has_more(
+            volumes_queryset,
+            limit=BROWSE_INITIAL_RESULT_LIMIT,
+        )
+
+    if issues_initially_loaded:
+        issue_list, has_more_issues = slice_with_has_more(
+            issues_queryset,
+            limit=BROWSE_INITIAL_RESULT_LIMIT,
+        )
+
+    if one_shots_initially_loaded:
+        one_shot_list, has_more_one_shots = slice_with_has_more(
+            one_shots_queryset,
+            limit=BROWSE_INITIAL_RESULT_LIMIT,
+        )
 
     attach_issue_credit_display(issue_list)
     attach_run_tracking(request, runs)
@@ -163,6 +149,10 @@ def browse(request):
         "has_more_volumes": has_more_volumes,
         "has_more_issues": has_more_issues,
         "has_more_one_shots": has_more_one_shots,
+        "runs_initially_loaded": True,
+        "volumes_initially_loaded": volumes_initially_loaded,
+        "issues_initially_loaded": issues_initially_loaded,
+        "one_shots_initially_loaded": one_shots_initially_loaded,
         "selected_publisher": selected_publisher,
         "selected_run": selected_run,
         "selected_issue": selected_issue,
@@ -695,8 +685,8 @@ def get_browse_querysets(
 
 
 def slice_with_has_more(queryset, *, limit, offset=0):
-    items = list(queryset[offset : offset + limit + 1])
-    return items[:limit], len(items) > limit
+    items = list(queryset[offset : offset + limit])
+    return items, len(items) == limit
 
 
 def get_option_page(queryset, *, offset=0):

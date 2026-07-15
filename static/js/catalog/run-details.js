@@ -5,7 +5,9 @@ document.addEventListener("DOMContentLoaded", function () {
     const statusModalCopy = document.getElementById("tracking-status-modal-copy");
     const statusModalSelect = document.getElementById("tracking-status-select");
     const statusModalConfirm = document.querySelector("[data-status-modal-confirm]");
-    const statusModal = statusModalElement ? bootstrap.Modal.getOrCreateInstance(statusModalElement) : null;
+    const statusModal = statusModalElement && window.bootstrap
+        ? window.bootstrap.Modal.getOrCreateInstance(statusModalElement)
+        : null;
 
     let statusModalResolve = null;
     let statusModalContext = null;
@@ -39,9 +41,22 @@ document.addEventListener("DOMContentLoaded", function () {
         const labels = {
             run: "run",
             issue: "issue",
+            volume: "volume",
+            one_shot: "one-shot",
         };
 
         return labels[itemType] || "item";
+    }
+
+    function unfollowPrompt(itemType) {
+        const labels = {
+            run: "run",
+            issue: "issue",
+            volume: "volume",
+            one_shot: "one-shot",
+        };
+
+        return `Are you sure you want to unfollow this ${labels[itemType] || "item"}?`;
     }
 
     function applyStatusMessage(status, totalIssues, trackedIssues) {
@@ -117,6 +132,10 @@ document.addEventListener("DOMContentLoaded", function () {
     function ensureStatusModalControls() {
         if (statusModalControls) {
             return statusModalControls;
+        }
+
+        if (!statusModalElement) {
+            return null;
         }
 
         const body = statusModalElement.querySelector(".modal-body");
@@ -227,6 +246,10 @@ document.addEventListener("DOMContentLoaded", function () {
     function hideStatusModalError() {
         const controls = ensureStatusModalControls();
 
+        if (!controls) {
+            return;
+        }
+
         controls.error.classList.add("d-none");
         controls.error.textContent = "";
     }
@@ -234,12 +257,20 @@ document.addEventListener("DOMContentLoaded", function () {
     function showStatusModalError(message) {
         const controls = ensureStatusModalControls();
 
+        if (!controls) {
+            return;
+        }
+
         controls.error.textContent = message;
         controls.error.classList.remove("d-none");
     }
 
     function renderIndividualIssueStatusRows(issues, choices, defaultStatus) {
         const controls = ensureStatusModalControls();
+
+        if (!controls) {
+            return;
+        }
 
         clearElement(controls.individualIssueStatusList);
 
@@ -282,10 +313,18 @@ document.addEventListener("DOMContentLoaded", function () {
 
     function resetRunModalControls(options) {
         const controls = ensureStatusModalControls();
-        const issues = options && options.issues ? options.issues : [];
-        const issueChoices = options && options.issue_status_choices ? options.issue_status_choices : optionObjectsFromSelect(statusModalSelect);
 
-        controls.runOptions.classList.add("d-none");
+        if (!controls || !statusModalSelect) {
+            return;
+        }
+
+        const issues = options && options.issues ? options.issues : [];
+        const issueChoices = options && options.issue_status_choices
+            ? options.issue_status_choices
+            : optionObjectsFromSelect(statusModalSelect);
+        const isRun = statusModalContext && statusModalContext.itemType === "run";
+
+        controls.runOptions.classList.toggle("d-none", !isRun);
         controls.followIssuesInput.checked = false;
         controls.followIssuesInput.disabled = false;
         controls.followIssuesSettings.classList.add("d-none");
@@ -296,19 +335,15 @@ document.addEventListener("DOMContentLoaded", function () {
         populateSelect(controls.sharedIssueStatusSelect, issueChoices, statusModalSelect.value);
         renderIndividualIssueStatusRows(issues, issueChoices, statusModalSelect.value);
 
-        if (statusModalContext && statusModalContext.itemType === "run") {
-            controls.runOptions.classList.remove("d-none");
-
-            if (!issues.length) {
-                controls.followIssuesInput.disabled = true;
-            }
+        if (isRun && !issues.length) {
+            controls.followIssuesInput.disabled = true;
         }
     }
 
     function buildStatusModalResult() {
         const controls = ensureStatusModalControls();
 
-        if (!statusModalContext || statusModalContext.itemType !== "run") {
+        if (!statusModalContext || statusModalContext.itemType !== "run" || !controls) {
             return {
                 status: statusModalSelect.value,
             };
@@ -391,59 +426,42 @@ document.addEventListener("DOMContentLoaded", function () {
         });
     }
 
-    document.querySelectorAll("[data-auto-submit]").forEach(function (select) {
+    function bindAutoSubmitSelect(select) {
+        if (select.dataset.autoSubmitBound === "1") {
+            return;
+        }
+
+        select.dataset.autoSubmitBound = "1";
+
         select.addEventListener("change", function () {
             select.form.requestSubmit();
         });
-    });
+    }
 
-    document.querySelectorAll("[data-run-status-form]").forEach(function (form) {
-        form.addEventListener("submit", function (event) {
-            const select = form.querySelector("select[name='status']");
-            const applyToIssuesInput = form.querySelector("input[name='apply_to_issues']");
-            const removeIssuesInput = form.querySelector("input[name='remove_issues']");
-            const currentStatus = form.dataset.currentStatus;
-            const totalIssues = getCount(form, "runIssueCount");
-            const trackedIssues = getCount(form, "trackedIssueCount");
+    document.querySelectorAll("[data-auto-submit]").forEach(bindAutoSubmitSelect);
 
-            if (!select || !applyToIssuesInput || !removeIssuesInput) {
+    document.querySelectorAll(".clickable-row").forEach(function (row) {
+        if (row.dataset.clickableRowBound === "1") {
+            return;
+        }
+
+        row.dataset.clickableRowBound = "1";
+
+        row.addEventListener("click", function (event) {
+            if (event.target.closest("a, button, input, select, textarea, label")) {
                 return;
             }
 
-            applyToIssuesInput.value = "";
-            removeIssuesInput.value = "";
+            window.location.href = row.dataset.rowUrl;
+        });
 
-            if (select.value === currentStatus) {
+        row.addEventListener("keydown", function (event) {
+            if (event.key !== "Enter" && event.key !== " ") {
                 return;
             }
 
-            if (select.value === unfollowStatusValue) {
-                const confirmed = window.confirm("Are you sure you want to unfollow this run?");
-
-                if (!confirmed) {
-                    event.preventDefault();
-                    select.value = currentStatus;
-                    return;
-                }
-
-                if (trackedIssues > 0) {
-                    const removeIssues = window.confirm(
-                        `Also unfollow the ${trackedIssues} saved ${issueLabel(trackedIssues)} from this run?`
-                    );
-
-                    if (removeIssues) {
-                        removeIssuesInput.value = "1";
-                    }
-                }
-
-                return;
-            }
-
-            const message = applyStatusMessage(select.value, totalIssues, trackedIssues);
-
-            if (message && window.confirm(message)) {
-                applyToIssuesInput.value = "1";
-            }
+            event.preventDefault();
+            window.location.href = row.dataset.rowUrl;
         });
     });
 
@@ -519,6 +537,57 @@ document.addEventListener("DOMContentLoaded", function () {
         addHiddenInput(form, "issue_status", selectedStatus.issueStatus || selectedStatus.status);
     }
 
+    document.querySelectorAll("[data-run-status-form]").forEach(function (form) {
+        form.addEventListener("submit", function (event) {
+            const select = form.querySelector("select[name='status']");
+            const applyToIssuesInput = form.querySelector("input[name='apply_to_issues']");
+            const removeIssuesInput = form.querySelector("input[name='remove_issues']");
+            const currentStatus = form.dataset.currentStatus;
+            const totalIssues = getCount(form, "runIssueCount");
+            const trackedIssues = getCount(form, "trackedIssueCount");
+
+            if (!select || !applyToIssuesInput || !removeIssuesInput) {
+                return;
+            }
+
+            applyToIssuesInput.value = "";
+            removeIssuesInput.value = "";
+
+            if (select.value === currentStatus) {
+                event.preventDefault();
+                return;
+            }
+
+            if (select.value === unfollowStatusValue) {
+                const confirmed = window.confirm(unfollowPrompt("run"));
+
+                if (!confirmed) {
+                    event.preventDefault();
+                    select.value = currentStatus;
+                    return;
+                }
+
+                if (trackedIssues > 0) {
+                    const removeIssues = window.confirm(
+                        `Also unfollow the ${trackedIssues} saved ${issueLabel(trackedIssues)} from this run?`,
+                    );
+
+                    if (removeIssues) {
+                        removeIssuesInput.value = "1";
+                    }
+                }
+
+                return;
+            }
+
+            const message = applyStatusMessage(select.value, totalIssues, trackedIssues);
+
+            if (message && window.confirm(message)) {
+                applyToIssuesInput.value = "1";
+            }
+        });
+    });
+
     document.querySelectorAll("[data-run-follow-form]").forEach(function (form) {
         form.addEventListener("submit", async function (event) {
             event.preventDefault();
@@ -552,17 +621,18 @@ document.addEventListener("DOMContentLoaded", function () {
         });
     });
 
-    document.querySelectorAll("[data-issue-follow-form]").forEach(function (form) {
+    document.querySelectorAll("[data-simple-follow-form]").forEach(function (form) {
         form.addEventListener("submit", async function (event) {
             event.preventDefault();
 
             const statusInput = form.querySelector("input[name='status']");
+            const itemType = form.dataset.itemType || "item";
 
             if (!statusInput) {
                 return;
             }
 
-            const selectedStatus = await openStatusModal("issue", {});
+            const selectedStatus = await openStatusModal(itemType, {});
 
             if (!selectedStatus) {
                 return;
@@ -573,16 +643,26 @@ document.addEventListener("DOMContentLoaded", function () {
         });
     });
 
-    document.querySelectorAll("[data-issue-status-form]").forEach(function (form) {
+    document.querySelectorAll("[data-simple-status-form]").forEach(function (form) {
         form.addEventListener("submit", function (event) {
             const select = form.querySelector("select[name='status']");
             const currentStatus = form.dataset.currentStatus;
+            const itemType = form.dataset.itemType || "item";
 
-            if (!select || select.value !== unfollowStatusValue) {
+            if (!select) {
                 return;
             }
 
-            const confirmed = window.confirm("Are you sure you want to unfollow this issue?");
+            if (select.value === currentStatus) {
+                event.preventDefault();
+                return;
+            }
+
+            if (select.value !== unfollowStatusValue) {
+                return;
+            }
+
+            const confirmed = window.confirm(unfollowPrompt(itemType));
 
             if (!confirmed) {
                 event.preventDefault();
