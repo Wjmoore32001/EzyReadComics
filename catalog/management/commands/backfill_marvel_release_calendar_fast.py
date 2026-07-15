@@ -34,6 +34,7 @@ from catalog.marvel.writer import (
     upsert_issue_from_series_issue,
     upsert_run_from_series,
 )
+from catalog.models import ComicIssue
 
 
 WEDNESDAY_WEEKDAY = 2
@@ -74,7 +75,7 @@ class Command(BaseCommand):
             "--limit",
             type=int,
             default=DEFAULT_LIMIT,
-            help="Maximum kept calendar issue seed pages to read per weekly window. Default: unlimited.",
+            help="Maximum kept calendar issue seed pages to consider per weekly window. Default: unlimited.",
         )
         parser.add_argument(
             "--calendar-timeout",
@@ -98,7 +99,12 @@ class Command(BaseCommand):
             "--detail-limit",
             type=int,
             default=None,
-            help="Maximum seed issue detail pages to read per weekly window. Default: unlimited.",
+            help="Maximum new seed issue detail pages to read per weekly window after existing-source skips. Default: unlimited.",
+        )
+        parser.add_argument(
+            "--rescan-existing",
+            action="store_true",
+            help="Re-read seed issue detail pages even when the Marvel issue URL or ID already exists locally.",
         )
         parser.add_argument(
             "--headed",
@@ -180,6 +186,7 @@ class Command(BaseCommand):
         raw = options["raw"]
         verbose = options["verbose"]
         headed = options["headed"]
+        rescan_existing = options["rescan_existing"]
 
         totals = new_totals()
         globally_seen_issue_keys = set()
@@ -195,6 +202,7 @@ class Command(BaseCommand):
             headed=headed,
             calendar_timeout=calendar_timeout,
             detail_timeout=detail_timeout,
+            rescan_existing=rescan_existing,
         )
 
         for week_start_date in week_start_dates:
@@ -220,6 +228,7 @@ class Command(BaseCommand):
                 raw=raw,
                 verbose=verbose,
                 headed=headed,
+                rescan_existing=rescan_existing,
                 globally_seen_issue_keys=globally_seen_issue_keys,
             )
             merge_totals(totals, date_totals)
@@ -240,6 +249,7 @@ class Command(BaseCommand):
         raw,
         verbose,
         headed,
+        rescan_existing,
         globally_seen_issue_keys,
     ):
         totals = new_totals()
@@ -289,24 +299,28 @@ class Command(BaseCommand):
             self.print_window_summary(totals)
             return totals
 
-        if detail_limit is not None and len(kept_calendar_issues) > detail_limit:
-            totals["detail_limit_skipped"] = len(kept_calendar_issues) - detail_limit
-            kept_calendar_issues = kept_calendar_issues[:detail_limit]
+        existing_sources = empty_existing_sources()
 
-        totals["planned_issue_detail_reads"] = len(kept_calendar_issues)
-        seed_count = len(kept_calendar_issues)
+        if not rescan_existing:
+            close_old_connections()
+            existing_sources = get_existing_marvel_issue_sources(kept_calendar_issues)
+            close_old_connections()
 
-        for seed_index, calendar_issue in enumerate(kept_calendar_issues, start=1):
+        pending_calendar_issues = []
+
+        for calendar_issue in kept_calendar_issues:
             issue_key = issue_identity(calendar_issue)
 
             if issue_key in globally_seen_issue_keys:
                 totals["duplicate_issue_seeds"] += 1
-                self.print_seed_skipped(
-                    seed_index=seed_index,
-                    seed_count=seed_count,
-                    calendar_issue=calendar_issue,
-                    reason="duplicate issue seed already processed in this run",
-                )
+
+                if verbose:
+                    self.print_seed_skipped(
+                        seed_index=len(pending_calendar_issues) + 1,
+                        seed_count=len(kept_calendar_issues),
+                        calendar_issue=calendar_issue,
+                        reason="duplicate issue seed already processed in this run",
+                    )
                 continue
 
             globally_seen_issue_keys.add(issue_key)
@@ -314,13 +328,38 @@ class Command(BaseCommand):
             if not clean_text(calendar_issue.detail_url):
                 totals["missing_detail_url_skipped"] += 1
                 self.print_seed_skipped(
-                    seed_index=seed_index,
-                    seed_count=seed_count,
+                    seed_index=len(pending_calendar_issues) + 1,
+                    seed_count=len(kept_calendar_issues),
                     calendar_issue=calendar_issue,
                     reason="calendar issue is missing detail URL",
                 )
                 continue
 
+            if not rescan_existing and marvel_calendar_issue_exists_locally(
+                calendar_issue=calendar_issue,
+                existing_sources=existing_sources,
+            ):
+                totals["existing_source_skipped"] += 1
+
+                if verbose:
+                    self.print_seed_skipped(
+                        seed_index=len(pending_calendar_issues) + 1,
+                        seed_count=len(kept_calendar_issues),
+                        calendar_issue=calendar_issue,
+                        reason="Marvel issue URL or ID already exists locally",
+                    )
+                continue
+
+            pending_calendar_issues.append(calendar_issue)
+
+        if detail_limit is not None and len(pending_calendar_issues) > detail_limit:
+            totals["detail_limit_skipped"] = len(pending_calendar_issues) - detail_limit
+            pending_calendar_issues = pending_calendar_issues[:detail_limit]
+
+        totals["planned_issue_detail_reads"] = len(pending_calendar_issues)
+        seed_count = len(pending_calendar_issues)
+
+        for seed_index, calendar_issue in enumerate(pending_calendar_issues, start=1):
             series_issue = build_series_issue_from_calendar_issue(calendar_issue)
             detail = read_seed_issue_detail(
                 series_issue=series_issue,
@@ -420,6 +459,7 @@ class Command(BaseCommand):
         headed,
         calendar_timeout,
         detail_timeout,
+        rescan_existing,
     ):
         first_window_end = week_start_dates[0] + timedelta(days=WINDOW_DAYS - 1)
         last_window_end = week_start_dates[-1] + timedelta(days=WINDOW_DAYS - 1)
@@ -450,11 +490,15 @@ class Command(BaseCommand):
         self.stdout.write("Series expansion: off")
         self.stdout.write("Write cadence: per seed issue")
         self.stdout.write(
+            "Existing source behavior: "
+            + ("rescan existing URLs/IDs" if rescan_existing else "skip existing URLs/IDs before browser detail reads")
+        )
+        self.stdout.write(
             "Calendar seed limit per weekly window: "
             + (str(limit) if limit is not None else "unlimited")
         )
         self.stdout.write(
-            "Issue detail read limit per weekly window: "
+            "Issue detail read limit per weekly window after existing-source skips: "
             + (str(detail_limit) if detail_limit is not None else "unlimited")
         )
 
@@ -536,8 +580,10 @@ class Command(BaseCommand):
         self.stdout.write("Weekly window summary:")
         self.stdout.write(f"  Calendar issues found: {totals['calendar_found']}")
         self.stdout.write(f"  Calendar issues used as seeds: {totals['calendar_processed']}")
+        self.stdout.write(f"  Existing URL/ID seeds skipped: {totals['existing_source_skipped']}")
         self.stdout.write(f"  Duplicate issue seeds skipped: {totals['duplicate_issue_seeds']}")
         self.stdout.write(f"  Missing detail URLs skipped: {totals['missing_detail_url_skipped']}")
+        self.stdout.write(f"  Planned issue detail reads: {totals['planned_issue_detail_reads']}")
         self.stdout.write(f"  Issue detail browser reads: {totals['detail_browser_reads']}")
         self.stdout.write(f"  Issue writes skipped because detail failed: {totals['issue_writes_skipped_no_detail']}")
         self.stdout.write(f"  Created issues: {totals['issues_created']}")
@@ -558,10 +604,12 @@ class Command(BaseCommand):
         )
         self.stdout.write(f"Skipped by keyword: {totals['keyword_skipped']}")
         self.stdout.write(f"Skipped by calendar seed limit: {totals['limit_skipped']}")
+        self.stdout.write(f"Skipped by existing URL/ID: {totals['existing_source_skipped']}")
         self.stdout.write(f"Skipped by detail limit: {totals['detail_limit_skipped']}")
         self.stdout.write(f"Calendar issues used as seeds: {totals['calendar_processed']}")
         self.stdout.write(f"Duplicate issue seeds skipped: {totals['duplicate_issue_seeds']}")
         self.stdout.write(f"Missing detail URLs skipped: {totals['missing_detail_url_skipped']}")
+        self.stdout.write(f"Planned issue detail reads: {totals['planned_issue_detail_reads']}")
         self.stdout.write(f"Issues with complete details: {totals['complete_details']}")
         self.stdout.write(f"Issues with incomplete details: {totals['incomplete_details']}")
         self.stdout.write(f"Issues missing description: {totals['missing_description']}")
@@ -666,6 +714,81 @@ def db_call(function, *args, retry=True, **kwargs):
         return function(*args, **kwargs)
     finally:
         close_old_connections()
+
+
+def empty_existing_sources():
+    return {
+        "urls": set(),
+        "keys": set(),
+    }
+
+
+def get_existing_marvel_issue_sources(calendar_issues):
+    urls = set()
+    source_keys = set()
+
+    for issue in calendar_issues:
+        urls.update(source_url_candidates(issue.detail_url))
+
+        if clean_text(issue.marvel_issue_id):
+            source_keys.add(clean_text(issue.marvel_issue_id))
+
+    existing_sources = empty_existing_sources()
+
+    if urls:
+        existing_sources["urls"] = {
+            normalize_url_for_compare(value)
+            for value in ComicIssue.objects.filter(
+                official_source_url__in=urls,
+            ).values_list("official_source_url", flat=True)
+            if clean_text(value)
+        }
+
+    if source_keys:
+        existing_sources["keys"] = {
+            clean_text(value)
+            for value in ComicIssue.objects.filter(
+                official_source_key__in=source_keys,
+            ).values_list("official_source_key", flat=True)
+            if clean_text(value)
+        }
+
+    return existing_sources
+
+
+def marvel_calendar_issue_exists_locally(*, calendar_issue, existing_sources):
+    for url in source_url_candidates(calendar_issue.detail_url):
+        if normalize_url_for_compare(url) in existing_sources["urls"]:
+            return True
+
+    marvel_issue_id = clean_text(calendar_issue.marvel_issue_id)
+
+    if marvel_issue_id and marvel_issue_id in existing_sources["keys"]:
+        return True
+
+    return False
+
+
+def source_url_candidates(value):
+    value = clean_text(value)
+
+    if not value:
+        return set()
+
+    candidates = {
+        value,
+        value.rstrip("/"),
+    }
+
+    if "?" in value:
+        candidates.add(value.split("?", 1)[0])
+        candidates.add(value.split("?", 1)[0].rstrip("/"))
+
+    return {candidate for candidate in candidates if candidate}
+
+
+def normalize_url_for_compare(value):
+    return clean_text(value).rstrip("/").casefold()
 
 
 def add_detected_year_flags(parser):
@@ -777,6 +900,7 @@ def new_totals():
         "limit_skipped": 0,
         "detail_limit_skipped": 0,
         "calendar_processed": 0,
+        "existing_source_skipped": 0,
         "duplicate_issue_seeds": 0,
         "missing_detail_url_skipped": 0,
         "planned_issue_detail_reads": 0,
