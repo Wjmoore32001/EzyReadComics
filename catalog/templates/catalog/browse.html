@@ -10,9 +10,7 @@
             <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-end gap-4">
                 <div>
                     <p class="erc-page-kicker mb-3">Comics</p>
-                    <h1 class="erc-hero-title display-4 fw-bold mb-3">
-                        Browse Comics
-                    </h1>
+                    <h1 class="erc-hero-title display-4 fw-bold mb-3">Browse Comics</h1>
                     <p class="erc-hero-subtitle lead mb-0">
                         Find runs, collected volumes, one-shots, and issues.
                     </p>
@@ -26,33 +24,6 @@
                     </div>
                 {% endif %}
             </div>
-        </div>
-    </section>
-
-    <section class="erc-home-stat-grid">
-        <div class="erc-home-stat">
-            <div class="erc-home-stat-value">{{ catalog_publisher_count }}</div>
-            <div class="erc-muted mt-2">Publishers in catalog</div>
-        </div>
-
-        <div class="erc-home-stat">
-            <div class="erc-home-stat-value">{{ catalog_run_count }}</div>
-            <div class="erc-muted mt-2">Runs in catalog</div>
-        </div>
-
-        <div class="erc-home-stat">
-            <div class="erc-home-stat-value">{{ catalog_volume_count }}</div>
-            <div class="erc-muted mt-2">Volumes in catalog</div>
-        </div>
-
-        <div class="erc-home-stat">
-            <div class="erc-home-stat-value">{{ catalog_one_shot_count }}</div>
-            <div class="erc-muted mt-2">One-shots in catalog</div>
-        </div>
-
-        <div class="erc-home-stat">
-            <div class="erc-home-stat-value">{{ catalog_issue_count }}</div>
-            <div class="erc-muted mt-2">Issues in catalog</div>
         </div>
     </section>
 
@@ -70,9 +41,7 @@
 
             <div class="row g-3 align-items-end">
                 <div class="col-12 col-lg-6 col-xxl">
-                    <label class="form-label erc-muted" for="publisher-search-browse">
-                        Publisher
-                    </label>
+                    <label class="form-label erc-muted" for="publisher-search-browse">Publisher</label>
 
                     <div
                         class="dropdown searchable-dropdown"
@@ -123,11 +92,6 @@
                                         data-search-label="{{ publisher.name }}"
                                     >
                                         <span class="fw-semibold">{{ publisher.name }}</span>
-                                        <span class="erc-muted">
-                                            · {{ publisher.run_total }} runs
-                                            · {{ publisher.volume_total }} volumes
-                                            · {{ publisher.one_shot_total }} one-shots
-                                        </span>
                                     </a>
                                 {% endfor %}
                             </div>
@@ -154,9 +118,7 @@
                         </label>
                     </div>
 
-                    <label class="form-label erc-muted" for="run-search-browse">
-                        Run
-                    </label>
+                    <label class="form-label erc-muted" for="run-search-browse">Run</label>
 
                     <div
                         class="dropdown searchable-dropdown"
@@ -221,7 +183,6 @@
                                         <span class="fw-semibold">
                                             {{ run.title }}{% if run.start_year %} ({{ run.start_year }}){% endif %}
                                         </span>
-
                                         <span class="erc-muted">
                                             · {{ run.publisher.name }}
                                             {% if run.issue_count %}
@@ -256,9 +217,7 @@
                         </label>
                     </div>
 
-                    <label class="form-label erc-muted" for="issue-search-browse">
-                        Issues
-                    </label>
+                    <label class="form-label erc-muted" for="issue-search-browse">Issues</label>
 
                     <div
                         class="dropdown searchable-dropdown"
@@ -365,9 +324,7 @@
                         </label>
                     </div>
 
-                    <label class="form-label erc-muted" for="volume-search-browse">
-                        Collected volume
-                    </label>
+                    <label class="form-label erc-muted" for="volume-search-browse">Collected volume</label>
 
                     <div
                         class="dropdown searchable-dropdown"
@@ -473,9 +430,7 @@
                         </label>
                     </div>
 
-                    <label class="form-label erc-muted" for="one-shot-search-browse">
-                        One-shot
-                    </label>
+                    <label class="form-label erc-muted" for="one-shot-search-browse">One-shot</label>
 
                     <div
                         class="dropdown searchable-dropdown"
@@ -611,10 +566,7 @@
         <div class="card-body">
             <div class="erc-section-header">
                 <h2 class="h3 fw-bold mb-0 erc-section-title">Runs</h2>
-
-                <p class="erc-muted mb-0" data-loaded-count>
-                    Showing {{ runs|length }} loaded
-                </p>
+                <p class="erc-muted mb-0" data-loaded-count>Showing {{ runs|length }} loaded</p>
             </div>
 
             <div class="table-responsive">
@@ -630,12 +582,7 @@
 
                     <tbody data-load-target>
                     {% for run in runs %}
-                        <tr
-                            class="clickable-row"
-                            data-row-url="{% url 'catalog:run_details' run.id %}"
-                            tabindex="0"
-                            aria-label="Open run details for {{ run }}"
-                        >
+                        <tr class="clickable-row" data-row-url="{% url 'catalog:run_details' run.id %}" tabindex="0" aria-label="Open run details for {{ run }}">
                             <td class="fw-semibold">
                                 <a href="{% url 'catalog:run_details' run.id %}" class="erc-data-link">
                                     {{ run.title }}{% if run.start_year %} ({{ run.start_year }}){% endif %}
@@ -672,9 +619,7 @@
                                         <input type="hidden" name="remove_issues" value="">
                                         <select name="status" class="form-select form-select-sm" data-auto-submit>
                                             {% for value, label in run_status_choices %}
-                                                <option value="{{ value }}" {% if run.user_tracking.status == value %}selected{% endif %}>
-                                                    {{ label }}
-                                                </option>
+                                                <option value="{{ value }}" {% if run.user_tracking.status == value %}selected{% endif %}>{{ label }}</option>
                                             {% endfor %}
                                             <option value="__unfollow__">Unfollow</option>
                                         </select>
@@ -695,18 +640,14 @@
                                         <input type="hidden" name="apply_to_issues" value="">
                                         <input type="hidden" name="issue_status" value="">
                                         <input type="hidden" name="issue_status_mode" value="">
-                                        <button type="submit" class="btn btn-outline-light btn-sm erc-track-button">
-                                            Follow
-                                        </button>
+                                        <button type="submit" class="btn btn-outline-light btn-sm erc-track-button">Follow</button>
                                     </form>
                                 {% endif %}
                             </td>
                         </tr>
                     {% empty %}
                         <tr>
-                            <td colspan="4" class="text-center erc-muted py-4">
-                                No runs match this filter.
-                            </td>
+                            <td colspan="4" class="text-center erc-muted py-4">No runs match this filter.</td>
                         </tr>
                     {% endfor %}
                     </tbody>
@@ -747,10 +688,7 @@
         <div class="card-body">
             <div class="erc-section-header">
                 <h2 class="h3 fw-bold mb-0 erc-section-title">Volumes</h2>
-
-                <p class="erc-muted mb-0" data-loaded-count>
-                    Showing {{ volumes|length }} loaded
-                </p>
+                <p class="erc-muted mb-0" data-loaded-count>Showing {{ volumes|length }} loaded</p>
             </div>
 
             <div class="table-responsive">
@@ -766,21 +704,12 @@
 
                     <tbody data-load-target>
                     {% for volume in volumes %}
-                        <tr
-                            class="clickable-row"
-                            data-row-url="{% url 'catalog:volume_details' volume.id %}"
-                            tabindex="0"
-                            aria-label="Open volume details for {{ volume }}"
-                        >
+                        <tr class="clickable-row" data-row-url="{% url 'catalog:volume_details' volume.id %}" tabindex="0" aria-label="Open volume details for {{ volume }}">
                             <td class="fw-semibold">
-                                <a href="{% url 'catalog:volume_details' volume.id %}" class="erc-data-link">
-                                    {{ volume }}
-                                </a>
+                                <a href="{% url 'catalog:volume_details' volume.id %}" class="erc-data-link">{{ volume }}</a>
                             </td>
                             <td>
-                                <a href="{% url 'catalog:run_details' volume.run.id %}" class="erc-data-link">
-                                    {{ volume.run }}
-                                </a>
+                                <a href="{% url 'catalog:run_details' volume.run.id %}" class="erc-data-link">{{ volume.run }}</a>
                             </td>
                             <td>
                                 {% if volume.release_date %}
@@ -791,48 +720,28 @@
                             </td>
                             <td class="text-end erc-track-cell">
                                 {% if volume.user_tracking %}
-                                    <form
-                                        action="{% url 'reading:set_volume_status' volume.id %}"
-                                        method="post"
-                                        class="erc-track-form"
-                                        data-tracking-form
-                                        data-item-type="volume"
-                                        data-current-status="{{ volume.user_tracking.status }}"
-                                    >
+                                    <form action="{% url 'reading:set_volume_status' volume.id %}" method="post" class="erc-track-form" data-tracking-form data-item-type="volume" data-current-status="{{ volume.user_tracking.status }}">
                                         {% csrf_token %}
                                         <input type="hidden" name="next" value="{{ request.get_full_path }}">
                                         <select name="status" class="form-select form-select-sm" data-auto-submit>
                                             {% for value, label in volume_status_choices %}
-                                                <option value="{{ value }}" {% if volume.user_tracking.status == value %}selected{% endif %}>
-                                                    {{ label }}
-                                                </option>
+                                                <option value="{{ value }}" {% if volume.user_tracking.status == value %}selected{% endif %}>{{ label }}</option>
                                             {% endfor %}
                                             <option value="__unfollow__">Remove</option>
                                         </select>
                                     </form>
                                 {% else %}
-                                    <form
-                                        action="{% url 'reading:set_volume_status' volume.id %}"
-                                        method="post"
-                                        class="erc-track-form"
-                                        data-tracking-form
-                                        data-item-type="volume"
-                                        data-track-follow
-                                    >
+                                    <form action="{% url 'reading:set_volume_status' volume.id %}" method="post" class="erc-track-form" data-tracking-form data-item-type="volume" data-track-follow>
                                         {% csrf_token %}
                                         <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                                        <button type="submit" class="btn btn-outline-light btn-sm erc-track-button">
-                                            Follow
-                                        </button>
+                                        <button type="submit" class="btn btn-outline-light btn-sm erc-track-button">Follow</button>
                                     </form>
                                 {% endif %}
                             </td>
                         </tr>
                     {% empty %}
                         <tr>
-                            <td colspan="4" class="text-center erc-muted py-4">
-                                No collected volumes match this filter.
-                            </td>
+                            <td colspan="4" class="text-center erc-muted py-4">No collected volumes match this filter.</td>
                         </tr>
                     {% endfor %}
                     </tbody>
@@ -856,13 +765,7 @@
                     Load {{ browse_load_more_limit }} more volumes
                 </button>
 
-                <button
-                    type="button"
-                    class="btn erc-hide-button d-none"
-                    data-hide-more
-                    data-min-visible="{{ browse_initial_limit }}"
-                    data-hide-count="{{ browse_load_more_limit }}"
-                >
+                <button type="button" class="btn erc-hide-button d-none" data-hide-more data-min-visible="{{ browse_initial_limit }}" data-hide-count="{{ browse_load_more_limit }}">
                     Hide {{ browse_load_more_limit }} volumes
                 </button>
             </div>
@@ -873,10 +776,7 @@
         <div class="card-body">
             <div class="erc-section-header">
                 <h2 class="h3 fw-bold mb-0 erc-section-title">Issues</h2>
-
-                <p class="erc-muted mb-0" data-loaded-count>
-                    Showing {{ issues|length }} loaded
-                </p>
+                <p class="erc-muted mb-0" data-loaded-count>Showing {{ issues|length }} loaded</p>
             </div>
 
             <div class="table-responsive">
@@ -891,22 +791,9 @@
                     </thead>
                     <tbody data-load-target>
                     {% for issue in issues %}
-                        <tr
-                            class="clickable-row"
-                            data-row-url="{% url 'catalog:issue_details' issue.id %}"
-                            tabindex="0"
-                            aria-label="Open issue details for issue {{ issue.issue_number }}"
-                        >
-                            <td class="fw-semibold">
-                                <a href="{% url 'catalog:issue_details' issue.id %}" class="erc-data-link">
-                                    #{{ issue.issue_number }}
-                                </a>
-                            </td>
-                            <td>
-                                <a href="{% url 'catalog:run_details' issue.run.id %}" class="erc-data-link">
-                                    {{ issue.run }}
-                                </a>
-                            </td>
+                        <tr class="clickable-row" data-row-url="{% url 'catalog:issue_details' issue.id %}" tabindex="0" aria-label="Open issue details for issue {{ issue.issue_number }}">
+                            <td class="fw-semibold"><a href="{% url 'catalog:issue_details' issue.id %}" class="erc-data-link">#{{ issue.issue_number }}</a></td>
+                            <td><a href="{% url 'catalog:run_details' issue.run.id %}" class="erc-data-link">{{ issue.run }}</a></td>
                             <td>
                                 {% if issue.published_date %}
                                     {{ issue.published_date|date:"Y-m-d" }}
@@ -916,48 +803,28 @@
                             </td>
                             <td class="text-end erc-track-cell">
                                 {% if issue.user_tracking %}
-                                    <form
-                                        action="{% url 'reading:set_issue_status' issue.id %}"
-                                        method="post"
-                                        class="erc-track-form"
-                                        data-tracking-form
-                                        data-item-type="issue"
-                                        data-current-status="{{ issue.user_tracking.status }}"
-                                    >
+                                    <form action="{% url 'reading:set_issue_status' issue.id %}" method="post" class="erc-track-form" data-tracking-form data-item-type="issue" data-current-status="{{ issue.user_tracking.status }}">
                                         {% csrf_token %}
                                         <input type="hidden" name="next" value="{{ request.get_full_path }}">
                                         <select name="status" class="form-select form-select-sm" data-auto-submit>
                                             {% for value, label in issue_status_choices %}
-                                                <option value="{{ value }}" {% if issue.user_tracking.status == value %}selected{% endif %}>
-                                                    {{ label }}
-                                                </option>
+                                                <option value="{{ value }}" {% if issue.user_tracking.status == value %}selected{% endif %}>{{ label }}</option>
                                             {% endfor %}
                                             <option value="__unfollow__">Unfollow</option>
                                         </select>
                                     </form>
                                 {% else %}
-                                    <form
-                                        action="{% url 'reading:set_issue_status' issue.id %}"
-                                        method="post"
-                                        class="erc-track-form"
-                                        data-tracking-form
-                                        data-item-type="issue"
-                                        data-track-follow
-                                    >
+                                    <form action="{% url 'reading:set_issue_status' issue.id %}" method="post" class="erc-track-form" data-tracking-form data-item-type="issue" data-track-follow>
                                         {% csrf_token %}
                                         <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                                        <button type="submit" class="btn btn-outline-light btn-sm erc-track-button">
-                                            Follow
-                                        </button>
+                                        <button type="submit" class="btn btn-outline-light btn-sm erc-track-button">Follow</button>
                                     </form>
                                 {% endif %}
                             </td>
                         </tr>
                     {% empty %}
                         <tr>
-                            <td colspan="4" class="text-center erc-muted py-4">
-                                No issues match this filter.
-                            </td>
+                            <td colspan="4" class="text-center erc-muted py-4">No issues match this filter.</td>
                         </tr>
                     {% endfor %}
                     </tbody>
@@ -981,13 +848,7 @@
                     Load {{ browse_load_more_limit }} more issues
                 </button>
 
-                <button
-                    type="button"
-                    class="btn erc-hide-button d-none"
-                    data-hide-more
-                    data-min-visible="{{ browse_initial_limit }}"
-                    data-hide-count="{{ browse_load_more_limit }}"
-                >
+                <button type="button" class="btn erc-hide-button d-none" data-hide-more data-min-visible="{{ browse_initial_limit }}" data-hide-count="{{ browse_load_more_limit }}">
                     Hide {{ browse_load_more_limit }} issues
                 </button>
             </div>
@@ -998,10 +859,7 @@
         <div class="card-body">
             <div class="erc-section-header">
                 <h2 class="h3 fw-bold mb-0 erc-section-title">One-shots</h2>
-
-                <p class="erc-muted mb-0" data-loaded-count>
-                    Showing {{ one_shots|length }} loaded
-                </p>
+                <p class="erc-muted mb-0" data-loaded-count>Showing {{ one_shots|length }} loaded</p>
             </div>
 
             <div class="table-responsive">
@@ -1017,17 +875,8 @@
 
                     <tbody data-load-target>
                     {% for one_shot in one_shots %}
-                        <tr
-                            class="clickable-row"
-                            data-row-url="{% url 'catalog:one_shot_details' one_shot.id %}"
-                            tabindex="0"
-                            aria-label="Open one-shot details for {{ one_shot.title }}"
-                        >
-                            <td class="fw-semibold">
-                                <a href="{% url 'catalog:one_shot_details' one_shot.id %}" class="erc-data-link">
-                                    {{ one_shot.title }}
-                                </a>
-                            </td>
+                        <tr class="clickable-row" data-row-url="{% url 'catalog:one_shot_details' one_shot.id %}" tabindex="0" aria-label="Open one-shot details for {{ one_shot.title }}">
+                            <td class="fw-semibold"><a href="{% url 'catalog:one_shot_details' one_shot.id %}" class="erc-data-link">{{ one_shot.title }}</a></td>
                             <td>{{ one_shot.publisher.name }}</td>
                             <td>
                                 {% if one_shot.published_date %}
@@ -1040,48 +889,28 @@
                             </td>
                             <td class="text-end erc-track-cell">
                                 {% if one_shot.user_tracking %}
-                                    <form
-                                        action="{% url 'reading:set_one_shot_status' one_shot.id %}"
-                                        method="post"
-                                        class="erc-track-form"
-                                        data-tracking-form
-                                        data-item-type="one_shot"
-                                        data-current-status="{{ one_shot.user_tracking.status }}"
-                                    >
+                                    <form action="{% url 'reading:set_one_shot_status' one_shot.id %}" method="post" class="erc-track-form" data-tracking-form data-item-type="one_shot" data-current-status="{{ one_shot.user_tracking.status }}">
                                         {% csrf_token %}
                                         <input type="hidden" name="next" value="{{ request.get_full_path }}">
                                         <select name="status" class="form-select form-select-sm" data-auto-submit>
                                             {% for value, label in one_shot_status_choices %}
-                                                <option value="{{ value }}" {% if one_shot.user_tracking.status == value %}selected{% endif %}>
-                                                    {{ label }}
-                                                </option>
+                                                <option value="{{ value }}" {% if one_shot.user_tracking.status == value %}selected{% endif %}>{{ label }}</option>
                                             {% endfor %}
                                             <option value="__unfollow__">Unfollow</option>
                                         </select>
                                     </form>
                                 {% else %}
-                                    <form
-                                        action="{% url 'reading:set_one_shot_status' one_shot.id %}"
-                                        method="post"
-                                        class="erc-track-form"
-                                        data-tracking-form
-                                        data-item-type="one_shot"
-                                        data-track-follow
-                                    >
+                                    <form action="{% url 'reading:set_one_shot_status' one_shot.id %}" method="post" class="erc-track-form" data-tracking-form data-item-type="one_shot" data-track-follow>
                                         {% csrf_token %}
                                         <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                                        <button type="submit" class="btn btn-outline-light btn-sm erc-track-button">
-                                            Follow
-                                        </button>
+                                        <button type="submit" class="btn btn-outline-light btn-sm erc-track-button">Follow</button>
                                     </form>
                                 {% endif %}
                             </td>
                         </tr>
                     {% empty %}
                         <tr>
-                            <td colspan="4" class="text-center erc-muted py-4">
-                                No one-shots match this filter.
-                            </td>
+                            <td colspan="4" class="text-center erc-muted py-4">No one-shots match this filter.</td>
                         </tr>
                     {% endfor %}
                     </tbody>
@@ -1105,13 +934,7 @@
                     Load {{ browse_load_more_limit }} more one-shots
                 </button>
 
-                <button
-                    type="button"
-                    class="btn erc-hide-button d-none"
-                    data-hide-more
-                    data-min-visible="{{ browse_initial_limit }}"
-                    data-hide-count="{{ browse_load_more_limit }}"
-                >
+                <button type="button" class="btn erc-hide-button d-none" data-hide-more data-min-visible="{{ browse_initial_limit }}" data-hide-count="{{ browse_load_more_limit }}">
                     Hide {{ browse_load_more_limit }} one-shots
                 </button>
             </div>
@@ -1128,13 +951,9 @@
             </div>
 
             <div class="modal-body">
-                <p class="erc-muted mb-3" id="tracking-status-modal-copy">
-                    Choose the status to save.
-                </p>
+                <p class="erc-muted mb-3" id="tracking-status-modal-copy">Choose the status to save.</p>
 
-                <label for="tracking-status-select" class="form-label erc-muted">
-                    Status
-                </label>
+                <label for="tracking-status-select" class="form-label erc-muted">Status</label>
                 <select id="tracking-status-select" class="form-select">
                     <option value="planned">Planned to read</option>
                     <option value="reading">Reading</option>
@@ -1143,12 +962,8 @@
             </div>
 
             <div class="modal-footer border-secondary">
-                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
-                    Cancel
-                </button>
-                <button type="button" class="btn btn-primary" data-status-modal-confirm>
-                    Save
-                </button>
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" data-status-modal-confirm>Save</button>
             </div>
         </div>
     </div>
@@ -1156,5 +971,5 @@
 {% endblock %}
 
 {% block extra_scripts %}
-<script src="{% static 'js/catalog/browse.js' %}?v=one-shots-20260713"></script>
+<script src="{% static 'js/catalog/browse.js' %}?v=remove-stat-boxes-20260715"></script>
 {% endblock %}

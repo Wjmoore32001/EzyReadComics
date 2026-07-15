@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load static %}
 
 {% block title %}{{ volume }} - EzyReadComics{% endblock %}
 
@@ -27,6 +28,9 @@
                             action="{% url 'reading:set_volume_status' volume.id %}"
                             method="post"
                             class="erc-track-form"
+                            data-simple-status-form
+                            data-item-type="volume"
+                            data-current-status="{{ current_volume_progress.status }}"
                         >
                             {% csrf_token %}
                             <input type="hidden" name="next" value="{{ request.get_full_path }}">
@@ -36,6 +40,7 @@
                                         {{ label }}
                                     </option>
                                 {% endfor %}
+                                <option value="__unfollow__">Unfollow</option>
                             </select>
                         </form>
                     {% else %}
@@ -43,9 +48,12 @@
                             action="{% url 'reading:set_volume_status' volume.id %}"
                             method="post"
                             class="erc-track-form"
+                            data-simple-follow-form
+                            data-item-type="volume"
                         >
                             {% csrf_token %}
                             <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                            <input type="hidden" name="status" value="">
                             <button type="submit" class="btn btn-outline-light">
                                 Follow
                             </button>
@@ -95,6 +103,17 @@
                     {{ volume.issue_count }}
                 {% else %}
                     <span class="erc-muted">Unknown</span>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="erc-info-card">
+            <div class="small-muted">My Comics</div>
+            <div class="erc-info-value mt-2">
+                {% if current_volume_progress %}
+                    {{ current_volume_progress.get_status_display }}
+                {% else %}
+                    <span class="erc-muted">Not saved</span>
                 {% endif %}
             </div>
         </div>
@@ -181,6 +200,9 @@
                                                         action="{% url 'reading:set_issue_status' issue.id %}"
                                                         method="post"
                                                         class="erc-track-form"
+                                                        data-simple-status-form
+                                                        data-item-type="issue"
+                                                        data-current-status="{{ issue.user_tracking.status }}"
                                                     >
                                                         {% csrf_token %}
                                                         <input type="hidden" name="next" value="{{ request.get_full_path }}">
@@ -190,6 +212,7 @@
                                                                     {{ label }}
                                                                 </option>
                                                             {% endfor %}
+                                                            <option value="__unfollow__">Unfollow</option>
                                                         </select>
                                                     </form>
                                                 {% else %}
@@ -197,9 +220,12 @@
                                                         action="{% url 'reading:set_issue_status' issue.id %}"
                                                         method="post"
                                                         class="erc-track-form"
+                                                        data-simple-follow-form
+                                                        data-item-type="issue"
                                                     >
                                                         {% csrf_token %}
                                                         <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                                        <input type="hidden" name="status" value="">
                                                         <button type="submit" class="btn btn-outline-light btn-sm erc-track-button">
                                                             Follow
                                                         </button>
@@ -265,16 +291,43 @@
         </div>
     </section>
 </div>
+
+<div class="modal fade" id="tracking-status-modal" tabindex="-1" aria-labelledby="tracking-status-modal-title" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content erc-panel">
+            <div class="modal-header border-secondary">
+                <h2 class="modal-title h5" id="tracking-status-modal-title">Follow item</h2>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+
+            <div class="modal-body">
+                <p class="erc-muted mb-3" id="tracking-status-modal-copy">
+                    Choose the status to save.
+                </p>
+
+                <label for="tracking-status-select" class="form-label erc-muted">
+                    Status
+                </label>
+                <select id="tracking-status-select" class="form-select">
+                    <option value="planned">Planned to read</option>
+                    <option value="reading">Reading</option>
+                    <option value="read">Read</option>
+                </select>
+            </div>
+
+            <div class="modal-footer border-secondary">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+                    Cancel
+                </button>
+                <button type="button" class="btn btn-primary" data-status-modal-confirm>
+                    Save
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_scripts %}
-<script>
-document.addEventListener("DOMContentLoaded", function () {
-    document.querySelectorAll("[data-auto-submit]").forEach(function (select) {
-        select.addEventListener("change", function () {
-            select.form.requestSubmit();
-        });
-    });
-});
-</script>
+<script src="{% static 'js/catalog/run-details.js' %}?v=volume-one-shot-tracking-20260715"></script>
 {% endblock %}

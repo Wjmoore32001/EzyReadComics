@@ -174,11 +174,6 @@ def browse(request):
         "selected_volume_id": selected_volume_id,
         "selected_one_shot_id": selected_one_shot_id,
         "selected_items": selected_items,
-        "catalog_publisher_count": ComicPublisher.objects.count(),
-        "catalog_run_count": ComicRun.objects.count(),
-        "catalog_volume_count": ComicVolume.objects.count(),
-        "catalog_issue_count": ComicIssue.objects.count(),
-        "catalog_one_shot_count": ComicOneShot.objects.count(),
         "browse_initial_limit": BROWSE_INITIAL_RESULT_LIMIT,
         "browse_load_more_limit": BROWSE_LOAD_MORE_LIMIT,
         "browse_option_limit": BROWSE_OPTION_LIMIT,
@@ -713,11 +708,7 @@ def get_option_page(queryset, *, offset=0):
 
 
 def get_publisher_options(search_value):
-    publishers = ComicPublisher.objects.annotate(
-        run_total=Count("runs", distinct=True),
-        volume_total=Count("volumes", distinct=True),
-        one_shot_total=Count("one_shots", distinct=True),
-    )
+    publishers = ComicPublisher.objects.all()
 
     if search_value:
         publishers = publishers.filter(
@@ -911,17 +902,11 @@ def get_one_shot_options(search_value, *, publisher_id=None):
 
 
 def build_publisher_option(publisher, selected_option_id):
-    meta_parts = [
-        f"{publisher.run_total} runs",
-        f"{publisher.volume_total} volumes",
-        f"{publisher.one_shot_total} one-shots",
-    ]
-
     return {
         "id": publisher.id,
         "url": browse_url_with_params(publisher=publisher.id),
         "label": publisher.name,
-        "meta": " · ".join(meta_parts),
+        "meta": "",
         "search_label": publisher.name,
         "active": publisher.id == selected_option_id,
     }

@@ -10,9 +10,7 @@
             <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-end gap-4">
                 <div>
                     <p class="erc-page-kicker mb-3">Reading</p>
-                    <h1 class="erc-hero-title display-4 fw-bold mb-3">
-                        My Comics
-                    </h1>
+                    <h1 class="erc-hero-title display-4 fw-bold mb-3">My Comics</h1>
                     <p class="erc-hero-subtitle lead mb-0">
                         Follow runs, save volumes, track one-shots, and track issue progress.
                     </p>
@@ -24,39 +22,6 @@
                     </a>
                 </div>
             </div>
-        </div>
-    </section>
-
-    <section class="erc-home-stat-grid">
-        <div class="erc-home-stat">
-            <div class="erc-home-stat-value">{{ followed_runs|length }}</div>
-            <div class="erc-muted mt-2">Runs</div>
-        </div>
-
-        <div class="erc-home-stat">
-            <div class="erc-home-stat-value">{{ volume_progress|length }}</div>
-            <div class="erc-muted mt-2">Volumes</div>
-        </div>
-
-        <div class="erc-home-stat">
-            <div class="erc-home-stat-value">{{ one_shot_progress|length }}</div>
-            <div class="erc-muted mt-2">One-shots</div>
-        </div>
-
-        <div class="erc-home-stat">
-            <div class="erc-home-stat-value">{{ issue_progress|length }}</div>
-            <div class="erc-muted mt-2">Issues</div>
-        </div>
-
-        <div class="erc-home-stat">
-            <div class="erc-home-stat-value">
-                {% if filters_active %}
-                    On
-                {% else %}
-                    Off
-                {% endif %}
-            </div>
-            <div class="erc-muted mt-2">Filters</div>
         </div>
     </section>
 
@@ -74,9 +39,7 @@
 
             <div class="row g-3 align-items-end">
                 <div class="col-12 col-lg-6 col-xxl">
-                    <label class="form-label erc-muted" for="my-comics-publisher-search">
-                        Publisher
-                    </label>
+                    <label class="form-label erc-muted" for="my-comics-publisher-search">Publisher</label>
 
                     <div
                         class="dropdown searchable-dropdown"
@@ -156,9 +119,7 @@
                         </label>
                     </div>
 
-                    <label class="form-label erc-muted" for="my-comics-run-search">
-                        Run
-                    </label>
+                    <label class="form-label erc-muted" for="my-comics-run-search">Run</label>
 
                     <div
                         class="dropdown searchable-dropdown"
@@ -221,9 +182,7 @@
                                         </span>
                                         —
                                         {{ option.run.title }}
-                                        <span class="erc-muted">
-                                            · {{ option.run.publisher.name }}
-                                        </span>
+                                        <span class="erc-muted">· {{ option.run.publisher.name }}</span>
                                     </a>
                                 {% endfor %}
                             </div>
@@ -250,9 +209,7 @@
                         </label>
                     </div>
 
-                    <label class="form-label erc-muted" for="my-comics-issue-search">
-                        Issues
-                    </label>
+                    <label class="form-label erc-muted" for="my-comics-issue-search">Issues</label>
 
                     <div
                         class="dropdown searchable-dropdown"
@@ -347,9 +304,7 @@
                         </label>
                     </div>
 
-                    <label class="form-label erc-muted" for="my-comics-status-search">
-                        Status
-                    </label>
+                    <label class="form-label erc-muted" for="my-comics-status-search">Status</label>
 
                     <div
                         class="dropdown searchable-dropdown"
@@ -372,9 +327,7 @@
                         >
                             {% if selected_status %}
                                 {% for value, label in status_filter_choices %}
-                                    {% if selected_status == value %}
-                                        {{ label }}
-                                    {% endif %}
+                                    {% if selected_status == value %}{{ label }}{% endif %}
                                 {% endfor %}
                             {% else %}
                                 All statuses
@@ -436,9 +389,7 @@
                         </label>
                     </div>
 
-                    <label class="form-label erc-muted" for="my-comics-one-shot-search">
-                        One-shot
-                    </label>
+                    <label class="form-label erc-muted" for="my-comics-one-shot-search">One-shot</label>
 
                     <div
                         class="dropdown searchable-dropdown"
@@ -498,9 +449,7 @@
                                         data-dropdown-option
                                         data-search-label="{{ option.one_shot.title }} {{ option.one_shot.start_year }} {{ option.one_shot.publisher.name }}"
                                     >
-                                        <span class="fw-semibold">
-                                            {{ option.one_shot.title }}
-                                        </span>
+                                        <span class="fw-semibold">{{ option.one_shot.title }}</span>
                                         <span class="erc-muted">
                                             · {{ option.one_shot.publisher.name }}
                                             {% if option.one_shot.published_date %}
@@ -524,27 +473,19 @@
             {% if filters_active %}
                 <div class="d-flex flex-wrap gap-2 mt-4">
                     {% if selected_run_id %}
-                        <a href="{{ clear_run_url }}" class="btn btn-sm btn-outline-secondary">
-                            Clear run
-                        </a>
+                        <a href="{{ clear_run_url }}" class="btn btn-sm btn-outline-secondary">Clear run</a>
                     {% endif %}
 
                     {% if selected_issue_id %}
-                        <a href="{{ clear_issue_url }}" class="btn btn-sm btn-outline-secondary">
-                            Clear issue
-                        </a>
+                        <a href="{{ clear_issue_url }}" class="btn btn-sm btn-outline-secondary">Clear issue</a>
                     {% endif %}
 
                     {% if selected_one_shot_id %}
-                        <a href="{{ clear_one_shot_url }}" class="btn btn-sm btn-outline-secondary">
-                            Clear one-shot
-                        </a>
+                        <a href="{{ clear_one_shot_url }}" class="btn btn-sm btn-outline-secondary">Clear one-shot</a>
                     {% endif %}
 
                     {% if selected_status %}
-                        <a href="{{ clear_status_url }}" class="btn btn-sm btn-outline-secondary">
-                            Clear status
-                        </a>
+                        <a href="{{ clear_status_url }}" class="btn btn-sm btn-outline-secondary">Clear status</a>
                     {% endif %}
 
                     {% if selected_publisher %}
@@ -594,10 +535,7 @@
         <div class="card-body">
             <div class="erc-section-header">
                 <h2 class="h3 fw-bold mb-0 erc-section-title">Runs</h2>
-
-                <p class="erc-muted mb-0">
-                    {{ followed_runs|length }} result{% if followed_runs|length != 1 %}s{% endif %}
-                </p>
+                <p class="erc-muted mb-0">{{ followed_runs|length }} result{% if followed_runs|length != 1 %}s{% endif %}</p>
             </div>
 
             <div class="table-responsive">
@@ -635,9 +573,7 @@
                                     <input type="hidden" name="remove_issues" value="">
                                     <select name="status" class="form-select form-select-sm" data-auto-submit>
                                         {% for value, label in run_status_choices %}
-                                            <option value="{{ value }}" {% if followed_run.status == value %}selected{% endif %}>
-                                                {{ label }}
-                                            </option>
+                                            <option value="{{ value }}" {% if followed_run.status == value %}selected{% endif %}>{{ label }}</option>
                                         {% endfor %}
                                         <option value="{{ unfollow_status_value }}">Unfollow</option>
                                     </select>
@@ -672,10 +608,7 @@
         <div class="card-body">
             <div class="erc-section-header">
                 <h2 class="h3 fw-bold mb-0 erc-section-title">Volumes</h2>
-
-                <p class="erc-muted mb-0">
-                    {{ volume_progress|length }} result{% if volume_progress|length != 1 %}s{% endif %}
-                </p>
+                <p class="erc-muted mb-0">{{ volume_progress|length }} result{% if volume_progress|length != 1 %}s{% endif %}</p>
             </div>
 
             <div class="table-responsive">
@@ -692,14 +625,10 @@
                     {% for progress in volume_progress %}
                         <tr>
                             <td class="fw-semibold">
-                                <a href="{% url 'catalog:volume_details' progress.volume.id %}" class="erc-data-link">
-                                    {{ progress.volume }}
-                                </a>
+                                <a href="{% url 'catalog:volume_details' progress.volume.id %}" class="erc-data-link">{{ progress.volume }}</a>
                             </td>
                             <td>
-                                <a href="{% url 'catalog:run_details' progress.volume.run.id %}" class="erc-data-link">
-                                    {{ progress.volume.run }}
-                                </a>
+                                <a href="{% url 'catalog:run_details' progress.volume.run.id %}" class="erc-data-link">{{ progress.volume.run }}</a>
                             </td>
                             <td>
                                 {% if progress.volume.release_date %}
@@ -709,19 +638,12 @@
                                 {% endif %}
                             </td>
                             <td class="text-end erc-track-cell">
-                                <form
-                                    action="{% url 'reading:set_volume_status' progress.volume.id %}"
-                                    method="post"
-                                    class="erc-track-form"
-                                    data-item-type="volume"
-                                >
+                                <form action="{% url 'reading:set_volume_status' progress.volume.id %}" method="post" class="erc-track-form" data-item-type="volume">
                                     {% csrf_token %}
                                     <input type="hidden" name="next" value="{{ request.get_full_path }}">
                                     <select name="status" class="form-select form-select-sm" data-auto-submit>
                                         {% for value, label in volume_status_choices %}
-                                            <option value="{{ value }}" {% if progress.status == value %}selected{% endif %}>
-                                                {{ label }}
-                                            </option>
+                                            <option value="{{ value }}" {% if progress.status == value %}selected{% endif %}>{{ label }}</option>
                                         {% endfor %}
                                         <option value="{{ unfollow_status_value }}">Remove</option>
                                     </select>
@@ -749,10 +671,7 @@
         <div class="card-body">
             <div class="erc-section-header">
                 <h2 class="h3 fw-bold mb-0 erc-section-title">Issues</h2>
-
-                <p class="erc-muted mb-0">
-                    {{ issue_progress|length }} result{% if issue_progress|length != 1 %}s{% endif %}
-                </p>
+                <p class="erc-muted mb-0">{{ issue_progress|length }} result{% if issue_progress|length != 1 %}s{% endif %}</p>
             </div>
 
             <div class="table-responsive">
@@ -769,14 +688,10 @@
                     {% for progress in issue_progress %}
                         <tr>
                             <td class="fw-semibold">
-                                <a href="{% url 'catalog:issue_details' progress.issue.id %}" class="erc-data-link">
-                                    #{{ progress.issue.issue_number }}
-                                </a>
+                                <a href="{% url 'catalog:issue_details' progress.issue.id %}" class="erc-data-link">#{{ progress.issue.issue_number }}</a>
                             </td>
                             <td>
-                                <a href="{% url 'catalog:run_details' progress.issue.run.id %}" class="erc-data-link">
-                                    {{ progress.issue.run }}
-                                </a>
+                                <a href="{% url 'catalog:run_details' progress.issue.run.id %}" class="erc-data-link">{{ progress.issue.run }}</a>
                             </td>
                             <td>
                                 {% if progress.issue.published_date %}
@@ -786,19 +701,12 @@
                                 {% endif %}
                             </td>
                             <td class="text-end erc-track-cell">
-                                <form
-                                    action="{% url 'reading:set_issue_status' progress.issue.id %}"
-                                    method="post"
-                                    class="erc-track-form"
-                                    data-item-type="issue"
-                                >
+                                <form action="{% url 'reading:set_issue_status' progress.issue.id %}" method="post" class="erc-track-form" data-item-type="issue">
                                     {% csrf_token %}
                                     <input type="hidden" name="next" value="{{ request.get_full_path }}">
                                     <select name="status" class="form-select form-select-sm" data-auto-submit>
                                         {% for value, label in issue_status_choices %}
-                                            <option value="{{ value }}" {% if progress.status == value %}selected{% endif %}>
-                                                {{ label }}
-                                            </option>
+                                            <option value="{{ value }}" {% if progress.status == value %}selected{% endif %}>{{ label }}</option>
                                         {% endfor %}
                                         <option value="{{ unfollow_status_value }}">Unfollow</option>
                                     </select>
@@ -826,10 +734,7 @@
         <div class="card-body">
             <div class="erc-section-header">
                 <h2 class="h3 fw-bold mb-0 erc-section-title">One-shots</h2>
-
-                <p class="erc-muted mb-0">
-                    {{ one_shot_progress|length }} result{% if one_shot_progress|length != 1 %}s{% endif %}
-                </p>
+                <p class="erc-muted mb-0">{{ one_shot_progress|length }} result{% if one_shot_progress|length != 1 %}s{% endif %}</p>
             </div>
 
             <div class="table-responsive">
@@ -846,9 +751,7 @@
                     {% for progress in one_shot_progress %}
                         <tr>
                             <td class="fw-semibold">
-                                <a href="{% url 'catalog:one_shot_details' progress.one_shot.id %}" class="erc-data-link">
-                                    {{ progress.one_shot.title }}
-                                </a>
+                                <a href="{% url 'catalog:one_shot_details' progress.one_shot.id %}" class="erc-data-link">{{ progress.one_shot.title }}</a>
                             </td>
                             <td>{{ progress.one_shot.publisher.name }}</td>
                             <td>
@@ -861,19 +764,12 @@
                                 {% endif %}
                             </td>
                             <td class="text-end erc-track-cell">
-                                <form
-                                    action="{% url 'reading:set_one_shot_status' progress.one_shot.id %}"
-                                    method="post"
-                                    class="erc-track-form"
-                                    data-item-type="one_shot"
-                                >
+                                <form action="{% url 'reading:set_one_shot_status' progress.one_shot.id %}" method="post" class="erc-track-form" data-item-type="one_shot">
                                     {% csrf_token %}
                                     <input type="hidden" name="next" value="{{ request.get_full_path }}">
                                     <select name="status" class="form-select form-select-sm" data-auto-submit>
                                         {% for value, label in one_shot_status_choices %}
-                                            <option value="{{ value }}" {% if progress.status == value %}selected{% endif %}>
-                                                {{ label }}
-                                            </option>
+                                            <option value="{{ value }}" {% if progress.status == value %}selected{% endif %}>{{ label }}</option>
                                         {% endfor %}
                                         <option value="{{ unfollow_status_value }}">Unfollow</option>
                                     </select>
@@ -900,5 +796,5 @@
 {% endblock %}
 
 {% block extra_scripts %}
-<script src="{% static 'js/reading/my-comics.js' %}?v=dropdown-scroll-20260713"></script>
+<script src="{% static 'js/reading/my-comics.js' %}?v=remove-stat-boxes-20260715"></script>
 {% endblock %}
