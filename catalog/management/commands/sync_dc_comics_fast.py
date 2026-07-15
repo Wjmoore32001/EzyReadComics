@@ -1,5 +1,3 @@
-from collections import deque
-
 from django.core.management.base import BaseCommand, CommandError
 from django.db import close_old_connections
 
@@ -20,7 +18,10 @@ from catalog.dc.writer import (
 
 
 class Command(BaseCommand):
-    help = "Sync DC.com browse/detail comic data into the catalog."
+    help = (
+        "Fast sync DC.com browse/detail comic data into the catalog. "
+        "This command reads only the visible browse/detail seed URLs and does not scan More From This Series."
+    )
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -40,13 +41,6 @@ class Command(BaseCommand):
             default="",
             help="Specific DC detail URL to sync. When set, Browse Comics is skipped.",
         )
-        parser.add_argument(
-            "--no-related-graphic-novels",
-            action="store_false",
-            dest="follow_related_graphic_novels",
-            help="Do not sync graphic novels found in More From This Series.",
-        )
-        parser.set_defaults(follow_related_graphic_novels=True)
         parser.add_argument(
             "--dry-run",
             action="store_true",
@@ -75,7 +69,6 @@ class Command(BaseCommand):
         start_page = options["page"]
         page_count = options["page_count"]
         detail_url = options["detail_url"].strip()
-        follow_related_graphic_novels = options["follow_related_graphic_novels"]
         dry_run = options["dry_run"]
         headed = options["headed"]
         timeout_ms = options["timeout"]
@@ -95,7 +88,6 @@ class Command(BaseCommand):
             start_page=start_page,
             page_count=page_count,
             detail_url=detail_url,
-            follow_related_graphic_novels=follow_related_graphic_novels,
             dry_run=dry_run,
             headed=headed,
             timeout_ms=timeout_ms,
@@ -104,7 +96,6 @@ class Command(BaseCommand):
         if detail_url:
             total = self.sync_direct_detail_url(
                 detail_url=detail_url,
-                follow_related_graphic_novels=follow_related_graphic_novels,
                 dry_run=dry_run,
                 headed=headed,
                 timeout_ms=timeout_ms,
@@ -114,7 +105,6 @@ class Command(BaseCommand):
             total = self.sync_browse_pages(
                 start_page=start_page,
                 page_count=page_count,
-                follow_related_graphic_novels=follow_related_graphic_novels,
                 dry_run=dry_run,
                 headed=headed,
                 timeout_ms=timeout_ms,
@@ -125,50 +115,24 @@ class Command(BaseCommand):
         self.print_totals(total)
         close_old_connections()
 
-    def sync_direct_detail_url(
-        self,
-        *,
-        detail_url,
-        follow_related_graphic_novels,
-        dry_run,
-        headed,
-        timeout_ms,
-        verbose,
-    ):
-        processed_detail_keys = set()
-
-        with dc_browser_context(headed=headed) as context:
-            details = self.read_seed_batch(
-                context=context,
-                seed_links=[{"label": "", "href": detail_url}],
-                follow_related_graphic_novels=follow_related_graphic_novels,
-                timeout_ms=timeout_ms,
-                processed_detail_keys=processed_detail_keys,
-            )
-
-        self.stdout.write(f"Detail pages read: {len(details)}")
+    def sync_direct_detail_url(self, *, detail_url, dry_run, headed, timeout_ms, verbose):
+        detail = self.read_seed_detail(
+            detail_url=detail_url,
+            headed=headed,
+            timeout_ms=timeout_ms,
+        )
+        self.stdout.write("Detail pages read: 1")
         close_old_connections()
 
         total = self.write_detail_batch(
-            details=details,
+            details=[detail],
             dry_run=dry_run,
             verbose=verbose,
         )
-        details.clear()
         close_old_connections()
         return total
 
-    def sync_browse_pages(
-        self,
-        *,
-        start_page,
-        page_count,
-        follow_related_graphic_novels,
-        dry_run,
-        headed,
-        timeout_ms,
-        verbose,
-    ):
+    def sync_browse_pages(self, *, start_page, page_count, dry_run, headed, timeout_ms, verbose):
         total = DcWriteResult()
         processed_detail_keys = set()
 
@@ -198,7 +162,7 @@ class Command(BaseCommand):
 
             page_result = DcWriteResult()
             page_details_read = 0
-            page_seed_batches_written = 0
+            page_duplicate_skipped = 0
 
             for seed_index, seed_link in enumerate(seed_links, start=1):
                 seed_url = clean_text(seed_link.get("href"))
@@ -209,39 +173,30 @@ class Command(BaseCommand):
                 seed_key = normalize_url_for_compare(seed_url)
 
                 if seed_key in processed_detail_keys:
+                    page_duplicate_skipped += 1
                     continue
 
-                details = self.read_detail_seed_batch(
-                    seed_link=seed_link,
-                    follow_related_graphic_novels=follow_related_graphic_novels,
+                processed_detail_keys.add(seed_key)
+                detail = self.read_seed_detail(
+                    detail_url=seed_url,
                     headed=headed,
                     timeout_ms=timeout_ms,
-                    processed_detail_keys=processed_detail_keys,
                 )
-                detail_count = len(details)
-                page_details_read += detail_count
-
-                if not details:
-                    continue
-
-                self.stdout.write(
-                    f"Browse page {page_number} [{seed_index}/{seed_count}]: "
-                    f"{detail_count} detail pages read"
-                )
+                page_details_read += 1
 
                 close_old_connections()
                 seed_result = self.write_detail_batch(
-                    details=details,
+                    details=[detail],
                     dry_run=dry_run,
                     verbose=verbose,
                 )
                 close_old_connections()
 
                 add_results(page_result, seed_result)
-                page_seed_batches_written += 1
 
                 self.stdout.write(
-                    f"Browse page {page_number} [{seed_index}/{seed_count}]: batch complete "
+                    f"Browse page {page_number} [{seed_index}/{seed_count}]: "
+                    f"{detail.title or detail.final_url} complete "
                     f"(runs +{seed_result.runs_created}/~{seed_result.runs_updated}, "
                     f"issues +{seed_result.issues_created}/~{seed_result.issues_updated}, "
                     f"volumes +{seed_result.volumes_created}/~{seed_result.volumes_updated}, "
@@ -249,15 +204,12 @@ class Command(BaseCommand):
                     f"skipped {seed_result.skipped})"
                 )
 
-                details.clear()
-                close_old_connections()
-
             add_results(total, page_result)
 
             self.stdout.write(
                 f"Browse page {page_number}: page complete "
-                f"({page_details_read} detail pages read, "
-                f"{page_seed_batches_written} seed batches written, "
+                f"({page_details_read} seed detail pages read, "
+                f"duplicates skipped {page_duplicate_skipped}, "
                 f"runs +{page_result.runs_created}/~{page_result.runs_updated}, "
                 f"issues +{page_result.issues_created}/~{page_result.issues_updated}, "
                 f"volumes +{page_result.volumes_created}/~{page_result.volumes_updated}, "
@@ -275,133 +227,15 @@ class Command(BaseCommand):
                 timeout_ms=timeout_ms,
             )
 
-    def read_detail_seed_batch(
-        self,
-        *,
-        seed_link,
-        follow_related_graphic_novels,
-        headed,
-        timeout_ms,
-        processed_detail_keys,
-    ):
+    def read_seed_detail(self, *, detail_url, headed, timeout_ms):
         with dc_browser_context(headed=headed) as context:
-            return self.read_seed_batch(
+            return read_detail_page(
                 context=context,
-                seed_links=[seed_link],
-                follow_related_graphic_novels=follow_related_graphic_novels,
+                url=detail_url,
                 timeout_ms=timeout_ms,
-                processed_detail_keys=processed_detail_keys,
+                scan_more_from_series=False,
+                known_more_from_series_links=[],
             )
-
-    def read_seed_batch(
-        self,
-        *,
-        context,
-        seed_links,
-        follow_related_graphic_novels,
-        timeout_ms,
-        processed_detail_keys,
-    ):
-        details = []
-        detail_by_url = {}
-        scanned_seed_urls = set()
-        discovered_urls = deque()
-        discovered_keys = set()
-
-        for seed_link in seed_links:
-            seed_url = clean_text(seed_link.get("href"))
-
-            if not seed_url:
-                continue
-
-            seed_key = normalize_url_for_compare(seed_url)
-
-            if seed_key in scanned_seed_urls or seed_key in processed_detail_keys:
-                continue
-
-            scanned_seed_urls.add(seed_key)
-
-            seed_detail = read_detail_page(
-                context=context,
-                url=seed_url,
-                timeout_ms=timeout_ms,
-                scan_more_from_series=True,
-            )
-
-            stored_seed = self.store_detail(
-                details=details,
-                detail_by_url=detail_by_url,
-                processed_detail_keys=processed_detail_keys,
-                detail=seed_detail,
-            )
-
-            if not stored_seed:
-                continue
-
-            series_map_links = seed_detail.more_from_series_links
-
-            for link in series_map_links:
-                if is_graphic_novel_link(link) and not follow_related_graphic_novels:
-                    continue
-
-                self.enqueue_url(
-                    queue=discovered_urls,
-                    queued_keys=discovered_keys,
-                    processed_detail_keys=processed_detail_keys,
-                    url=link.get("href"),
-                )
-
-            while discovered_urls:
-                url = discovered_urls.popleft()
-                key = normalize_url_for_compare(url)
-
-                if key in processed_detail_keys or key in detail_by_url:
-                    continue
-
-                detail = read_detail_page(
-                    context=context,
-                    url=url,
-                    timeout_ms=timeout_ms,
-                    scan_more_from_series=False,
-                    known_more_from_series_links=series_map_links,
-                )
-
-                self.store_detail(
-                    details=details,
-                    detail_by_url=detail_by_url,
-                    processed_detail_keys=processed_detail_keys,
-                    detail=detail,
-                )
-
-        return details
-
-    def store_detail(self, *, details, detail_by_url, processed_detail_keys, detail):
-        key = normalize_url_for_compare(detail.final_url)
-
-        if not key:
-            return False
-
-        if key in detail_by_url or key in processed_detail_keys:
-            return False
-
-        detail_by_url[key] = detail
-        processed_detail_keys.add(key)
-        details.append(detail)
-        return True
-
-    def enqueue_url(self, *, queue, queued_keys, processed_detail_keys, url):
-        url = clean_text(url)
-
-        if not url:
-            return
-
-        key = normalize_url_for_compare(url)
-
-        if key in queued_keys or key in processed_detail_keys:
-            return
-
-        queued_keys.add(key)
-        queue.append(url)
 
     def write_detail_batch(self, *, details, dry_run, verbose):
         total = DcWriteResult()
@@ -446,36 +280,29 @@ class Command(BaseCommand):
         start_page,
         page_count,
         detail_url,
-        follow_related_graphic_novels,
         dry_run,
         headed,
         timeout_ms,
     ):
         self.stdout.write("")
-        self.stdout.write(self.style.SUCCESS("DC comics sync"))
+        self.stdout.write(self.style.SUCCESS("DC comics fast sync"))
         self.stdout.write(f"Mode: {'dry run' if dry_run else 'write'}")
         self.stdout.write("Source: https://www.dc.com/comics")
         self.stdout.write(f"Start page: {start_page}")
         self.stdout.write(f"Page count: {page_count}")
         self.stdout.write(f"Specific detail URL: {detail_url or 'none'}")
-        self.stdout.write(
-            "Related graphic novels: "
-            + ("follow" if follow_related_graphic_novels else "skip")
-        )
         self.stdout.write(f"Browser mode: {'headed' if headed else 'headless'}")
         self.stdout.write(f"Timeout: {timeout_ms} ms")
 
         if detail_url:
             self.stdout.write("Browse behavior: skipped for direct detail URL")
-            self.stdout.write("Database behavior: close browser, then write direct-detail batch")
         else:
-            self.stdout.write("Browse behavior: collect seed URLs from one Browse Comics page at a time")
-            self.stdout.write("Database behavior: read one seed batch, close browser, write batch, clear memory")
+            self.stdout.write("Browse behavior: collect seed URLs from Browse Comics")
 
-        self.stdout.write("Series map behavior: scan More From This Series once per seed")
-        self.stdout.write("Discovered detail behavior: read item details only, no carousel rescan")
-        self.stdout.write("Volume matching: use explicit collected issue ranges only")
-        self.stdout.write("Duplicate behavior: keep a small URL set to avoid repeat detail reads across pages")
+        self.stdout.write("Series expansion: off")
+        self.stdout.write("More From This Series scan: off")
+        self.stdout.write("Write cadence: per seed detail page")
+        self.stdout.write("Duplicate behavior: keep a small URL set to avoid repeat seed reads across pages")
         self.stdout.write("")
 
     def print_detail_result(self, *, detail, result):
@@ -508,18 +335,19 @@ class Command(BaseCommand):
 
         self.stdout.write(f"  Series raw: {detail.series.raw or 'none'}")
         self.stdout.write(f"  Issue number: {detail.issue_key or detail.issue_number or 'none'}")
-        self.stdout.write(
-            "  More From This Series scan: "
-            + ("yes" if detail.scanned_more_from_series else "no")
-        )
+        self.stdout.write("  More From This Series scan: no")
         self.stdout.write(f"  Source URL: {detail.final_url}")
 
-        if detail.candidate_issue_links:
-            self.stdout.write(f"  Series issue links available: {len(detail.candidate_issue_links)}")
-
-        if detail.related_graphic_novel_links:
+        if detail.collection_parse.issue_numbers:
             self.stdout.write(
-                f"  Related graphic novel links available: {len(detail.related_graphic_novel_links)}"
+                "  Parsed collected issues: "
+                + ", ".join(detail.collection_parse.issue_numbers)
+            )
+
+        if detail.collection_parse.unmatched_issue_numbers:
+            self.stdout.write(
+                "  Unmatched collected issues: "
+                + ", ".join(detail.collection_parse.unmatched_issue_numbers)
             )
 
         self.stdout.write(
@@ -533,18 +361,6 @@ class Command(BaseCommand):
             f"run stats ~{result.run_stats_updated}, "
             f"skipped {result.skipped}"
         )
-
-        if detail.collection_parse.issue_numbers:
-            self.stdout.write(
-                "  Parsed collected issues: "
-                + ", ".join(detail.collection_parse.issue_numbers)
-            )
-
-        if detail.collection_parse.unmatched_issue_numbers:
-            self.stdout.write(
-                "  Unmatched collected issues: "
-                + ", ".join(detail.collection_parse.unmatched_issue_numbers)
-            )
 
     def record_skipped_detail(self, *, detail, result):
         identity = run_identity_from_detail(detail)
@@ -590,7 +406,7 @@ class Command(BaseCommand):
 
     def print_totals(self, total):
         self.stdout.write("")
-        self.stdout.write(self.style.SUCCESS("DC sync totals"))
+        self.stdout.write(self.style.SUCCESS("DC fast sync totals"))
         self.stdout.write(f"Runs created: {total.runs_created}")
         self.stdout.write(f"Runs updated: {total.runs_updated}")
         self.stdout.write(f"Run stats updated: {total.run_stats_updated}")
@@ -620,10 +436,6 @@ def detail_write_priority(detail):
         "standalone_graphic_novel_or_one_shot": 30,
     }
     return priorities.get(detail.classification, 90)
-
-
-def is_graphic_novel_link(link):
-    return "/graphic-novels/" in clean_text(link.get("href"))
 
 
 def normalize_url_for_compare(value):
