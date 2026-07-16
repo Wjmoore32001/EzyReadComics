@@ -24,7 +24,7 @@ from catalog.listing import (
     slice_with_has_more,
 )
 from catalog.models import ComicIssue, ComicOneShot, ComicPublisher, ComicRun, ComicVolume
-from catalog.views import (
+from catalog.presentation import (
     attach_issue_credit_display,
     attach_issue_tracking,
     attach_one_shot_tracking,

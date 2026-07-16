@@ -34,9 +34,9 @@ from catalog.models import (
     ComicVolume,
     ComicVolumeIssue,
 )
+from reading.constants import UNFOLLOW_STATUS_VALUE
 from reading.models import FollowedRun, IssueProgress, OneShotProgress, VolumeProgress
-from reading.views import (
-    UNFOLLOW_STATUS_VALUE,
+from reading.presentation import (
     build_my_comics_issue_row_item,
     build_my_comics_one_shot_row_item,
     build_my_comics_run_row_item,
