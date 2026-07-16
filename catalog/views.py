@@ -1,10 +1,11 @@
-from django.db.models import Prefetch
+from django.db.models import Prefetch, Q
 from django.shortcuts import get_object_or_404, render
 
 from catalog.models import (
     ComicIssue,
     ComicIssueCredit,
     ComicOneShot,
+    ComicOneShotCredit,
     ComicPublisher,
     ComicRun,
     ComicVolume,
@@ -53,7 +54,7 @@ def home(request):
 
 def run_details(request, pk):
     run = get_object_or_404(
-        ComicRun.objects.select_related("publisher").prefetch_related("volumes"),
+        ComicRun.objects.select_related("publisher"),
         pk=pk,
     )
 
@@ -72,7 +73,14 @@ def run_details(request, pk):
     attach_issue_tracking(request, issues)
 
     volumes = list(
-        run.volumes.select_related("publisher", "run").order_by(
+        ComicVolume.objects.select_related("publisher", "run")
+        .filter(
+            Q(run=run)
+            | Q(volume_runs__run=run)
+            | Q(volume_issues__issue__run=run)
+        )
+        .distinct()
+        .order_by(
             "volume_number",
             "release_date",
             "title",
@@ -193,9 +201,28 @@ def volume_details(request, pk):
         )
     )
 
+    volume_one_shot_links = list(
+        volume.volume_one_shots.select_related(
+            "one_shot",
+            "one_shot__publisher",
+        ).prefetch_related(
+            Prefetch(
+                "one_shot__credits",
+                queryset=ComicOneShotCredit.objects.select_related("person", "role"),
+            )
+        ).order_by(
+            "item_order",
+            "one_shot__published_date",
+            "one_shot__title",
+            "id",
+        )
+    )
+
     issues = [volume_issue.issue for volume_issue in volume_issues]
+    one_shots = [volume_one_shot.one_shot for volume_one_shot in volume_one_shot_links]
     attach_issue_credit_display(issues)
     attach_issue_tracking(request, issues)
+    attach_one_shot_tracking(request, one_shots)
 
     volume_issue_groups = build_volume_issue_groups(
         volume_issues=volume_issues,
@@ -206,6 +233,7 @@ def volume_details(request, pk):
         volume=volume,
         volume_issues=volume_issues,
         volume_run_links=volume_run_links,
+        volume_one_shot_links=volume_one_shot_links,
     )
 
     attach_volume_tracking(request, [volume])
@@ -214,12 +242,15 @@ def volume_details(request, pk):
         "volume": volume,
         "volume_issues": volume_issues,
         "volume_issue_groups": volume_issue_groups,
+        "volume_one_shot_links": volume_one_shot_links,
         "issues": issues,
+        "one_shots": one_shots,
         "default_credits": default_credits,
         "all_credits": all_credits,
         "current_volume_progress": volume.user_tracking,
         "volume_status_choices": VolumeProgress.STATUS_CHOICES,
         "issue_status_choices": IssueProgress.STATUS_CHOICES,
+        "one_shot_status_choices": OneShotProgress.STATUS_CHOICES,
     }
 
     return render(request, "catalog/volume_details.html", context)
@@ -326,7 +357,13 @@ def get_unique_run_issue_credits(run):
     return default_credits, unique_credits
 
 
-def get_unique_volume_credits(*, volume, volume_issues, volume_run_links):
+def get_unique_volume_credits(
+    *,
+    volume,
+    volume_issues,
+    volume_run_links,
+    volume_one_shot_links,
+):
     credits = list(volume.credits.all())
     explicit_issue_run_ids = set()
 
@@ -334,6 +371,9 @@ def get_unique_volume_credits(*, volume, volume_issues, volume_run_links):
         issue = volume_issue.issue
         explicit_issue_run_ids.add(issue.run_id)
         credits.extend(issue.credits.all())
+
+    for volume_one_shot_link in volume_one_shot_links:
+        credits.extend(volume_one_shot_link.one_shot.credits.all())
 
     linked_run_ids = {
         volume_run_link.run_id

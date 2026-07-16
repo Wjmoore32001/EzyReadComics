@@ -7,6 +7,7 @@ from catalog.models.core import (
     ComicVolumeIssue,
     ComicVolumeOneShot,
     ComicVolumeRun,
+    CurrentReadingEraRun,
 )
 from catalog.models.credits import (
     ComicIssueCredit,
@@ -20,6 +21,7 @@ from catalog.models.credits import (
 __all__ = [
     "ComicPublisher",
     "ComicRun",
+    "CurrentReadingEraRun",
     "ComicIssue",
     "ComicOneShot",
     "ComicVolume",

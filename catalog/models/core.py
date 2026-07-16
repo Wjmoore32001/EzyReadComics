@@ -102,6 +102,25 @@ class ComicRun(ImageUrlFields):
         return self.title
 
 
+class CurrentReadingEraRun(models.Model):
+    run = models.ForeignKey(
+        ComicRun,
+        on_delete=models.CASCADE,
+        related_name="current_reading_era_entries",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["run"],
+                name="unique_current_reading_era_run",
+            )
+        ]
+
+    def __str__(self):
+        return str(self.run)
+
+
 class ComicIssue(ImageUrlFields):
     OFFICIAL_DETAIL_STATUS_UNKNOWN = "unknown"
     OFFICIAL_DETAIL_STATUS_COMPLETE = "complete"
@@ -216,12 +235,6 @@ class ComicOneShot(ImageUrlFields):
 
     class Meta:
         ordering = ["publisher__name", "title", "start_year", "published_date"]
-        constraints = [
-            models.UniqueConstraint(
-                fields=["publisher", "title", "start_year"],
-                name="unique_comic_one_shot_per_publisher_title_year",
-            )
-        ]
 
     def __str__(self):
         if self.start_year:
@@ -238,7 +251,9 @@ class ComicVolume(ImageUrlFields):
     )
     run = models.ForeignKey(
         ComicRun,
-        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
         related_name="volumes",
     )
 

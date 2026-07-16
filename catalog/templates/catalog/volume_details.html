@@ -14,7 +14,7 @@
                         {{ volume }}
                     </h1>
                     <p class="erc-hero-subtitle lead mb-0">
-                        {{ volume.publisher.name }} · {{ volume.run }}
+                        {{ volume.publisher.name }}{% if volume.run_id %} · {{ volume.run }}{% endif %}
                     </p>
                 </div>
 
@@ -77,11 +77,15 @@
         </div>
 
         <div class="erc-info-card">
-            <div class="small-muted">Run</div>
+            <div class="small-muted">Primary run</div>
             <div class="h5 fw-bold mt-2 mb-0">
-                <a href="{% url 'catalog:run_details' volume.run.id %}" class="erc-data-link">
-                    {{ volume.run }}
-                </a>
+                {% if volume.run_id %}
+                    <a href="{% url 'catalog:run_details' volume.run.id %}" class="erc-data-link">
+                        {{ volume.run }}
+                    </a>
+                {% else %}
+                    <span class="erc-muted">None</span>
+                {% endif %}
             </div>
         </div>
 
@@ -132,13 +136,16 @@
         <div class="card-body">
             <div class="erc-section-header">
                 <h2 class="h3 fw-bold mb-0 erc-section-title">
-                    Runs and issues in this volume
+                    Runs, issues, and one-shots in this volume
                 </h2>
 
                 <p class="erc-muted mb-0">
                     {{ volume_issues|length }} issue{% if volume_issues|length != 1 %}s{% endif %}
                     {% if volume_issue_groups %}
                         across {{ volume_issue_groups|length }} run{% if volume_issue_groups|length != 1 %}s{% endif %}
+                    {% endif %}
+                    {% if volume_one_shot_links %}
+                        · {{ volume_one_shot_links|length }} one-shot{% if volume_one_shot_links|length != 1 %}s{% endif %}
                     {% endif %}
                 </p>
             </div>
@@ -245,11 +252,102 @@
                             </table>
                         </div>
                     </article>
-                {% empty %}
-                    <div class="erc-empty-panel">
-                        No runs or issues have been linked to this volume.
-                    </div>
                 {% endfor %}
+
+                {% if volume_one_shot_links %}
+                    <article class="erc-volume-run-card">
+                        <header class="erc-volume-run-header">
+                            <h3 class="h5 fw-bold mb-0 erc-volume-run-title">One-shots</h3>
+                        </header>
+
+                        <div aria-hidden="true" style="height: 2rem;"></div>
+
+                        <div class="table-responsive erc-volume-run-table-wrap">
+                            <table class="table table-dark table-hover align-middle mb-0 erc-data-table erc-volume-run-table">
+                                <thead>
+                                <tr>
+                                    <th scope="col">One-shot</th>
+                                    <th scope="col">Published Date</th>
+                                    <th scope="col">Publisher</th>
+                                    <th scope="col" class="text-end">My Comics</th>
+                                </tr>
+                                </thead>
+                                <tbody>
+                                {% for volume_one_shot in volume_one_shot_links %}
+                                    {% with one_shot=volume_one_shot.one_shot %}
+                                        <tr
+                                            class="clickable-row"
+                                            data-row-url="{% url 'catalog:one_shot_details' one_shot.id %}"
+                                            tabindex="0"
+                                            aria-label="Open one-shot details for {{ one_shot.title }}"
+                                        >
+                                            <td class="fw-semibold">
+                                                <a href="{% url 'catalog:one_shot_details' one_shot.id %}" class="erc-data-link">
+                                                    {{ one_shot.title }}
+                                                </a>
+                                            </td>
+                                            <td>
+                                                {% if one_shot.published_date %}
+                                                    {{ one_shot.published_date|date:"Y-m-d" }}
+                                                {% elif one_shot.start_year %}
+                                                    {{ one_shot.start_year }}
+                                                {% else %}
+                                                    <span class="erc-muted">Unknown</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>{{ one_shot.publisher.name }}</td>
+                                            <td class="text-end erc-track-cell">
+                                                {% if one_shot.user_tracking %}
+                                                    <form
+                                                        action="{% url 'reading:set_one_shot_status' one_shot.id %}"
+                                                        method="post"
+                                                        class="erc-track-form"
+                                                        data-simple-status-form
+                                                        data-item-type="one_shot"
+                                                        data-current-status="{{ one_shot.user_tracking.status }}"
+                                                    >
+                                                        {% csrf_token %}
+                                                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                                        <select name="status" class="form-select form-select-sm" data-auto-submit>
+                                                            {% for value, label in one_shot_status_choices %}
+                                                                <option value="{{ value }}" {% if one_shot.user_tracking.status == value %}selected{% endif %}>
+                                                                    {{ label }}
+                                                                </option>
+                                                            {% endfor %}
+                                                            <option value="__unfollow__">Unfollow</option>
+                                                        </select>
+                                                    </form>
+                                                {% else %}
+                                                    <form
+                                                        action="{% url 'reading:set_one_shot_status' one_shot.id %}"
+                                                        method="post"
+                                                        class="erc-track-form"
+                                                        data-simple-follow-form
+                                                        data-item-type="one_shot"
+                                                    >
+                                                        {% csrf_token %}
+                                                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                                        <input type="hidden" name="status" value="">
+                                                        <button type="submit" class="btn btn-outline-light btn-sm erc-track-button">
+                                                            Follow
+                                                        </button>
+                                                    </form>
+                                                {% endif %}
+                                            </td>
+                                        </tr>
+                                    {% endwith %}
+                                {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </article>
+                {% endif %}
+
+                {% if not volume_issue_groups and not volume_one_shot_links %}
+                    <div class="erc-empty-panel">
+                        No runs, issues, or one-shots have been linked to this volume.
+                    </div>
+                {% endif %}
             </div>
         </div>
     </section>
