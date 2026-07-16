@@ -2,20 +2,20 @@
 
 EzyReadComics is a Django web app for browsing comic runs, issues, collected volumes, one-shots, standalone graphic novels, and personal reading progress.
 
-The project is focused on a confirmed catalog layer backed by official publisher data, source-data staging, and user-specific reading tracking.
+The project uses a confirmed catalog layer backed by official publisher data, source-data staging, and user-specific reading tracking.
 
 ## Current Status
 
 EzyReadComics is in active development.
 
-Current production areas:
+Current project areas:
 
 - Catalog home
 - Browse
 - Run details
 - Issue details
 - Collected-volume details
-- One-shots and standalone graphic novels
+- One-shot and standalone graphic-novel details
 - My Comics reading tracker
 - User accounts
 - Admin-only catalog controls
@@ -37,7 +37,7 @@ Route:
 /
 ```
 
-The home page gives a simple entry point into the catalog and user reading features.
+The home page provides entry points into the comic catalog, Browse, and My Comics.
 
 ### Browse
 
@@ -53,20 +53,25 @@ Browse supports:
 - Run filtering
 - Issue filtering
 - Collected-volume filtering
-- Runs, issues, collected volumes, and one-shots
+- One-shot filtering
 - Searchable filter dropdowns
-- Incremental row loading
-- Toggleable catalog sections
+- Filter option pagination while scrolling dropdowns
+- Runs, issues, collected volumes, and one-shots in separate sections
+- Independent section visibility toggles
+- A hide/show control for the entire filter panel
+- Per-page filter-panel visibility persistence in browser storage
+- Ten initial rows per loaded section
+- Ten additional rows per remote load
+- Scroll-based incremental loading
 - Clickable catalog rows
 - Logged-in tracking actions
 
-Current Browse defaults:
+Browse defaults:
 
-- Runs are shown by default.
-- Issues are hidden by default.
-- Collected volumes are hidden by default.
-- One-shots are hidden by default.
-- Issue Show All is only available when a run filter is selected.
+- Runs are shown and loaded by default.
+- Issues are hidden unless an issue filter is selected or the section is enabled.
+- Collected volumes are hidden unless a volume filter is selected or the section is enabled.
+- One-shots are hidden unless a one-shot filter is selected or the section is enabled.
 - Admin-only Add Data controls are hidden from normal users.
 
 ### Run Details
@@ -85,13 +90,13 @@ Run pages show:
 - First issue date
 - Latest issue date
 - Description when available
-- Related issues
+- Issues in the run
 - Related collected volumes
-- Aggregated run credits from issues
+- Aggregated run credits
 - Tracking controls for logged-in users
 - Admin edit link for staff users
 
-Run credits are built from unique credits across the issues in the run.
+Run credits contain unique role/person pairs collected from the run's issues.
 
 ### Issue Details
 
@@ -114,7 +119,7 @@ Issue pages show:
 - Tracking controls for logged-in users
 - Admin edit link for staff users
 
-Issue titles and cover dates are retained in the data model but are not part of the main user-facing issue workflow.
+Issue titles and cover dates remain available in the data model but are not part of the main user-facing issue workflow.
 
 ### Collected Volume Details
 
@@ -132,23 +137,57 @@ Collected-volume pages show:
 - Release date
 - Description when available
 - Runs and issues collected in the volume
-- Volume credits
+- Aggregated volume credits
 - Tracking controls for logged-in users
 - Admin edit link for staff users
 
 Volumes can link to multiple runs. Volume contents are grouped by run on the detail page.
 
-If a volume has a known run range but individual issue links are not available yet, the page keeps the volume/run relationship without guessing missing issue links.
+If a volume has a known run relationship but individual issue links are unavailable, the volume keeps the run relationship without guessing missing issue links.
+
+Volume credits combine and deduplicate:
+
+- Credits stored directly on the volume
+- Credits from explicitly linked issues
+- Issue credits from linked runs that do not have explicit issue links for that volume
+
+Credit uniqueness uses the role/person pair.
 
 ### One-Shots and Standalone Graphic Novels
 
-One-shots support catalog records that do not belong to a normal run or collected-volume relationship.
+Route:
 
-Current one-shot uses include:
+```text
+/one-shots/<id>/
+```
+
+One-shot pages show:
+
+- Publisher
+- Published date when available
+- Start year when available
+- Description when available
+- Credits
+- Tracking controls for logged-in users
+- Admin edit link for staff users
+
+One-shot records support comics that do not belong to a normal run or collected-volume relationship.
+
+One-shot uses include:
 
 - Standalone DC graphic novels
 - DC graphic novels with no usable series relationship
-- Marvel one-shot-style collected items parsed from official collection text
+- Marvel one-shot-style items parsed from official collection text
+
+### Detail-Page Lists
+
+Run, issue, volume, and one-shot detail tables use local incremental display:
+
+- Ten rows are visible initially.
+- Ten additional rows are revealed when the table scroll approaches the bottom.
+- Each run group inside a collected volume has an independent scrollable issue table.
+- Empty-state rows remain visible.
+- Data is rendered by Django with the page and revealed locally without another server request.
 
 ### My Comics
 
@@ -165,13 +204,27 @@ My Comics supports:
 - Followed runs
 - Followed issues
 - Followed collected volumes
-- Reading statuses
+- Followed one-shots
+- Planned to read, Reading, and Read statuses
 - Publisher filtering
 - Run filtering
 - Issue filtering
-- Status filtering
+- Collected-volume filtering
+- One-shot filtering
+- Searchable filter dropdowns
+- Independent section visibility toggles
+- A hide/show control for the entire filter panel
+- Ten initial rows per loaded section
+- Ten additional rows per remote load
+- Scroll-based incremental loading
 - Inline status updates
 - Unfollow/remove actions
+
+My Comics section defaults match Browse:
+
+- Runs are shown and loaded by default.
+- Issues, collected volumes, and one-shots are loaded immediately when their matching filter is selected.
+- Other hidden sections load when enabled.
 
 Reading statuses:
 
@@ -179,14 +232,17 @@ Reading statuses:
 - Reading
 - Read
 
-Current tracking behavior:
+Tracking behavior:
 
 - Saving issue progress follows the issue's parent run.
 - Saving volume progress follows the volume's parent run.
+- Saving one-shot progress does not require a run.
 - Marking a volume Read also marks linked issues in that volume Read.
 - Run status changes can optionally apply to issues in that run.
+- A run can apply one issue status to all issues or individual statuses per issue.
 - Unfollowing a run can optionally remove issue progress for that run.
 - Removing a volume status does not remove issue progress.
+- Completing all issues in a run can offer to mark the run Read.
 
 ### Accounts
 
@@ -221,7 +277,56 @@ Admin-only UI includes:
 - Browse Add Data button
 - Detail-page Edit in Admin buttons
 
-Admin visibility is based on authenticated staff users. Django admin permissions still control actual admin access.
+Admin visibility is based on authenticated staff users. Django admin permissions control actual admin access.
+
+## Application Architecture
+
+### Confirmed Catalog and Source Layers
+
+The project separates data by responsibility:
+
+- `catalog` stores confirmed app-facing comic data.
+- `comicvine` stores imported Comic Vine source data.
+- `ingestion` stores source-to-catalog staging and review data.
+- `catalog.marvel` contains Marvel.com readers, parsers, planners, and writers.
+- `catalog.dc` contains DC.com readers, parsers, and writers.
+- `reading` stores user-specific progress.
+- `accounts` handles authentication and account settings.
+
+### Catalog Page Modules
+
+Catalog page responsibilities are divided across focused modules:
+
+- `catalog/views.py` contains the home and comic detail pages.
+- `catalog/browse_views.py` contains Browse, Browse item loading, and Browse filter-option endpoints.
+- `catalog/listing.py` contains shared listing limits, query parsing, filter context, searchable option queries, option serialization, and pagination helpers.
+- `catalog/presentation.py` contains Browse row serialization, credit-display decoration, and user tracking decoration for catalog objects.
+
+### Reading Page Modules
+
+Reading page responsibilities are divided across focused modules:
+
+- `reading/my_comics_views.py` contains My Comics, My Comics item loading, filter-option endpoints, tracked-object filtering, and tracked-object option scopes.
+- `reading/views.py` contains follow, unfollow, status, propagation, completion-offer, and tracking response behavior.
+- `reading/presentation.py` contains My Comics row serialization and status-choice serialization.
+- `reading/constants.py` contains the shared unfollow status sentinel.
+
+### Frontend List Modules
+
+Shared frontend behavior is organized under `static/js/`:
+
+- `static/js/comic-lists.js` controls searchable dropdowns, dropdown pagination, section toggles, remote row loading, local row revealing, clickable rows, and shared tracking helpers.
+- `static/js/catalog/browse.js` contains Browse row rendering and Browse-specific tracking modal behavior.
+- `static/js/reading/my-comics.js` contains My Comics row rendering and page-specific status behavior.
+- `static/js/catalog/detail-lists.js` configures existing detail-page tables for local incremental display.
+- `static/js/catalog/run-details.js` contains detail-page tracking interactions.
+- `static/js/base.js` controls the persistent filter-panel hide/show preference.
+
+Browse and My Comics share one filter template:
+
+```text
+catalog/templates/catalog/partials/comic_filters.html
+```
 
 ## Data Model
 
@@ -251,27 +356,28 @@ Catalog records can store official source data through:
 - `official_source_key`
 - `official_source_url`
 
-Current issue behavior:
+Issue behavior:
 
 - `published_date` is the main date used by the UI.
 - `description` stores official description text when available.
 - `official_detail_status` tracks whether official details are unknown, complete, or incomplete.
 - `official_detail_missing_fields` stores missing expected fields such as description or Writer.
-- A normal mainline issue #1 can fill the parent run description if the run description is blank.
+- A normal mainline issue #1 can fill the parent run description when the run description is blank.
 
-Current run behavior:
+Run behavior:
 
 - `issue_count` stores the known or computed run issue count.
 - `first_issue_date` and `last_issue_date` are maintained from attached issues.
 - `status` uses ongoing/completed values.
-- Run credits are displayed from unique issue credits.
+- Run detail credits are unique issue-credit role/person pairs.
 
-Current volume behavior:
+Volume behavior:
 
 - `ComicVolume` stores collected editions, trades, hardcovers, omnibus-style books, and similar records.
-- `ComicVolumeRun` links a volume to each run represented in that collected volume.
+- `ComicVolumeRun` links a volume to each represented run.
 - `ComicVolumeIssue` links a volume to individual issues when those issues can be resolved safely.
 - `ComicVolumeOneShot` links a volume to one-shot-style collected items.
+- Volume detail credits aggregate direct, linked-issue, and linked-run issue credits.
 
 ### Reading App
 
@@ -282,6 +388,9 @@ Main reading models:
 - `FollowedRun`
 - `IssueProgress`
 - `VolumeProgress`
+- `OneShotProgress`
+
+Each tracking model allows one saved row per user and comic object.
 
 ### Comic Vine App
 
@@ -289,7 +398,7 @@ The `comicvine` app stores imported source data.
 
 Comic Vine source data is not automatically trusted as app-facing catalog data.
 
-Current Comic Vine source data includes:
+Comic Vine source data includes:
 
 - Volumes
 - Issues
@@ -309,7 +418,7 @@ Current Comic Vine source data includes:
 
 The `ingestion` app stores review/staging records between Comic Vine source data and confirmed catalog data.
 
-Current ingestion supports confirmed Comic Vine run candidates and their directly attached issues. Collected-volume catalog data stays separate from Comic Vine run ingestion.
+Ingestion supports confirmed Comic Vine run candidates and their directly attached issues. Collected-volume catalog data stays separate from Comic Vine run ingestion.
 
 ## Official Publisher Ingestion
 
@@ -317,72 +426,87 @@ Official publisher commands use Playwright-rendered pages and stored source URLs
 
 ### Marvel Release Calendar
 
-Current release calendar sync:
+Release calendar sync:
 
 ```bash
 python manage.py sync_marvel_release_calendar_ai --dry-run --verbose
 python manage.py sync_marvel_release_calendar_ai --verbose
 ```
 
-Release calendar backfill:
+Deep release calendar backfill by dates:
 
 ```bash
 python manage.py backfill_marvel_release_calendar --start-date 2026-07-01 --end-date 2026-07-15 --dry-run --verbose
 python manage.py backfill_marvel_release_calendar --start-date 2026-07-01 --end-date 2026-07-15 --verbose
 ```
 
-Release calendar fast backfill:
+Deep release calendar backfill by year or year range:
+
+```bash
+python manage.py backfill_marvel_release_calendar --year 2025 --dry-run --verbose
+python manage.py backfill_marvel_release_calendar --year 2025 --verbose
+python manage.py backfill_marvel_release_calendar --start-year 2020 --end-year 2025 --verbose
+```
+
+Fast release calendar backfill:
 
 ```bash
 python manage.py backfill_marvel_release_calendar_fast --start-date 2026-07-01 --end-date 2026-07-15 --dry-run
 python manage.py backfill_marvel_release_calendar_fast --start-date 2026-07-01 --end-date 2026-07-15
-```
-
-Year backfill:
-
-```bash
 python manage.py backfill_marvel_release_calendar_fast --year 2025 --dry-run
 python manage.py backfill_marvel_release_calendar_fast --year 2025
 ```
 
 Marvel release behavior:
 
-- Deep release sync/backfill reads calendar seeds, follows `Back to Series`, reads series pages, and fills missing/incomplete issue details.
+- Deep release sync/backfill reads calendar seeds, follows `Back to Series`, reads series pages, and fills missing or incomplete issue details.
+- Deep backfill processes weekly Wednesday-to-Tuesday calendar windows.
+- Deep backfill supports a single year, an inclusive year range, or an explicit date range.
 - Fast release backfill reads only calendar seed issue detail pages.
 - Fast release backfill skips seed issues whose official URL or Marvel issue ID already exists locally.
-- Pass `--rescan-existing` to force fast release backfill to reread existing seed issues.
+- `--rescan-existing` forces fast release backfill to reread existing seed issues.
 - `--limit` limits calendar seeds when explicitly passed.
 - `--detail-limit` limits detail-page reads when explicitly passed.
+- Browser contexts close between weekly windows before database writes and the next window.
+- Commands report skipped items and summary counts.
 
 Useful Marvel release flags:
 
 ```text
 --year <YEAR>
+--start-year <YEAR>
+--end-year <YEAR>
 --start-date YYYY-MM-DD
 --end-date YYYY-MM-DD
 --limit <NUMBER>
 --detail-limit <NUMBER>
 --rescan-existing
+--skip-details
+--skip-missing-issues
 --dry-run
 --verbose
 --raw
 --headed
 ```
 
+Flags apply only to commands that define them.
+
 ### Marvel Collection Calendar
 
-Current collection calendar sync:
+Collection calendar sync:
 
 ```bash
 python manage.py sync_marvel_collection_calendar --dry-run --verbose
 python manage.py sync_marvel_collection_calendar --verbose
 ```
 
-Collection calendar backfill:
+Collection calendar backfill by dates or year:
 
 ```bash
 python manage.py backfill_marvel_collection_calendar --start-date 2026-07-01 --end-date 2026-07-15 --dry-run --verbose
 python manage.py backfill_marvel_collection_calendar --start-date 2026-07-01 --end-date 2026-07-15 --verbose
+python manage.py backfill_marvel_collection_calendar --year 2025 --dry-run --verbose
+python manage.py backfill_marvel_collection_calendar --year 2025 --verbose
 ```
 
 Marvel collection behavior:
@@ -394,6 +518,10 @@ Marvel collection behavior:
 - Creates volume/run links.
 - Links individual issues when safely resolvable.
 - Creates one-shot records for one-shot-style collected items.
+- Processes weekly Wednesday-to-Tuesday calendar windows.
+- Supports a single year or an explicit date range.
+- Browser contexts close between weekly windows before database writes and the next window.
+- Reports skipped items and summary counts.
 
 ### DC Browse/Detail Sync
 
@@ -420,13 +548,16 @@ python manage.py sync_dc_comics_fast --detail-url "https://www.dc.com/graphic-no
 
 DC behavior:
 
-- Deep DC sync reads browse seed pages and scans More From This Series for related issue and graphic novel links.
-- Fast DC sync reads only the visible browse/detail seed URLs.
+- Deep DC sync reads direct `?page=N` Browse Comics pages and detail pages.
+- Deep DC sync scans More From This Series for related issue and graphic-novel links.
+- Fast DC sync reads only visible browse/detail seed URLs.
 - Fast DC sync skips seed URLs already stored on issues, volumes, or one-shots.
-- Pass `--rescan-existing` to force fast DC sync to reread existing seed URLs.
+- `--rescan-existing` forces fast DC sync to reread existing seed URLs.
 - DC issue pages create or update runs and issues when the page exposes a usable run and issue number.
-- DC graphic novel pages create collected volumes when they expose a usable series relationship.
+- DC graphic-novel pages create collected volumes when they expose a usable series relationship.
 - DC standalone graphic novels are stored as one-shots when they do not have a normal run/volume relationship.
+- Browser contexts close after each browse page before database writes and the next page.
+- Commands report skipped items and summary counts.
 
 Useful DC flags:
 
@@ -456,6 +587,8 @@ Convert stale single-issue runs into one-shots:
 python manage.py convert_stale_single_issue_runs_to_one_shots --dry-run --verbose
 python manage.py convert_stale_single_issue_runs_to_one_shots --verbose
 ```
+
+The stale-run conversion skips runs that are primary runs for collected volumes so cascade deletion cannot remove those volume rows.
 
 Recommended checks after ingestion work:
 
@@ -500,10 +633,10 @@ python manage.py apply_marvel_ingestion_to_catalog --apply --create-missing-cata
 
 The project is deployed as a Django web service on Render.
 
-Current production setup:
+Production setup:
 
 - GitHub repository: `Wjmoore32001/EzyReadComics`
-- Main production branch: `main`
+- Production branch: `main`
 - Runtime host: Render web service
 - Database: Neon/PostgreSQL through `DATABASE_URL`
 - Domain/DNS: Cloudflare
@@ -534,6 +667,7 @@ The deployment build script installs dependencies, collects static files, and ru
 - Gunicorn
 - WhiteNoise
 - Bootstrap
+- JavaScript
 - Playwright
 - Comic Vine API
 - Requests
@@ -547,20 +681,38 @@ The deployment build script installs dependencies, collects static files, and ru
 EzyReadComics/
     accounts/
     catalog/
+        browse_views.py
+        listing.py
+        presentation.py
+        views.py
         dc/
         marvel/
         management/commands/
         models/
         templates/catalog/
+            partials/comic_filters.html
     comicvine/
     config/
     docs/
         development-log.md
     ingestion/
     reading/
+        constants.py
+        my_comics_views.py
+        presentation.py
+        views.py
+        templates/reading/
     static/
         css/
         js/
+            comic-lists.js
+            base.js
+            catalog/
+                browse.js
+                detail-lists.js
+                run-details.js
+            reading/
+                my-comics.js
     templates/
     build.sh
     manage.py
@@ -584,7 +736,7 @@ ALLOWED_HOSTS=ezyreadcomics.onrender.com,ezyreadcomics.com,www.ezyreadcomics.com
 CSRF_TRUSTED_ORIGINS=https://ezyreadcomics.onrender.com,https://ezyreadcomics.com,https://www.ezyreadcomics.com
 ```
 
-Recommended production optional value:
+Recommended production value:
 
 ```text
 DB_CONN_MAX_AGE=60
@@ -681,9 +833,11 @@ python manage.py collectstatic --no-input
 ## Current Development Direction
 
 - Keep confirmed catalog data separate from source data.
-- Prefer official publisher pages for current catalog metadata.
+- Prefer official publisher pages for app-facing catalog metadata.
 - Use fast ingestion commands for populated ranges where existing source URLs can be skipped.
-- Use deep ingestion commands for discovery and repair.
+- Use deep ingestion commands for discovery and relationship repair.
 - Keep collected-volume relationships conservative when individual issue links cannot be safely resolved.
 - Keep reading tracking user-specific.
+- Keep Browse, My Comics, and detail lists on shared loading behavior where their interaction models match.
+- Keep page-specific tracking behavior separate from shared list behavior.
 - Keep production deployment stable through Render, Neon, Cloudflare, Gunicorn, and WhiteNoise.
