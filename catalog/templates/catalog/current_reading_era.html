@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Current Reading Era - EzyReadComics{% endblock %}
+
+{% block extra_styles %}
+<link rel="stylesheet" href="{% static 'css/catalog/current-reading-era.css' %}?v=current-era-stage-2-20260716" />
+{% endblock %}
+
+{% block content %}
+<div class="erc-page-shell erc-current-era-page">
+    <section class="erc-hero p-4 p-lg-5">
+        <div class="erc-hero-content">
+            <p class="erc-page-kicker mb-3">Reading Guide</p>
+            <h1 class="erc-hero-title display-4 fw-bold mb-3">Current Reading Era</h1>
+            <p class="erc-hero-subtitle lead mb-0">
+                Follow the released issues from currently active runs in publication order.
+            </p>
+        </div>
+    </section>
+
+    <section class="card erc-panel erc-current-era-filter-card">
+        <div class="card-body">
+            <form method="get" class="erc-current-era-filter-form">
+                <div>
+                    <label for="publisher" class="form-label erc-current-era-filter-label">Publisher</label>
+                    <select id="publisher" name="publisher" class="form-select">
+                        {% for option in publisher_options %}
+                            <option
+                                value="{{ option.publisher.slug }}"
+                                {% if selected_publisher and option.publisher.id == selected_publisher.id %}selected{% endif %}
+                            >
+                                {{ option.publisher.name }}
+                            </option>
+                        {% empty %}
+                            <option value="">No supported publishers found</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <button type="submit" class="btn btn-primary">View</button>
+            </form>
+        </div>
+    </section>
+
+    <section class="card erc-panel erc-current-era-guide-card">
+        <div class="card-body p-0">
+            <div class="erc-current-era-guide-header">
+                <div>
+                    <h2 class="h3 fw-bold mb-1 erc-section-title">
+                        {% if selected_publisher %}{{ selected_publisher.name }}{% else %}Publisher{% endif %}
+                    </h2>
+                    <p class="erc-muted mb-0">
+                        {{ timeline.run_count }} run{{ timeline.run_count|pluralize }} ·
+                        {{ timeline.issue_count }} released issue{{ timeline.issue_count|pluralize }}
+                    </p>
+                </div>
+
+                <p class="erc-current-era-scroll-note mb-0">Scroll horizontally to continue through the reading order</p>
+            </div>
+
+            {% if timeline.rows %}
+                <div
+                    class="erc-current-era-scroll"
+                    role="region"
+                    aria-label="Current reading era release order"
+                    tabindex="0"
+                >
+                    <div
+                        class="erc-current-era-timeline"
+                        style="--era-columns: {{ timeline.column_count }};"
+                    >
+                        {% for row in timeline.rows %}
+                            <div class="erc-current-era-row">
+                                <a
+                                    href="{% url 'catalog:run_details' row.run.id %}"
+                                    class="erc-current-era-run-link"
+                                >
+                                    <span class="erc-current-era-run-title">{{ row.run.title }}</span>
+                                    {% if row.run.start_year %}
+                                        <span class="erc-current-era-run-year">({{ row.run.start_year }})</span>
+                                    {% endif %}
+                                </a>
+
+                                <div class="erc-current-era-track">
+                                    {% if row.issues %}
+                                        <span
+                                            class="erc-current-era-line"
+                                            style="grid-column: {{ row.first_column }} / {{ row.line_end_column }};"
+                                            aria-hidden="true"
+                                        ></span>
+
+                                        {% for item in row.issues %}
+                                            <a
+                                                href="{% url 'catalog:issue_details' item.issue.id %}"
+                                                class="erc-current-era-issue"
+                                                style="grid-column: {{ item.column }};"
+                                                aria-label="Open {{ row.run }} issue {{ item.issue.issue_number }}"
+                                                title="{{ row.run }} #{{ item.issue.issue_number }}"
+                                            >
+                                                #{{ item.issue.issue_number }}
+                                            </a>
+                                        {% endfor %}
+                                    {% else %}
+                                        <span class="erc-current-era-empty-run">No released issues with a publication date</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            {% else %}
+                <div class="erc-current-era-empty-state">
+                    {% if selected_publisher %}
+                        No current reading era runs are available for {{ selected_publisher.name }} yet.
+                    {% else %}
+                        No supported publisher records are available yet.
+                    {% endif %}
+                </div>
+            {% endif %}
+        </div>
+    </section>
+</div>
+{% endblock %}

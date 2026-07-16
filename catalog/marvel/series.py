@@ -489,7 +489,7 @@ def derive_status_from_series_end_value(end_value):
         return "ongoing"
 
     if clean_text(end_value):
-        return "ended"
+        return "completed"
 
     return "unknown"
 

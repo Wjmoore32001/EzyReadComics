@@ -11,6 +11,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="{% static 'css/site.css' %}?v=dropdown-scroll-fix-20260713" />
+    {% block extra_styles %}{% endblock %}
   </head>
   <body>
     <nav class="navbar navbar-expand-lg border-bottom border-secondary">
@@ -35,6 +36,9 @@
           <div class="navbar-nav me-auto">
             <a href="{% url 'catalog:home' %}" class="nav-link"> Home </a>
             <a href="{% url 'catalog:browse' %}" class="nav-link"> Browse </a>
+            <a href="{% url 'catalog:current_reading_era' %}" class="nav-link">
+              Current Reading Era
+            </a>
             {% if request.user.is_authenticated and request.user.is_staff %}
             <a href="{% url 'admin:index' %}" class="nav-link"> Admin </a>
             {% endif %}
