@@ -150,9 +150,12 @@ class Command(BaseCommand):
         )
 
         if series_plan.issue_detail_plans:
+            detail_records = []
+            detail_plan_count = len(series_plan.issue_detail_plans)
+
             self.stdout.write("")
             self.stdout.write(
-                f"Reading {len(series_plan.issue_detail_plans)} issue detail page(s)..."
+                f"Reading {detail_plan_count} issue detail page(s)..."
             )
 
             with marvel_browser_context(headed=headed) as context:
@@ -166,56 +169,58 @@ class Command(BaseCommand):
                         timeout_ms=timeout_ms,
                     )
                     update_detail_stats(detail_stats, detail)
+                    detail_records.append((index, issue_plan, detail))
+                    self.write_progress(index=index, total=detail_plan_count)
 
-                    if should_skip_new_issue_write(
-                        issue_plan=issue_plan,
-                        detail=detail,
-                    ):
-                        skipped_reports.append(
-                            build_skip_report(
-                                issue_plan=issue_plan,
-                                detail=detail,
-                            )
-                        )
-                        detail_stats["issue_writes_skipped"] += 1
+            close_old_connections()
 
-                        if verbose:
-                            self.write_skipped_issue(
-                                index=index,
-                                total=len(series_plan.issue_detail_plans),
-                                issue_plan=issue_plan,
-                                detail=detail,
-                            )
-                        else:
-                            self.write_progress(
-                                index=index,
-                                total=len(series_plan.issue_detail_plans),
-                            )
-                        continue
+            self.stdout.write("")
+            self.stdout.write(
+                f"Processing {detail_plan_count} issue database result(s)..."
+            )
 
-                    close_old_connections()
-                    _, issue_result = upsert_issue_from_series_issue(
-                        run=run,
-                        series_issue=issue_plan.series_issue,
-                        detail=detail,
-                        dry_run=dry_run,
-                    )
-                    add_write_result(totals, issue_result)
-
-                    if verbose:
-                        self.write_issue_result(
-                            index=index,
-                            total=len(series_plan.issue_detail_plans),
+            for index, issue_plan, detail in detail_records:
+                if should_skip_new_issue_write(
+                    issue_plan=issue_plan,
+                    detail=detail,
+                ):
+                    skipped_reports.append(
+                        build_skip_report(
                             issue_plan=issue_plan,
                             detail=detail,
-                            issue_result=issue_result,
-                            dry_run=dry_run,
                         )
-                    else:
-                        self.write_progress(
+                    )
+                    detail_stats["issue_writes_skipped"] += 1
+
+                    if verbose:
+                        self.write_skipped_issue(
                             index=index,
-                            total=len(series_plan.issue_detail_plans),
+                            total=detail_plan_count,
+                            issue_plan=issue_plan,
+                            detail=detail,
                         )
+                    continue
+
+                close_old_connections()
+                _, issue_result = upsert_issue_from_series_issue(
+                    run=run,
+                    series_issue=issue_plan.series_issue,
+                    detail=detail,
+                    dry_run=dry_run,
+                )
+                add_write_result(totals, issue_result)
+
+                if verbose:
+                    self.write_issue_result(
+                        index=index,
+                        total=detail_plan_count,
+                        issue_plan=issue_plan,
+                        detail=detail,
+                        issue_result=issue_result,
+                        dry_run=dry_run,
+                    )
+
+            del detail_records
         else:
             self.stdout.write("")
             self.stdout.write("No issue detail reads are needed for this run.")
