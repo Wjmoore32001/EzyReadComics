@@ -493,54 +493,34 @@ def find_existing_run(*, publisher, title, start_year, source_url):
     if is_preview(publisher):
         return None
 
+    title = clean_text(title)
+    start_year = clean_text(start_year)
     source = source_key(source_url)
 
     if source:
-        match = (
+        source_match = (
             ComicRun.objects.filter(
                 publisher=publisher,
                 official_source_key=source,
+                title__iexact=title,
+                start_year=start_year,
             )
             .order_by("id")
             .first()
         )
 
-        if match:
-            return match
+        if source_match:
+            return source_match
 
-    queryset = ComicRun.objects.filter(
-        publisher=publisher,
-        title__iexact=title,
+    return (
+        ComicRun.objects.filter(
+            publisher=publisher,
+            title__iexact=title,
+            start_year=start_year,
+        )
+        .order_by("id")
+        .first()
     )
-
-    if start_year:
-        match = queryset.filter(start_year=start_year).order_by("id").first()
-
-        if match:
-            return match
-
-    match = queryset.order_by("id").first()
-
-    if match:
-        return match
-
-    legacy_title = clean_text(f"{title} {start_year}")
-
-    if legacy_title and start_year:
-        legacy_match = (
-            ComicRun.objects.filter(
-                publisher=publisher,
-                title__iexact=legacy_title,
-                start_year="",
-            )
-            .order_by("id")
-            .first()
-        )
-
-        if legacy_match:
-            return legacy_match
-
-    return None
 
 
 def find_existing_issue_by_url_or_number(*, run, source_url, issue_number):
@@ -645,12 +625,14 @@ def update_run_from_detail(*, run, detail):
     changed = False
     identity = run_identity_from_detail(detail)
 
+    same_title = clean_text(run.title).casefold() == identity.title.casefold()
+    same_start_year = clean_text(run.start_year) == identity.start_year
+
+    if not same_title or not same_start_year:
+        return False
+
     if identity.title and run.title != identity.title:
         run.title = identity.title
-        changed = True
-
-    if identity.start_year and run.start_year != identity.start_year:
-        run.start_year = identity.start_year
         changed = True
 
     source_url_value = series_source_url_from_identity(identity)
@@ -979,7 +961,7 @@ def run_identity_from_detail(detail):
     parsed_title = clean_text(detail.series.title)
     parsed_start_year = clean_text(detail.series.start_year)
 
-    if parsed_title and parsed_start_year:
+    if parsed_title:
         return DcRunIdentity(
             title=parsed_title,
             start_year=parsed_start_year,
@@ -1001,6 +983,9 @@ def run_identity_from_detail(detail):
             start_year=clean_text(raw_parenthetical_match.group("start_year")),
         )
 
+    if raw:
+        return DcRunIdentity(title=raw)
+
     title_match = DETAIL_TITLE_YEAR_RE.match(clean_text(detail.title))
 
     if title_match:
@@ -1008,12 +993,6 @@ def run_identity_from_detail(detail):
             title=clean_text(title_match.group("title")),
             start_year=clean_text(title_match.group("start_year")),
         )
-
-    if parsed_title:
-        return DcRunIdentity(title=parsed_title)
-
-    if raw:
-        return DcRunIdentity(title=raw)
 
     return DcRunIdentity()
 
