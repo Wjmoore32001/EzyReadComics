@@ -21,13 +21,8 @@ from reading.forms import (
 )
 from reading.models import FollowedRun, IssueProgress, OneShotProgress, VolumeProgress
 from reading.presentation import (
-    build_my_comics_issue_row_item,
-    build_my_comics_one_shot_row_item,
-    build_my_comics_run_row_item,
-    build_my_comics_volume_row_item,
     build_run_follow_issue_option,
     build_status_choices,
-    format_date_or_unknown,
 )
 
 
@@ -401,11 +396,13 @@ def set_volume_status(request, volume_id):
 
     status = form.cleaned_data["status"]
 
-    FollowedRun.objects.get_or_create(
-        user=request.user,
-        run=volume.run,
-        defaults={"status": FollowedRun.STATUS_PLANNED},
-    )
+    if volume.run_id:
+        FollowedRun.objects.get_or_create(
+            user=request.user,
+            run=volume.run,
+            defaults={"status": FollowedRun.STATUS_PLANNED},
+        )
+
     VolumeProgress.objects.update_or_create(
         user=request.user,
         volume=volume,

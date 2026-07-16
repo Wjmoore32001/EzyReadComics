@@ -155,12 +155,18 @@ def get_volume_options(queryset, search_value, *, publisher_id=None, run_id=None
         queryset = queryset.filter(publisher_id=publisher_id)
 
     if run_id:
-        queryset = queryset.filter(run_id=run_id)
+        queryset = queryset.filter(
+            Q(run_id=run_id)
+            | Q(volume_runs__run_id=run_id)
+            | Q(volume_issues__issue__run_id=run_id)
+        ).distinct()
 
     if search_value:
         return queryset.filter(
             Q(title__icontains=search_value)
             | Q(run__title__icontains=search_value)
+            | Q(volume_runs__run__title__icontains=search_value)
+            | Q(volume_issues__issue__run__title__icontains=search_value)
             | Q(volume_number__icontains=search_value)
             | Q(publisher__name__icontains=search_value)
         ).annotate(
@@ -174,18 +180,18 @@ def get_volume_options(queryset, search_value, *, publisher_id=None, run_id=None
                 default=Value(6),
                 output_field=IntegerField(),
             )
-        ).order_by(
+        ).distinct().order_by(
             "search_rank",
-            "-run__start_year",
             "-release_date",
+            "-run__start_year",
             "run__title",
             "volume_number",
             "title",
         )
 
     return queryset.order_by(
-        "-run__start_year",
         "-release_date",
+        "-run__start_year",
         "run__title",
         "volume_number",
         "title",
@@ -218,6 +224,7 @@ def get_one_shot_options(queryset, search_value, *, publisher_id=None):
             "-start_year",
             "publisher__name",
             "title",
+            "id",
         )
 
     return queryset.order_by(
@@ -225,6 +232,7 @@ def get_one_shot_options(queryset, search_value, *, publisher_id=None):
         "-start_year",
         "publisher__name",
         "title",
+        "id",
     )
 
 
@@ -291,9 +299,13 @@ def build_issue_option(issue, *, url, selected_option_id):
 
 
 def build_volume_option(volume, *, url, selected_option_id):
+    primary_run = volume.run
+    primary_run_text = str(primary_run) if primary_run else "No primary run"
+    primary_run_title = primary_run.title if primary_run else ""
+
     meta_parts = [
         volume.publisher.name,
-        str(volume.run),
+        primary_run_text,
     ]
 
     if volume.issue_count:
@@ -305,7 +317,7 @@ def build_volume_option(volume, *, url, selected_option_id):
         "label": str(volume),
         "meta": " · ".join(meta_parts),
         "search_label": (
-            f"{volume.title} {volume.run.title} "
+            f"{volume.title} {primary_run_title} "
             f"{volume.volume_number} {volume.publisher.name}"
         ),
         "active": volume.id == selected_option_id,
@@ -326,6 +338,7 @@ def build_one_shot_option(one_shot, *, url, selected_option_id):
         ),
         "active": one_shot.id == selected_option_id,
     }
+
 
 def build_selected_items(
     *,
@@ -465,4 +478,3 @@ def build_filter_context(
             publisher=selected_publisher_id,
         ),
     }
-

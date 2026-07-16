@@ -203,12 +203,14 @@ def build_run_row_item(run):
 
 def build_volume_row_item(volume):
     has_issue_range = bool(volume.first_issue_number or volume.last_issue_number)
+    primary_run = volume.run
 
     return {
         "row_url": reverse("catalog:volume_details", args=[volume.id]),
         "aria_label": f"Open volume details for {volume}",
         "volume": str(volume),
-        "run": str(volume.run),
+        "run": str(primary_run) if primary_run else "No primary run",
+        "run_muted": not bool(primary_run),
         "publisher": volume.publisher.name,
         "issue_range": (
             f"#{volume.first_issue_number or '?'}–{volume.last_issue_number or '?'}"

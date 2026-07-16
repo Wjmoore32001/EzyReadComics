@@ -163,7 +163,7 @@
                     <thead>
                     <tr>
                         <th scope="col">Volume</th>
-                        <th scope="col">Run</th>
+                        <th scope="col">Primary Run</th>
                         <th scope="col">Release Date</th>
                         <th scope="col" class="text-end">My Comics</th>
                     </tr>
@@ -175,7 +175,11 @@
                                 <a href="{% url 'catalog:volume_details' volume.id %}" class="erc-data-link">{{ volume }}</a>
                             </td>
                             <td>
-                                <a href="{% url 'catalog:run_details' volume.run.id %}" class="erc-data-link">{{ volume.run }}</a>
+                                {% if volume.run_id %}
+                                    <a href="{% url 'catalog:run_details' volume.run.id %}" class="erc-data-link">{{ volume.run }}</a>
+                                {% else %}
+                                    <span class="erc-muted">No primary run</span>
+                                {% endif %}
                             </td>
                             <td>
                                 {% if volume.release_date %}

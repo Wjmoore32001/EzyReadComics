@@ -1,0 +1,223 @@
+.erc-current-era-page {
+  --era-run-column-width: 18rem;
+  --era-issue-width: 3.25rem;
+  --era-column-gap: 0.85rem;
+}
+
+.erc-current-era-filter-card .card-body {
+  padding: 1rem;
+}
+
+.erc-current-era-filter-form {
+  display: grid;
+  grid-template-columns: minmax(13rem, 20rem) minmax(11rem, 15rem);
+  gap: 1rem;
+  align-items: end;
+}
+
+.erc-current-era-filter-control {
+  width: 100%;
+}
+
+.erc-current-era-filter-label {
+  color: var(--erc-text-muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.erc-current-era-filter-toggle {
+  grid-column: 1 / -1;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--erc-border-soft);
+  border-radius: 0.8rem;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.erc-current-era-filter-toggle .form-check {
+  min-height: 1.5rem;
+  margin-bottom: 0;
+}
+
+.erc-current-era-filter-toggle .form-check-label {
+  color: #e9edf5;
+  font-weight: 700;
+}
+
+.erc-current-era-filter-help {
+  max-width: 48rem;
+  margin-top: 0.35rem;
+  color: var(--erc-text-muted);
+  font-size: 0.82rem;
+}
+
+.erc-current-era-filter-submit {
+  justify-self: start;
+}
+
+.erc-current-era-guide-card {
+  overflow: hidden;
+}
+
+.erc-current-era-guide-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1.25rem;
+  border-bottom: 1px solid var(--erc-border);
+}
+
+.erc-current-era-scroll-note {
+  color: var(--erc-text-muted);
+  font-size: 0.875rem;
+}
+
+.erc-current-era-scroll {
+  max-height: 68vh;
+  overflow: auto;
+  scrollbar-gutter: stable;
+  background:
+    linear-gradient(90deg, rgba(76, 201, 240, 0.025), transparent 20rem),
+    rgba(9, 11, 18, 0.48);
+}
+
+.erc-current-era-timeline {
+  width: max-content;
+  min-width: 100%;
+}
+
+.erc-current-era-row {
+  display: grid;
+  grid-template-columns: var(--era-run-column-width) max-content;
+  min-width: max-content;
+  border-bottom: 1px solid var(--erc-border-soft);
+}
+
+.erc-current-era-row:last-child {
+  border-bottom: 0;
+}
+
+.erc-current-era-run-link {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  min-height: 4.75rem;
+  padding: 1rem 1.15rem;
+  color: #f4f7fb;
+  background: linear-gradient(90deg, var(--erc-surface-soft) 88%, rgba(23, 28, 40, 0.94));
+  border-right: 1px solid var(--erc-border);
+  box-shadow: 0.75rem 0 1.25rem rgba(0, 0, 0, 0.14);
+}
+
+.erc-current-era-run-link:hover,
+.erc-current-era-run-link:focus {
+  color: var(--erc-accent-strong);
+  background: linear-gradient(90deg, rgba(76, 201, 240, 0.12), var(--erc-surface-soft));
+}
+
+.erc-current-era-run-title {
+  font-weight: 750;
+  line-height: 1.2;
+}
+
+.erc-current-era-run-year {
+  flex: 0 0 auto;
+  color: var(--erc-text-muted);
+  font-size: 0.82rem;
+}
+
+.erc-current-era-track {
+  display: grid;
+  grid-template-columns: repeat(var(--era-columns), var(--era-issue-width));
+  column-gap: var(--era-column-gap);
+  align-items: center;
+  min-height: 4.75rem;
+  padding: 0 1.25rem;
+}
+
+.erc-current-era-line {
+  z-index: 0;
+  grid-row: 1;
+  align-self: center;
+  height: 2px;
+  background: linear-gradient(90deg, rgba(76, 201, 240, 0.34), rgba(139, 92, 246, 0.34));
+}
+
+.erc-current-era-issue {
+  z-index: 1;
+  grid-row: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--era-issue-width);
+  min-width: var(--era-issue-width);
+  height: 2.35rem;
+  padding: 0 0.35rem;
+  overflow: hidden;
+  color: #ffffff;
+  font-size: 0.82rem;
+  font-weight: 800;
+  white-space: nowrap;
+  border: 1px solid rgba(76, 201, 240, 0.52);
+  border-radius: 0.65rem;
+  background: linear-gradient(180deg, rgba(34, 44, 61, 0.98), rgba(18, 22, 32, 0.98));
+  box-shadow: 0 0.45rem 1rem rgba(0, 0, 0, 0.28);
+  transition: 140ms ease-in-out;
+}
+
+.erc-current-era-issue:hover,
+.erc-current-era-issue:focus {
+  color: #ffffff;
+  border-color: var(--erc-accent-strong);
+  background: linear-gradient(180deg, rgba(76, 201, 240, 0.26), rgba(18, 22, 32, 0.98));
+  box-shadow: 0 0 0 0.12rem rgba(76, 201, 240, 0.12);
+  transform: translateY(-1px);
+}
+
+.erc-current-era-empty-run {
+  grid-column: 1 / -1;
+  color: var(--erc-text-muted);
+  font-size: 0.875rem;
+}
+
+.erc-current-era-empty-state {
+  padding: 3rem 1.25rem;
+  color: var(--erc-text-muted);
+  text-align: center;
+}
+
+@media (min-width: 768px) {
+  .erc-current-era-guide-header {
+    flex-direction: row;
+    align-items: end;
+    justify-content: space-between;
+  }
+}
+
+@media (max-width: 767.98px) {
+  .erc-current-era-page {
+    --era-run-column-width: 13rem;
+    --era-issue-width: 3rem;
+    --era-column-gap: 0.65rem;
+  }
+
+  .erc-current-era-filter-form {
+    grid-template-columns: 1fr;
+  }
+
+  .erc-current-era-filter-toggle {
+    grid-column: 1;
+  }
+
+  .erc-current-era-run-link {
+    padding-inline: 0.85rem;
+  }
+
+  .erc-current-era-track {
+    padding-inline: 0.85rem;
+  }
+}

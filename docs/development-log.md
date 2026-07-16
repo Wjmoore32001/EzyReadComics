@@ -6,6 +6,34 @@ The README describes the current project state. This log tracks major developmen
 
 ## Timeline
 
+### 2026-07-16
+
+- Added the Current Reading Era navbar tab and `/current-reading-era/` page.
+- Added `CurrentReadingEraRun` as a unique relation to existing `ComicRun` records without duplicating run or issue data.
+- Added migration `0012_currentreadingerarun`.
+- Added `sync_current_reading_era` for adding every currently ongoing run that is not already related to the Current Reading Era.
+- Kept Current Reading Era population additive:
+  - Existing relations are preserved.
+  - Completed or otherwise changed runs are not removed.
+  - The command makes no external requests.
+- Added shared Current Reading Era timeline construction under `catalog/current_reading_era/shared.py`.
+- Added separate Marvel and DC publisher handlers under `catalog/current_reading_era/`.
+- Set Marvel as the default Current Reading Era publisher.
+- Added publication-order issue placement using shared date columns across run rows.
+- Added deterministic ordering for runs, same-date issues, and nonstandard issue numbers.
+- Added horizontal timeline scrolling, sticky run labels, connecting lines, fixed-width issue boxes, and direct links to run and issue detail pages.
+- Limited timeline issues to released issues with known publication dates.
+- Added publisher filtering.
+- Added a `Started in or after` year cutoff:
+  - Options run from the current year back to the oldest valid included run start year.
+  - Selecting a year includes runs from that year through the current year.
+- Added the Marvel-only `Show non-Marvel-universe titles` toggle.
+- Kept the external-title toggle off by default.
+- Added Marvel external-title matching for lines including Star Wars, Alien, Predator, Godzilla, Planet of the Apes, Ultraman, Disney crossovers, Conan, Fortnite, Halo, and Warhammer.
+- Kept alternate Marvel universes in the normal timeline.
+- Applied external-title and year filtering before issue prefetching so filtered-out runs do not load timeline issues.
+- Added the dedicated `static/css/catalog/current-reading-era.css` stylesheet.
+
 ### 2026-07-15
 
 - Expanded reading tracking to cover runs, issues, collected volumes, and one-shots across Browse, detail pages, and My Comics.

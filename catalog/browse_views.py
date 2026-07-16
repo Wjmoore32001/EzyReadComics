@@ -1,3 +1,4 @@
+from django.db.models import Q
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
@@ -345,7 +346,6 @@ def resolve_browse_selection(*, publisher_id, run_id, issue_id, volume_id, one_s
             ComicVolume.objects.select_related("publisher", "run"),
             id=volume_id,
         )
-        selected_run = selected_volume.run
         selected_publisher = selected_volume.publisher
     elif run_id:
         selected_run = get_object_or_404(
@@ -374,8 +374,8 @@ def get_browse_querysets(
         "title",
     )
     volumes = ComicVolume.objects.select_related("publisher", "run").order_by(
-        "-run__start_year",
         "-release_date",
+        "-run__start_year",
         "run__title",
         "volume_number",
         "title",
@@ -398,11 +398,14 @@ def get_browse_querysets(
         "-start_year",
         "publisher__name",
         "title",
+        "id",
     )
 
     if selected_one_shot:
         runs = runs.none()
-        volumes = volumes.none()
+        volumes = volumes.filter(
+            volume_one_shots__one_shot=selected_one_shot,
+        ).distinct()
         issues = issues.none()
         one_shots = one_shots.filter(id=selected_one_shot.id)
     elif selected_issue:
@@ -411,13 +414,21 @@ def get_browse_querysets(
         issues = issues.filter(id=selected_issue.id)
         one_shots = one_shots.none()
     elif selected_volume:
-        runs = runs.filter(id=selected_volume.run_id)
+        runs = runs.filter(
+            Q(volumes=selected_volume)
+            | Q(collected_volume_links__volume=selected_volume)
+            | Q(issues__collected_in__volume=selected_volume)
+        ).distinct()
         volumes = volumes.filter(id=selected_volume.id)
         issues = issues.filter(collected_in__volume=selected_volume).distinct()
-        one_shots = one_shots.none()
+        one_shots = one_shots.filter(collected_in__volume=selected_volume).distinct()
     elif selected_run:
         runs = runs.filter(id=selected_run.id)
-        volumes = volumes.filter(run=selected_run)
+        volumes = volumes.filter(
+            Q(run=selected_run)
+            | Q(volume_runs__run=selected_run)
+            | Q(volume_issues__issue__run=selected_run)
+        ).distinct()
         issues = issues.filter(run=selected_run)
         one_shots = one_shots.none()
     elif selected_publisher:

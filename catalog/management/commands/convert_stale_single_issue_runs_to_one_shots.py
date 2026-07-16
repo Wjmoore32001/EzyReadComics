@@ -12,6 +12,7 @@ from catalog.models import (
     ComicOneShotCredit,
     ComicRun,
     ComicRunCredit,
+    ComicVolume,
     ComicVolumeIssue,
     ComicVolumeOneShot,
     ComicVolumeRun,
@@ -59,6 +60,9 @@ class ConversionResult:
     issue_credits_copied: int = 0
     volume_issue_links_copied: int = 0
     volume_run_links_copied: int = 0
+    primary_volume_links_copied: int = 0
+    primary_volume_rows_detached: int = 0
+    primary_volume_titles_filled: int = 0
 
     run_rows_deleted: int = 0
     issue_rows_deleted: int = 0
@@ -153,6 +157,9 @@ class Command(BaseCommand):
             "issue_credits_copied": 0,
             "volume_issue_links_copied": 0,
             "volume_run_links_copied": 0,
+            "primary_volume_links_copied": 0,
+            "primary_volume_rows_detached": 0,
+            "primary_volume_titles_filled": 0,
             "run_rows_deleted": 0,
             "issue_rows_deleted": 0,
             "run_credit_rows_deleted": 0,
@@ -200,6 +207,9 @@ class Command(BaseCommand):
                 totals["issue_credits_copied"] += result.issue_credits_copied
                 totals["volume_issue_links_copied"] += result.volume_issue_links_copied
                 totals["volume_run_links_copied"] += result.volume_run_links_copied
+                totals["primary_volume_links_copied"] += result.primary_volume_links_copied
+                totals["primary_volume_rows_detached"] += result.primary_volume_rows_detached
+                totals["primary_volume_titles_filled"] += result.primary_volume_titles_filled
                 totals["run_rows_deleted"] += result.run_rows_deleted
                 totals["issue_rows_deleted"] += result.issue_rows_deleted
                 totals["run_credit_rows_deleted"] += result.run_credit_rows_deleted
@@ -225,7 +235,8 @@ class Command(BaseCommand):
             self.stdout.write("")
             self.stdout.write(
                 self.style.WARNING(
-                    "Dry run only. Re-run without --dry-run to create one-shots and delete the stale run/issue rows."
+                    "Dry run only. Re-run without --dry-run to create one-shots, "
+                    "move volume relationships, and delete the stale run/issue rows."
                 )
             )
 
@@ -239,6 +250,12 @@ class Command(BaseCommand):
         self.stdout.write(f"  One-shot: {result.one_shot_title}")
         if result.one_shot_id:
             self.stdout.write(f"  One-shot ID: {result.one_shot_id}")
+        if result.primary_volume_rows_detached:
+            action = "Would detach" if dry_run else "Detached"
+            self.stdout.write(
+                f"  {action} as primary run from "
+                f"{result.primary_volume_rows_detached} collected volume(s)"
+            )
 
     def print_skipped_result(self, result):
         self.stdout.write(
@@ -258,6 +275,7 @@ class Command(BaseCommand):
     def print_summary(self, totals, *, dry_run):
         label = "Would convert" if dry_run else "Converted"
         delete_label = "Would delete" if dry_run else "Deleted"
+        detach_label = "Would detach" if dry_run else "Detached"
 
         self.stdout.write("")
         self.stdout.write("Summary")
@@ -271,6 +289,19 @@ class Command(BaseCommand):
         self.stdout.write(f"Issue credits copied to one-shots: {totals['issue_credits_copied']}")
         self.stdout.write(f"Volume issue links copied to one-shots: {totals['volume_issue_links_copied']}")
         self.stdout.write(f"Volume run links copied to one-shots: {totals['volume_run_links_copied']}")
+        self.stdout.write(
+            f"Primary volume links copied to one-shots: "
+            f"{totals['primary_volume_links_copied']}"
+        )
+        self.stdout.write(
+            f"{detach_label} collected-volume primary runs: "
+            f"{totals['primary_volume_rows_detached']}"
+        )
+        fill_label = "Would fill" if dry_run else "Filled"
+        self.stdout.write(
+            f"{fill_label} blank collected-volume titles before detaching: "
+            f"{totals['primary_volume_titles_filled']}"
+        )
         self.stdout.write(f"{delete_label} run rows: {totals['run_rows_deleted']}")
         self.stdout.write(f"{delete_label} issue rows: {totals['issue_rows_deleted']}")
         self.stdout.write(f"{delete_label} run credit rows: {totals['run_credit_rows_deleted']}")
@@ -341,31 +372,11 @@ def build_conversion_result(*, run, cutoff_date, dry_run):
         )
         return result
 
-    primary_volume_count = run.volumes.count()
-
-    if primary_volume_count:
-        result.skipped = True
-        result.skip_reason = (
-            f"Run is the primary run for {primary_volume_count} collected volume(s). "
-            "Deleting this run would cascade-delete those volume rows, so this needs manual review."
-        )
-        return result
-
     one_shot_values = build_one_shot_values(run=run, issue=issue)
     existing_one_shot = find_existing_one_shot(
         publisher=run.publisher,
-        title=one_shot_values["title"],
-        start_year=one_shot_values["start_year"],
-    )
-    conflict_reason = get_existing_one_shot_conflict_reason(
-        existing_one_shot=existing_one_shot,
         one_shot_values=one_shot_values,
     )
-
-    if conflict_reason:
-        result.skipped = True
-        result.skip_reason = conflict_reason
-        return result
 
     result.run_credit_rows_deleted = run.credits.count()
     result.issue_credit_rows_deleted = issue.credits.count()
@@ -373,6 +384,14 @@ def build_conversion_result(*, run, cutoff_date, dry_run):
     result.issue_progress_rows_deleted = IssueProgress.objects.filter(issue=issue).count()
     result.volume_issue_rows_deleted = ComicVolumeIssue.objects.filter(issue=issue).count()
     result.volume_run_rows_deleted = ComicVolumeRun.objects.filter(run=run).count()
+
+    primary_volumes = list(ComicVolume.objects.filter(run=run).order_by("id"))
+    result.primary_volume_rows_detached = len(primary_volumes)
+    result.primary_volume_titles_filled = fill_blank_primary_volume_titles(
+        primary_volumes=primary_volumes,
+        run=run,
+        dry_run=dry_run,
+    )
 
     if existing_one_shot:
         one_shot = existing_one_shot
@@ -392,7 +411,7 @@ def build_conversion_result(*, run, cutoff_date, dry_run):
     result.one_shot_id = getattr(one_shot, "id", None)
     result.one_shot_title = str(one_shot)
 
-    seen_credit_keys = existing_one_shot_credit_keys(one_shot=one_shot, dry_run=dry_run)
+    seen_credit_keys = existing_one_shot_credit_keys(one_shot=one_shot)
 
     result.issue_credits_copied = copy_credits_to_one_shot(
         source_credits=ComicIssueCredit.objects.filter(issue=issue)
@@ -411,7 +430,7 @@ def build_conversion_result(*, run, cutoff_date, dry_run):
         dry_run=dry_run,
     )
 
-    seen_volume_ids = existing_one_shot_volume_ids(one_shot=one_shot, dry_run=dry_run)
+    seen_volume_ids = existing_one_shot_volume_ids(one_shot=one_shot)
 
     result.volume_issue_links_copied = copy_volume_issue_links_to_one_shot(
         issue=issue,
@@ -421,6 +440,12 @@ def build_conversion_result(*, run, cutoff_date, dry_run):
     )
     result.volume_run_links_copied = copy_volume_run_links_to_one_shot(
         run=run,
+        one_shot=one_shot,
+        seen_volume_ids=seen_volume_ids,
+        dry_run=dry_run,
+    )
+    result.primary_volume_links_copied = copy_primary_volume_links_to_one_shot(
+        primary_volumes=primary_volumes,
         one_shot=one_shot,
         seen_volume_ids=seen_volume_ids,
         dry_run=dry_run,
@@ -441,6 +466,9 @@ def build_conversion_result(*, run, cutoff_date, dry_run):
             + result.volume_run_rows_deleted
         )
     else:
+        ComicVolume.objects.filter(
+            id__in=[volume.id for volume in primary_volumes]
+        ).update(run=None)
         deleted_count, deleted_summary = run.delete()
         result.deleted_object_count = deleted_count
         result.deleted_object_summary = deleted_summary
@@ -494,41 +522,47 @@ def one_shot_start_year(*, run, issue):
     return ""
 
 
-def find_existing_one_shot(*, publisher, title, start_year):
-    return (
-        ComicOneShot.objects.filter(
-            publisher=publisher,
-            title__iexact=title,
-            start_year=start_year,
+def find_existing_one_shot(*, publisher, one_shot_values):
+    official_source_key = clean_text(one_shot_values.get("official_source_key"))
+    official_source_url = clean_text(one_shot_values.get("official_source_url"))
+
+    if official_source_key:
+        match = (
+            ComicOneShot.objects.filter(
+                publisher=publisher,
+                official_source_key=official_source_key,
+            )
+            .order_by("id")
+            .first()
         )
-        .order_by("id")
-        .first()
-    )
+        if match:
+            return match
 
-
-def get_existing_one_shot_conflict_reason(*, existing_one_shot, one_shot_values):
-    if not existing_one_shot:
-        return ""
-
-    existing_key = clean_text(existing_one_shot.official_source_key)
-    new_key = clean_text(one_shot_values.get("official_source_key"))
-
-    if existing_key and new_key and existing_key != new_key:
-        return (
-            "Existing one-shot with the same publisher/title/start_year has a different "
-            f"official_source_key: existing={existing_key}, new={new_key}."
+    if official_source_url:
+        match = (
+            ComicOneShot.objects.filter(
+                publisher=publisher,
+                official_source_url=official_source_url,
+            )
+            .order_by("id")
+            .first()
         )
+        if match:
+            return match
 
-    existing_url = clean_text(existing_one_shot.official_source_url)
-    new_url = clean_text(one_shot_values.get("official_source_url"))
+    fallback_queryset = ComicOneShot.objects.filter(
+        publisher=publisher,
+        title__iexact=one_shot_values["title"],
+        start_year=one_shot_values["start_year"],
+        official_source_key="",
+        official_source_url="",
+    ).order_by("id")
 
-    if existing_url and new_url and existing_url != new_url:
-        return (
-            "Existing one-shot with the same publisher/title/start_year has a different "
-            f"official_source_url: existing={existing_url}, new={new_url}."
-        )
+    if official_source_key or official_source_url:
+        fallback_matches = list(fallback_queryset[:2])
+        return fallback_matches[0] if len(fallback_matches) == 1 else None
 
-    return ""
+    return fallback_queryset.first()
 
 
 def create_one_shot(*, one_shot_values, dry_run):
@@ -575,8 +609,8 @@ def update_existing_one_shot(*, one_shot, one_shot_values, dry_run):
     return 1 if changed else 0
 
 
-def existing_one_shot_credit_keys(*, one_shot, dry_run):
-    if dry_run or not getattr(one_shot, "pk", None):
+def existing_one_shot_credit_keys(*, one_shot):
+    if not getattr(one_shot, "pk", None):
         return set()
 
     return set(
@@ -612,8 +646,8 @@ def copy_credits_to_one_shot(*, source_credits, one_shot, seen_credit_keys, dry_
     return copied
 
 
-def existing_one_shot_volume_ids(*, one_shot, dry_run):
-    if dry_run or not getattr(one_shot, "pk", None):
+def existing_one_shot_volume_ids(*, one_shot):
+    if not getattr(one_shot, "pk", None):
         return set()
 
     return set(
@@ -680,6 +714,61 @@ def copy_volume_run_links_to_one_shot(*, run, one_shot, seen_volume_ids, dry_run
     return copied
 
 
+
+def fill_blank_primary_volume_titles(*, primary_volumes, run, dry_run):
+    filled = 0
+
+    for volume in primary_volumes:
+        if clean_text(volume.title):
+            continue
+
+        volume_number = clean_text(volume.volume_number)
+        title = clean_text(run.title)
+
+        if volume_number:
+            title = f"{title} Vol. {volume_number}"
+
+        if not title:
+            continue
+
+        filled += 1
+
+        if dry_run:
+            continue
+
+        volume.title = title
+        volume.save(update_fields=["title", "updated_at"])
+
+    return filled
+
+def copy_primary_volume_links_to_one_shot(
+    *,
+    primary_volumes,
+    one_shot,
+    seen_volume_ids,
+    dry_run,
+):
+    copied = 0
+
+    for volume in primary_volumes:
+        if volume.id in seen_volume_ids:
+            continue
+
+        seen_volume_ids.add(volume.id)
+        copied += 1
+
+        if dry_run:
+            continue
+
+        ComicVolumeOneShot.objects.create(
+            volume=volume,
+            one_shot=one_shot,
+            item_order=None,
+        )
+
+    return copied
+
+
 def subtract_months(value, months):
     year = value.year
     month = value.month - months
@@ -708,7 +797,6 @@ def clean_text(value):
 def first_clean_text(*values):
     for value in values:
         text = clean_text(value)
-
         if text:
             return text
 
@@ -731,7 +819,6 @@ def should_always_print_skip(result):
     ]
 
     reason = result.skip_reason.casefold()
-
     return not any(fragment in reason for fragment in quiet_fragments)
 
 

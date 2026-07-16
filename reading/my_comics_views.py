@@ -347,7 +347,6 @@ def resolve_my_comics_filters(request):
             ComicVolume.objects.select_related("publisher", "run"),
             id=raw_filters["volume_id"],
         )
-        run = volume.run
         publisher = volume.publisher
     elif raw_filters["run_id"]:
         run = get_object_or_404(
@@ -409,9 +408,9 @@ def get_filtered_my_comics_querysets(user, filters):
         "volume__publisher",
     ).order_by(
         "volume__publisher__name",
+        "volume__release_date",
         "volume__run__title",
         "volume__volume_number",
-        "volume__release_date",
         "volume__title",
     )
 
@@ -437,6 +436,7 @@ def get_filtered_my_comics_querysets(user, filters):
         "one_shot__publisher__name",
         "one_shot__published_date",
         "one_shot__title",
+        "id",
     )
 
     publisher_id = filters["publisher_id"]
@@ -453,7 +453,9 @@ def get_filtered_my_comics_querysets(user, filters):
 
     if one_shot_id:
         followed_runs = followed_runs.none()
-        volume_progress = volume_progress.none()
+        volume_progress = volume_progress.filter(
+            volume__volume_one_shots__one_shot_id=one_shot_id,
+        ).distinct()
         issue_progress = issue_progress.none()
         one_shot_progress = one_shot_progress.filter(one_shot_id=one_shot_id)
     elif issue_id:
@@ -464,20 +466,29 @@ def get_filtered_my_comics_querysets(user, filters):
         issue_progress = issue_progress.filter(issue_id=issue_id)
         one_shot_progress = one_shot_progress.none()
     elif volume_id:
-        followed_runs = followed_runs.filter(run__volumes__id=volume_id).distinct()
+        followed_runs = followed_runs.filter(
+            Q(run__volumes__id=volume_id)
+            | Q(run__collected_volume_links__volume_id=volume_id)
+            | Q(run__issues__collected_in__volume_id=volume_id)
+        ).distinct()
         volume_progress = volume_progress.filter(volume_id=volume_id)
         issue_progress = issue_progress.filter(
             issue__collected_in__volume_id=volume_id,
         ).distinct()
-        one_shot_progress = one_shot_progress.none()
+        one_shot_progress = one_shot_progress.filter(
+            one_shot__collected_in__volume_id=volume_id,
+        ).distinct()
     elif run_id:
         followed_runs = followed_runs.filter(run_id=run_id)
-        volume_progress = volume_progress.filter(volume__run_id=run_id)
+        volume_progress = volume_progress.filter(
+            Q(volume__run_id=run_id)
+            | Q(volume__volume_runs__run_id=run_id)
+            | Q(volume__volume_issues__issue__run_id=run_id)
+        ).distinct()
         issue_progress = issue_progress.filter(issue__run_id=run_id)
         one_shot_progress = one_shot_progress.none()
 
     return followed_runs, volume_progress, issue_progress, one_shot_progress
-
 
 
 def get_user_tracked_publisher_ids(user):
@@ -518,12 +529,23 @@ def get_user_tracked_run_ids(user):
             flat=True,
         )
     )
-    run_ids.update(
+
+    tracked_volume_ids = list(
         VolumeProgress.objects.filter(user=user).values_list(
-            "volume__run_id",
+            "volume_id",
             flat=True,
         )
     )
+
+    if tracked_volume_ids:
+        run_ids.update(
+            ComicRun.objects.filter(
+                Q(volumes__id__in=tracked_volume_ids)
+                | Q(collected_volume_links__volume_id__in=tracked_volume_ids)
+                | Q(issues__collected_in__volume_id__in=tracked_volume_ids)
+            ).values_list("id", flat=True)
+        )
+
     return [run_id for run_id in run_ids if run_id]
 
 
@@ -569,12 +591,24 @@ def get_user_tracked_volume_ids(user):
 
 
 def get_user_tracked_one_shot_ids(user):
-    return list(
+    one_shot_ids = set(
         OneShotProgress.objects.filter(user=user).values_list(
             "one_shot_id",
             flat=True,
         )
     )
+
+    followed_volume_ids = VolumeProgress.objects.filter(user=user).values_list(
+        "volume_id",
+        flat=True,
+    )
+    one_shot_ids.update(
+        ComicOneShot.objects.filter(
+            collected_in__volume_id__in=followed_volume_ids,
+        ).values_list("id", flat=True)
+    )
+
+    return list(one_shot_ids)
 
 
 def build_my_comics_url(**params):

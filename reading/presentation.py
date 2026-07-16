@@ -37,14 +37,20 @@ def build_my_comics_run_row_item(progress):
 
 def build_my_comics_volume_row_item(progress):
     volume = progress.volume
+    primary_run = volume.run
 
     return {
         "kind": "volumes",
         "row_url": reverse("catalog:volume_details", args=[volume.id]),
         "aria_label": f"Open volume details for {volume}",
         "volume": str(volume),
-        "run": str(volume.run),
-        "run_url": reverse("catalog:run_details", args=[volume.run.id]),
+        "run": str(primary_run) if primary_run else "No primary run",
+        "run_url": (
+            reverse("catalog:run_details", args=[primary_run.id])
+            if primary_run
+            else ""
+        ),
+        "run_muted": not bool(primary_run),
         "release_date": format_date_or_unknown(volume.release_date),
         "release_date_muted": not bool(volume.release_date),
         "status": progress.status,

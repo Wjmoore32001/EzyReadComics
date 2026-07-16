@@ -454,7 +454,7 @@ def is_uppercase_issue_text(value):
     title = clean_text(match.group("title"))
 
     if not re.search(r"[A-Za-z]", title):
-        return False
+        return bool(re.search(r"\d", title))
 
     return title == title.upper()
 
@@ -489,7 +489,7 @@ def derive_status_from_series_end_value(end_value):
         return "ongoing"
 
     if clean_text(end_value):
-        return "ended"
+        return "completed"
 
     return "unknown"
 
