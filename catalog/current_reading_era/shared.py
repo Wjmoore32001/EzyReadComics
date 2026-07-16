@@ -49,14 +49,14 @@ def issue_sort_key(issue):
     )
 
 
-def build_timeline(runs, *, is_eligible_run):
-    eligible_runs = [run for run in runs if is_eligible_run(run)]
-    eligible_runs.sort(key=run_sort_key)
+def build_timeline(runs):
+    sorted_runs = list(runs)
+    sorted_runs.sort(key=run_sort_key)
 
     issues_by_date = defaultdict(list)
     issues_by_run_and_date = defaultdict(list)
 
-    for run in eligible_runs:
+    for run in sorted_runs:
         timeline_issues = list(getattr(run, "current_era_timeline_issues", []))
         timeline_issues.sort(key=issue_sort_key)
         run.current_era_sorted_issues = timeline_issues
@@ -87,7 +87,7 @@ def build_timeline(runs, *, is_eligible_run):
 
     rows = []
 
-    for run in eligible_runs:
+    for run in sorted_runs:
         row_issues = [
             {
                 "issue": issue,

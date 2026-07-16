@@ -13,13 +13,5 @@ PUBLISHER_NAME_ALIASES = {
 SORT_ORDER = 1
 
 
-def get_exclusion_reason(run):
-    return ""
-
-
-def is_eligible_run(run):
-    return True
-
-
 def build_publisher_timeline(runs):
-    return build_timeline(runs, is_eligible_run=is_eligible_run)
+    return build_timeline(runs)
