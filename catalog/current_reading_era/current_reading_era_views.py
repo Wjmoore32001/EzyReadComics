@@ -1,5 +1,8 @@
+import re
+
 from django.db.models import Prefetch
 from django.shortcuts import render
+from django.utils import timezone
 
 from catalog.current_reading_era import (
     DEFAULT_PUBLISHER_HANDLER,
@@ -7,6 +10,9 @@ from catalog.current_reading_era import (
     publisher_option_sort_key,
 )
 from catalog.models import ComicIssue, ComicPublisher, ComicRun
+
+
+START_YEAR_PATTERN = re.compile(r"^\d{4}$")
 
 
 def current_reading_era(request):
@@ -51,6 +57,13 @@ def current_reading_era(request):
         )
 
     selected_publisher = None
+    selected_start_year = None
+    start_year_options = []
+    show_non_marvel_universe_titles = False
+    show_non_marvel_universe_filter = False
+    non_marvel_universe_filter_label = ""
+    non_marvel_universe_filter_help = ""
+
     timeline = {
         "rows": [],
         "column_count": 1,
@@ -61,6 +74,57 @@ def current_reading_era(request):
     if selected_option is not None:
         selected_publisher = selected_option["publisher"]
         selected_handler = selected_option["handler"]
+
+        show_non_marvel_universe_filter = getattr(
+            selected_handler,
+            "SUPPORTS_NON_MARVEL_UNIVERSE_FILTER",
+            False,
+        )
+        show_non_marvel_universe_titles = (
+            show_non_marvel_universe_filter
+            and request.GET.get("show_non_marvel_universe") == "1"
+        )
+        non_marvel_universe_filter_label = getattr(
+            selected_handler,
+            "NON_MARVEL_UNIVERSE_FILTER_LABEL",
+            "",
+        )
+        non_marvel_universe_filter_help = getattr(
+            selected_handler,
+            "NON_MARVEL_UNIVERSE_FILTER_HELP",
+            "",
+        )
+
+        base_run_queryset = ComicRun.objects.filter(
+            publisher=selected_publisher,
+            current_reading_era_entries__isnull=False,
+        )
+
+        if (
+            show_non_marvel_universe_filter
+            and not show_non_marvel_universe_titles
+        ):
+            base_run_queryset = base_run_queryset.exclude(
+                selected_handler.non_marvel_universe_run_query()
+            )
+
+        start_year_options = build_start_year_options(
+            base_run_queryset.filter(status=ComicRun.STATUS_ONGOING)
+        )
+        selected_start_year = get_selected_start_year(
+            request.GET.get("start_year", ""),
+            start_year_options,
+        )
+
+        if selected_start_year is not None:
+            current_year = timezone.localdate().year
+            included_start_years = [
+                str(year)
+                for year in range(selected_start_year, current_year + 1)
+            ]
+            base_run_queryset = base_run_queryset.filter(
+                start_year__in=included_start_years
+            )
 
         timeline_issue_queryset = (
             ComicIssue.objects.filter(
@@ -76,11 +140,7 @@ def current_reading_era(request):
         )
 
         runs = list(
-            ComicRun.objects.filter(
-                publisher=selected_publisher,
-                current_reading_era_entries__isnull=False,
-            )
-            .select_related("publisher")
+            base_run_queryset.select_related("publisher")
             .prefetch_related(
                 Prefetch(
                     "issues",
@@ -96,7 +156,53 @@ def current_reading_era(request):
     context = {
         "publisher_options": publisher_options,
         "selected_publisher": selected_publisher,
+        "selected_start_year": selected_start_year,
+        "start_year_options": start_year_options,
+        "show_non_marvel_universe_filter": show_non_marvel_universe_filter,
+        "show_non_marvel_universe_titles": show_non_marvel_universe_titles,
+        "non_marvel_universe_filter_label": non_marvel_universe_filter_label,
+        "non_marvel_universe_filter_help": non_marvel_universe_filter_help,
         "timeline": timeline,
     }
 
     return render(request, "catalog/current_reading_era.html", context)
+
+
+def build_start_year_options(run_queryset):
+    current_year = timezone.localdate().year
+    valid_years = []
+
+    raw_start_years = (
+        run_queryset.exclude(start_year="")
+        .values_list("start_year", flat=True)
+        .distinct()
+    )
+
+    for raw_start_year in raw_start_years:
+        normalized_year = str(raw_start_year or "").strip()
+
+        if not START_YEAR_PATTERN.fullmatch(normalized_year):
+            continue
+
+        year = int(normalized_year)
+
+        if year <= current_year:
+            valid_years.append(year)
+
+    oldest_year = min(valid_years, default=current_year)
+
+    return list(range(current_year, oldest_year - 1, -1))
+
+
+def get_selected_start_year(raw_value, start_year_options):
+    normalized_value = str(raw_value or "").strip()
+
+    if not START_YEAR_PATTERN.fullmatch(normalized_value):
+        return None
+
+    selected_year = int(normalized_value)
+
+    if selected_year not in start_year_options:
+        return None
+
+    return selected_year

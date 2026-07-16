@@ -4,7 +4,7 @@
 {% block title %}Current Reading Era - EzyReadComics{% endblock %}
 
 {% block extra_styles %}
-<link rel="stylesheet" href="{% static 'css/catalog/current-reading-era.css' %}?v=current-era-stage-2-20260716" />
+<link rel="stylesheet" href="{% static 'css/catalog/current-reading-era.css' %}?v=current-era-filters-20260716" />
 {% endblock %}
 
 {% block content %}
@@ -22,7 +22,7 @@
     <section class="card erc-panel erc-current-era-filter-card">
         <div class="card-body">
             <form method="get" class="erc-current-era-filter-form">
-                <div>
+                <div class="erc-current-era-filter-control">
                     <label for="publisher" class="form-label erc-current-era-filter-label">Publisher</label>
                     <select id="publisher" name="publisher" class="form-select">
                         {% for option in publisher_options %}
@@ -38,7 +38,46 @@
                     </select>
                 </div>
 
-                <button type="submit" class="btn btn-primary">View</button>
+                <div class="erc-current-era-filter-control">
+                    <label for="start-year" class="form-label erc-current-era-filter-label">Started in or after</label>
+                    <select id="start-year" name="start_year" class="form-select">
+                        <option value="">All years</option>
+                        {% for year in start_year_options %}
+                            <option
+                                value="{{ year }}"
+                                {% if selected_start_year == year %}selected{% endif %}
+                            >
+                                {{ year }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                {% if show_non_marvel_universe_filter %}
+                    <div class="erc-current-era-filter-toggle">
+                        <div class="form-check form-switch">
+                            <input
+                                id="show-non-marvel-universe"
+                                name="show_non_marvel_universe"
+                                value="1"
+                                type="checkbox"
+                                class="form-check-input"
+                                {% if show_non_marvel_universe_titles %}checked{% endif %}
+                            >
+                            <label for="show-non-marvel-universe" class="form-check-label">
+                                {{ non_marvel_universe_filter_label }}
+                            </label>
+                        </div>
+
+                        {% if non_marvel_universe_filter_help %}
+                            <p class="erc-current-era-filter-help mb-0">
+                                {{ non_marvel_universe_filter_help }}
+                            </p>
+                        {% endif %}
+                    </div>
+                {% endif %}
+
+                <button type="submit" class="btn btn-primary erc-current-era-filter-submit">View</button>
             </form>
         </div>
     </section>
@@ -53,6 +92,9 @@
                     <p class="erc-muted mb-0">
                         {{ timeline.run_count }} run{{ timeline.run_count|pluralize }} ·
                         {{ timeline.issue_count }} released issue{{ timeline.issue_count|pluralize }}
+                        {% if selected_start_year %}
+                            · Runs started {{ selected_start_year }} or later
+                        {% endif %}
                     </p>
                 </div>
 
@@ -112,7 +154,7 @@
             {% else %}
                 <div class="erc-current-era-empty-state">
                     {% if selected_publisher %}
-                        No current reading era runs are available for {{ selected_publisher.name }} yet.
+                        No current reading era runs match these filters for {{ selected_publisher.name }}.
                     {% else %}
                         No supported publisher records are available yet.
                     {% endif %}

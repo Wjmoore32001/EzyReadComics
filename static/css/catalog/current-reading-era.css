@@ -9,13 +9,14 @@
 }
 
 .erc-current-era-filter-form {
-  display: flex;
-  flex-direction: column;
-  gap: 0.85rem;
+  display: grid;
+  grid-template-columns: minmax(13rem, 20rem) minmax(11rem, 15rem);
+  gap: 1rem;
+  align-items: end;
 }
 
-.erc-current-era-filter-form > div {
-  width: min(100%, 20rem);
+.erc-current-era-filter-control {
+  width: 100%;
 }
 
 .erc-current-era-filter-label {
@@ -26,8 +27,33 @@
   text-transform: uppercase;
 }
 
-.erc-current-era-filter-form .btn {
-  align-self: flex-start;
+.erc-current-era-filter-toggle {
+  grid-column: 1 / -1;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--erc-border-soft);
+  border-radius: 0.8rem;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.erc-current-era-filter-toggle .form-check {
+  min-height: 1.5rem;
+  margin-bottom: 0;
+}
+
+.erc-current-era-filter-toggle .form-check-label {
+  color: #e9edf5;
+  font-weight: 700;
+}
+
+.erc-current-era-filter-help {
+  max-width: 48rem;
+  margin-top: 0.35rem;
+  color: var(--erc-text-muted);
+  font-size: 0.82rem;
+}
+
+.erc-current-era-filter-submit {
+  justify-self: start;
 }
 
 .erc-current-era-guide-card {
@@ -165,11 +191,6 @@
 }
 
 @media (min-width: 768px) {
-  .erc-current-era-filter-form {
-    flex-direction: row;
-    align-items: end;
-  }
-
   .erc-current-era-guide-header {
     flex-direction: row;
     align-items: end;
@@ -182,6 +203,14 @@
     --era-run-column-width: 13rem;
     --era-issue-width: 3rem;
     --era-column-gap: 0.65rem;
+  }
+
+  .erc-current-era-filter-form {
+    grid-template-columns: 1fr;
+  }
+
+  .erc-current-era-filter-toggle {
+    grid-column: 1;
   }
 
   .erc-current-era-run-link {
