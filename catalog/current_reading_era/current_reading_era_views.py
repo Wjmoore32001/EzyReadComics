@@ -59,8 +59,9 @@ def current_reading_era(request):
     selected_publisher = None
     selected_start_year = None
     start_year_options = []
-    show_non_marvel_universe_titles = False
+
     show_non_marvel_universe_filter = False
+    show_non_marvel_universe_titles = False
     non_marvel_universe_filter_label = ""
     non_marvel_universe_filter_help = ""
 
@@ -95,7 +96,7 @@ def current_reading_era(request):
             "",
         )
 
-        base_run_queryset = ComicRun.objects.filter(
+        visible_runs_queryset = ComicRun.objects.filter(
             publisher=selected_publisher,
             current_reading_era_entries__isnull=False,
         )
@@ -104,13 +105,11 @@ def current_reading_era(request):
             show_non_marvel_universe_filter
             and not show_non_marvel_universe_titles
         ):
-            base_run_queryset = base_run_queryset.exclude(
+            visible_runs_queryset = visible_runs_queryset.exclude(
                 selected_handler.non_marvel_universe_run_query()
             )
 
-        start_year_options = build_start_year_options(
-            base_run_queryset.filter(status=ComicRun.STATUS_ONGOING)
-        )
+        start_year_options = build_start_year_options(visible_runs_queryset)
         selected_start_year = get_selected_start_year(
             request.GET.get("start_year", ""),
             start_year_options,
@@ -122,7 +121,7 @@ def current_reading_era(request):
                 str(year)
                 for year in range(selected_start_year, current_year + 1)
             ]
-            base_run_queryset = base_run_queryset.filter(
+            visible_runs_queryset = visible_runs_queryset.filter(
                 start_year__in=included_start_years
             )
 
@@ -140,7 +139,7 @@ def current_reading_era(request):
         )
 
         runs = list(
-            base_run_queryset.select_related("publisher")
+            visible_runs_queryset.select_related("publisher")
             .prefetch_related(
                 Prefetch(
                     "issues",
