@@ -27,12 +27,23 @@ The README describes the current project state. This log tracks major developmen
 - Added a `Started in or after` year cutoff:
   - Options run from the current year back to the oldest valid included run start year.
   - Selecting a year includes runs from that year through the current year.
-- Added the Marvel-only `Show non-Marvel-universe titles` toggle.
-- Kept the external-title toggle off by default.
+- Added publisher-specific optional-run filtering.
+- Added the Marvel `Show non-Marvel-universe titles` toggle and kept it off by default.
 - Added Marvel external-title matching for lines including Star Wars, Alien, Predator, Godzilla, Planet of the Apes, Ultraman, Disney crossovers, Conan, Fortnite, Halo, and Warhammer.
 - Kept alternate Marvel universes in the normal timeline.
-- Applied external-title and year filtering before issue prefetching so filtered-out runs do not load timeline issues.
+- Added the DC `Show Action Comics and Detective Comics` toggle and kept those long-running series hidden by default.
+- Applied optional-run and year filtering before issue prefetching so filtered-out runs do not load timeline issues.
 - Added the dedicated `static/css/catalog/current-reading-era.css` stylesheet.
+- Fixed DC run identity matching in `catalog/dc/writer.py`:
+  - `Specs > Series` is the primary source for the series title and start year.
+  - The detail-page title supplies the issue number and special-issue key and is only a run-identity fallback when Specs has no Series value.
+  - Run matching requires the same publisher, series title, and start year.
+  - A blank-year run matches only another blank-year run.
+  - Same-title runs from different years no longer fall back to one another.
+  - An official source-key match is rejected when its stored title or start year conflicts with the incoming series identity.
+  - Updating a matched run no longer rewrites an established title or start year into a different run identity.
+- Added catalog tests covering the DC Batman title patterns where issue #1 omits the year in its title while Specs identifies `BATMAN 2016`, later issues include the year, and `BATMAN (2016)` remains separate from `BATMAN (2025)` and blank-year Batman records.
+- Kept existing previously merged catalog data outside the automatic importer fix; corrupted run/issue relationships require a separate explicit repair operation.
 
 ### 2026-07-15
 

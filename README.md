@@ -38,7 +38,7 @@ Route:
 /
 ```
 
-The home page provides entry points into the comic catalog, Browse, and My Comics.
+The home page provides entry points into the comic catalog, Browse, Current Reading Era, and My Comics.
 
 ### Browse
 
@@ -100,7 +100,7 @@ The page supports:
 - A sticky run-name column
 - Publisher filtering
 - A start-year cutoff
-- A Marvel-only non-Marvel-universe title toggle
+- Publisher-specific optional-run toggles
 
 Timeline ordering:
 
@@ -117,14 +117,14 @@ Start-year filtering:
 - Selecting a year includes runs whose `start_year` is that year or later, through the current year.
 - Runs with blank or non-four-digit start years are not included when a year cutoff is active.
 
-Marvel non-Marvel-universe filtering:
+Publisher-specific optional-run filtering:
 
-- `Show non-Marvel-universe titles` is off by default.
-- With the toggle off, known external franchise lines are excluded before issue prefetching.
-- With the toggle on, those runs and their issues are included.
+- Marvel hides known external franchise lines by default and provides `Show non-Marvel-universe titles`.
+- DC hides the long-running Action Comics and Detective Comics series by default and provides `Show Action Comics and Detective Comics`.
+- Optional-run filtering is applied before issue prefetching.
 - Alternate Marvel universes remain included.
 
-The Marvel external-title prefixes are:
+The Marvel external-title prefixes include:
 
 - Star Wars
 - Alien and Aliens
@@ -137,8 +137,6 @@ The Marvel external-title prefixes are:
 - Fortnite and Marvel x Fortnite
 - Halo
 - Warhammer
-
-The publisher, external-title, and year filters are applied to the run queryset before issue prefetching. Issues belonging to filtered-out runs are not loaded for the timeline.
 
 Current Reading Era membership is stored through `CurrentReadingEraRun`. The population command is additive: once a run is linked, later command runs preserve that relation even if the run status changes.
 
@@ -371,7 +369,7 @@ Catalog page responsibilities are divided across focused modules:
 - `catalog/current_reading_era_views.py` selects the Current Reading Era publisher, applies page filters, limits issue prefetching to visible runs, and builds the timeline context.
 - `catalog/current_reading_era/shared.py` contains shared run ordering, issue ordering, publication-date column assignment, and timeline row construction.
 - `catalog/current_reading_era/marvel.py` contains Marvel publisher matching and Marvel-specific external-title filtering.
-- `catalog/current_reading_era/dc.py` contains DC publisher matching and DC timeline configuration.
+- `catalog/current_reading_era/dc.py` contains DC publisher matching and DC-specific optional-run filtering.
 - `catalog/listing.py` contains shared listing limits, query parsing, filter context, searchable option queries, option serialization, and pagination helpers.
 - `catalog/presentation.py` contains Browse row serialization, credit-display decoration, and user tracking decoration for catalog objects.
 
@@ -446,6 +444,9 @@ Issue behavior:
 
 Run behavior:
 
+- A run is identified by publisher, series title, and start year.
+- A blank start year is a distinct identity and does not match a same-title run with a known year.
+- Same-title runs with different start years remain separate records.
 - `issue_count` stores the known or computed run issue count.
 - `first_issue_date` and `last_issue_date` are maintained from attached issues.
 - `status` uses ongoing/completed values.
@@ -641,11 +642,19 @@ DC behavior:
 - Fast DC sync reads only visible browse/detail seed URLs.
 - Fast DC sync skips seed URLs already stored on issues, volumes, or one-shots.
 - `--rescan-existing` forces fast DC sync to reread existing seed URLs.
-- DC issue pages create or update runs and issues when the page exposes a usable run and issue number.
+- DC issue pages create or update runs and issues when the page exposes a usable series identity and issue number.
+- `Specs > Series` is the primary source for a DC issue's series title and start year.
+- The page title is used for the issue number and special-issue key. Its series title/year is only a fallback when the Specs Series value is absent.
+- DC run matching requires the same publisher, series title, and start year.
+- A blank incoming start year matches only a same-title run whose start year is also blank.
+- Same-title runs from different years never fall back to one another.
+- A stored official series source key is accepted only when the stored run identity agrees with the incoming title and start year.
+- Updating a matched run does not rewrite an established run title or start year into a different identity.
 - DC graphic-novel pages create collected volumes when they expose a usable series relationship.
 - DC standalone graphic novels are stored as one-shots when they do not have a normal run/volume relationship.
 - Browser contexts close after each browse page before database writes and the next page.
 - Commands report skipped items and summary counts.
+- Existing issue rows are not automatically moved between runs; data created by an earlier incorrect merge requires an explicit repair operation.
 
 Useful DC flags:
 
@@ -684,7 +693,7 @@ Command behavior:
 - Removes no relations.
 - Makes no external website, browser, or API requests.
 - `--verbose` prints each run that would be added or was added.
-- The page currently provides publisher handlers for Marvel and DC.
+- The page provides publisher handlers for Marvel and DC.
 
 ### Run Dates and Statuses
 
@@ -710,6 +719,7 @@ Recommended checks after ingestion work:
 
 ```bash
 python manage.py check
+python manage.py test catalog
 python manage.py update_run_dates_and_status --dry-run --verbose
 python manage.py sync_current_reading_era --dry-run --verbose
 ```
@@ -809,13 +819,18 @@ EzyReadComics/
             marvel.py
             shared.py
         dc/
+            browser.py
+            writer.py
         marvel/
         management/commands/
             sync_current_reading_era.py
+            sync_dc_comics.py
+            sync_dc_comics_fast.py
         models/
         templates/catalog/
             current_reading_era.html
             partials/comic_filters.html
+        tests.py
     comicvine/
     config/
     docs/
@@ -929,10 +944,11 @@ python manage.py sync_current_reading_era --dry-run --verbose
 python manage.py sync_current_reading_era --verbose
 ```
 
-Run checks:
+Run checks and tests:
 
 ```bash
 python manage.py check
+python manage.py test catalog
 ```
 
 Create an admin user:
@@ -957,6 +973,7 @@ http://127.0.0.1:8000/
 
 ```bash
 python manage.py check
+python manage.py test catalog
 python manage.py makemigrations
 python manage.py migrate
 python manage.py sync_current_reading_era --dry-run --verbose
@@ -970,6 +987,9 @@ python manage.py collectstatic --no-input
 
 - Keep confirmed catalog data separate from source data.
 - Prefer official publisher pages for app-facing catalog metadata.
+- Treat publisher, series title, and start year as the run identity.
+- Keep blank-year run identities separate from known-year identities.
+- Use source page series/specification fields before display-title fallbacks when a publisher exposes both.
 - Use fast ingestion commands for populated ranges where existing source URLs can be skipped.
 - Use deep ingestion commands for discovery and relationship repair.
 - Keep collected-volume relationships conservative when individual issue links cannot be safely resolved.
