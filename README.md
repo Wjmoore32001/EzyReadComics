@@ -1,6 +1,6 @@
 # EzyReadComics
 
-EzyReadComics is a Django web app for browsing comic runs, issues, collected volumes, one-shots, standalone graphic novels, and personal reading progress.
+EzyReadComics is a Django web app for browsing comic runs, issues, collected volumes, one-shots, standalone graphic novels, publication-order reading guides, and personal reading progress.
 
 The project uses a confirmed catalog layer backed by official publisher data, source-data staging, and user-specific reading tracking.
 
@@ -12,6 +12,7 @@ Current project areas:
 
 - Catalog home
 - Browse
+- Current Reading Era publication-order guide
 - Run details
 - Issue details
 - Collected-volume details
@@ -73,6 +74,73 @@ Browse defaults:
 - Collected volumes are hidden unless a volume filter is selected or the section is enabled.
 - One-shots are hidden unless a one-shot filter is selected or the section is enabled.
 - Admin-only Add Data controls are hidden from normal users.
+
+### Current Reading Era
+
+Route:
+
+```text
+/current-reading-era/
+```
+
+Current Reading Era is a horizontal publication-order guide for runs that have entered the current reading era.
+
+The page supports:
+
+- Marvel and DC publisher views
+- Marvel as the default publisher
+- One row per included run
+- Run names linked to run detail pages
+- Issue boxes linked to issue detail pages
+- Released issues with a known `published_date`
+- Shared publication-date columns across every run
+- Vertical alignment for issues published on the same date
+- Adjacent columns when one run has multiple issues on the same date
+- Horizontal timeline scrolling
+- A sticky run-name column
+- Publisher filtering
+- A start-year cutoff
+- A Marvel-only non-Marvel-universe title toggle
+
+Timeline ordering:
+
+- Run rows are ordered by first issue date, then title, start year, and database ID.
+- Issue positions are ordered by publication date.
+- Issue number and stable run fields provide deterministic ordering when multiple issues share a publication date.
+- Calendar dates are not displayed in the guide.
+- Runs with no released issue that has a publication date remain visible with an empty-state message.
+
+Start-year filtering:
+
+- The default selection is `All years`.
+- The dropdown begins with the current year and continues back to the oldest valid four-digit start year among the currently included runs for the selected publisher.
+- Selecting a year includes runs whose `start_year` is that year or later, through the current year.
+- Runs with blank or non-four-digit start years are not included when a year cutoff is active.
+
+Marvel non-Marvel-universe filtering:
+
+- `Show non-Marvel-universe titles` is off by default.
+- With the toggle off, known external franchise lines are excluded before issue prefetching.
+- With the toggle on, those runs and their issues are included.
+- Alternate Marvel universes remain included.
+
+The Marvel external-title prefixes are:
+
+- Star Wars
+- Alien and Aliens
+- Predator
+- Godzilla
+- Planet of the Apes
+- Ultraman
+- Marvel & Disney, Marvel Disney, and Disney
+- Conan
+- Fortnite and Marvel x Fortnite
+- Halo
+- Warhammer
+
+The publisher, external-title, and year filters are applied to the run queryset before issue prefetching. Issues belonging to filtered-out runs are not loaded for the timeline.
+
+Current Reading Era membership is stored through `CurrentReadingEraRun`. The population command is additive: once a run is linked, later command runs preserve that relation even if the run status changes.
 
 ### Run Details
 
@@ -290,6 +358,7 @@ The project separates data by responsibility:
 - `ingestion` stores source-to-catalog staging and review data.
 - `catalog.marvel` contains Marvel.com readers, parsers, planners, and writers.
 - `catalog.dc` contains DC.com readers, parsers, and writers.
+- `catalog.current_reading_era` contains shared timeline behavior and publisher-specific reading-guide configuration.
 - `reading` stores user-specific progress.
 - `accounts` handles authentication and account settings.
 
@@ -299,6 +368,10 @@ Catalog page responsibilities are divided across focused modules:
 
 - `catalog/views.py` contains the home and comic detail pages.
 - `catalog/browse_views.py` contains Browse, Browse item loading, and Browse filter-option endpoints.
+- `catalog/current_reading_era_views.py` selects the Current Reading Era publisher, applies page filters, limits issue prefetching to visible runs, and builds the timeline context.
+- `catalog/current_reading_era/shared.py` contains shared run ordering, issue ordering, publication-date column assignment, and timeline row construction.
+- `catalog/current_reading_era/marvel.py` contains Marvel publisher matching and Marvel-specific external-title filtering.
+- `catalog/current_reading_era/dc.py` contains DC publisher matching and DC timeline configuration.
 - `catalog/listing.py` contains shared listing limits, query parsing, filter context, searchable option queries, option serialization, and pagination helpers.
 - `catalog/presentation.py` contains Browse row serialization, credit-display decoration, and user tracking decoration for catalog objects.
 
@@ -311,7 +384,7 @@ Reading page responsibilities are divided across focused modules:
 - `reading/presentation.py` contains My Comics row serialization and status-choice serialization.
 - `reading/constants.py` contains the shared unfollow status sentinel.
 
-### Frontend List Modules
+### Frontend Modules
 
 Shared frontend behavior is organized under `static/js/`:
 
@@ -328,6 +401,12 @@ Browse and My Comics share one filter template:
 catalog/templates/catalog/partials/comic_filters.html
 ```
 
+Current Reading Era uses a dedicated stylesheet:
+
+```text
+static/css/catalog/current-reading-era.css
+```
+
 ## Data Model
 
 ### Catalog App
@@ -338,6 +417,7 @@ Main catalog models:
 
 - `ComicPublisher`
 - `ComicRun`
+- `CurrentReadingEraRun`
 - `ComicIssue`
 - `ComicOneShot`
 - `ComicVolume`
@@ -370,6 +450,14 @@ Run behavior:
 - `first_issue_date` and `last_issue_date` are maintained from attached issues.
 - `status` uses ongoing/completed values.
 - Run detail credits are unique issue-credit role/person pairs.
+
+Current Reading Era behavior:
+
+- `CurrentReadingEraRun` links one catalog run to the Current Reading Era.
+- A unique constraint allows at most one Current Reading Era relation per run.
+- Deleting a run deletes its Current Reading Era relation.
+- The relation stores no duplicate title, publisher, date, or issue data.
+- The page reads run and issue details from the existing catalog records.
 
 Volume behavior:
 
@@ -574,12 +662,40 @@ Useful DC flags:
 
 ## Utility Commands
 
+### Current Reading Era Population
+
+Preview missing Current Reading Era relations:
+
+```bash
+python manage.py sync_current_reading_era --dry-run --verbose
+```
+
+Add missing relations:
+
+```bash
+python manage.py sync_current_reading_era --verbose
+```
+
+Command behavior:
+
+- Scans every `ComicRun` whose status is `ongoing`.
+- Adds a `CurrentReadingEraRun` relation when one does not already exist.
+- Preserves every existing Current Reading Era relation.
+- Removes no relations.
+- Makes no external website, browser, or API requests.
+- `--verbose` prints each run that would be added or was added.
+- The page currently provides publisher handlers for Marvel and DC.
+
+### Run Dates and Statuses
+
 Update run dates and statuses from local issues:
 
 ```bash
 python manage.py update_run_dates_and_status --dry-run --verbose
 python manage.py update_run_dates_and_status --verbose
 ```
+
+### Stale Single-Issue Conversion
 
 Convert stale single-issue runs into one-shots:
 
@@ -595,6 +711,7 @@ Recommended checks after ingestion work:
 ```bash
 python manage.py check
 python manage.py update_run_dates_and_status --dry-run --verbose
+python manage.py sync_current_reading_era --dry-run --verbose
 ```
 
 ## Comic Vine Commands
@@ -682,14 +799,22 @@ EzyReadComics/
     accounts/
     catalog/
         browse_views.py
+        current_reading_era_views.py
         listing.py
         presentation.py
         views.py
+        current_reading_era/
+            __init__.py
+            dc.py
+            marvel.py
+            shared.py
         dc/
         marvel/
         management/commands/
+            sync_current_reading_era.py
         models/
         templates/catalog/
+            current_reading_era.html
             partials/comic_filters.html
     comicvine/
     config/
@@ -704,6 +829,8 @@ EzyReadComics/
         templates/reading/
     static/
         css/
+            catalog/
+                current-reading-era.css
         js/
             comic-lists.js
             base.js
@@ -795,6 +922,13 @@ Run migrations:
 python manage.py migrate
 ```
 
+Populate Current Reading Era relations:
+
+```bash
+python manage.py sync_current_reading_era --dry-run --verbose
+python manage.py sync_current_reading_era --verbose
+```
+
 Run checks:
 
 ```bash
@@ -825,6 +959,8 @@ http://127.0.0.1:8000/
 python manage.py check
 python manage.py makemigrations
 python manage.py migrate
+python manage.py sync_current_reading_era --dry-run --verbose
+python manage.py sync_current_reading_era --verbose
 python manage.py runserver
 python manage.py createsuperuser
 python manage.py collectstatic --no-input
@@ -839,5 +975,7 @@ python manage.py collectstatic --no-input
 - Keep collected-volume relationships conservative when individual issue links cannot be safely resolved.
 - Keep reading tracking user-specific.
 - Keep Browse, My Comics, and detail lists on shared loading behavior where their interaction models match.
+- Keep Current Reading Era timeline calculation shared while publisher-specific rules remain in separate modules.
+- Apply Current Reading Era filters before issue prefetching.
 - Keep page-specific tracking behavior separate from shared list behavior.
 - Keep production deployment stable through Render, Neon, Cloudflare, Gunicorn, and WhiteNoise.
