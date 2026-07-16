@@ -86,7 +86,11 @@
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="{% static 'js/base.js' %}?v=filter-panel-toggle-20260715"></script>
+    <script src="{% static 'js/base.js' %}?v=filter-panel-only-20260715"></script>
+    <script
+      src="{% static 'js/catalog/detail-lists.js' %}?v=shared-detail-scroll-20260715"
+      data-comic-lists-url="{% static 'js/comic-lists.js' %}?v=shared-detail-scroll-20260715"
+    ></script>
     {% block extra_scripts %}{% endblock %}
   </body>
 </html>

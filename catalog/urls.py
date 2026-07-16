@@ -1,15 +1,15 @@
 from django.urls import path
 
-from catalog import views
+from catalog import browse_views, views
 
 
 app_name = "catalog"
 
 urlpatterns = [
     path("", views.home, name="home"),
-    path("browse/", views.browse, name="browse"),
-    path("browse/options/", views.browse_options, name="browse_options"),
-    path("browse/items/", views.browse_items, name="browse_items"),
+    path("browse/", browse_views.browse, name="browse"),
+    path("browse/options/", browse_views.browse_options, name="browse_options"),
+    path("browse/items/", browse_views.browse_items, name="browse_items"),
     path("runs/<int:pk>/", views.run_details, name="run_details"),
     path("issues/<int:pk>/", views.issue_details, name="issue_details"),
     path("volumes/<int:pk>/", views.volume_details, name="volume_details"),

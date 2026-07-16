@@ -4,25 +4,40 @@ A concise history of EzyReadComics development.
 
 The README describes the current project state. This log tracks major development milestones.
 
-## Current Status
-
-EzyReadComics is a Django web app for browsing confirmed comic catalog data and tracking personal comic reading progress.
-
-Current project areas:
-
-- `accounts` handles signup, login, logout, account settings, username changes, and password changes.
-- `catalog` stores confirmed app-facing comic data.
-- `catalog.marvel` stores Marvel.com page readers, parsers, sync planners, and catalog writers.
-- `catalog.dc` stores DC.com page readers, parsers, and catalog writers.
-- `comicvine` stores imported Comic Vine source data.
-- `ingestion` stores source-to-catalog staging records and confirmed run candidates.
-- `reading` stores user-specific comic tracking data.
-- The site has catalog home, browse, run details, issue details, collected-volume details, My Comics, account, login, and signup pages.
-- Browse and My Comics use capped initial loads, section toggles, searchable filters, and inline tracking actions.
-- Admin-facing UI links are hidden unless the logged-in user is staff/admin.
-- Production deployment runs through Render, Neon/PostgreSQL, Gunicorn, WhiteNoise, and Cloudflare DNS.
-
 ## Timeline
+
+### 2026-07-15
+
+- Expanded reading tracking to cover runs, issues, collected volumes, and one-shots across Browse, detail pages, and My Comics.
+- Added `OneShotProgress` support and one-shot status controls.
+- Added collected-volume and one-shot filters to My Comics.
+- Removed the My Comics status filter from the main comic filter workflow.
+- Added one shared filter template for Browse and My Comics.
+- Standardized the shared filters around publisher, run, issue, collected volume, and one-shot selections.
+- Added section visibility switches for runs, issues, collected volumes, and one-shots.
+- Added a hide/show switch for the complete filter panel.
+- Stored filter-panel visibility per page in browser local storage.
+- Consolidated Browse and My Comics dropdown search, dropdown pagination, section toggling, row loading, empty states, clickable rows, and common tracking helpers in `static/js/comic-lists.js`.
+- Kept Browse follow-modal behavior in `static/js/catalog/browse.js`.
+- Kept My Comics status and unfollow behavior in `static/js/reading/my-comics.js`.
+- Added local incremental table display to run, issue, collected-volume, and one-shot detail pages through `static/js/catalog/detail-lists.js`.
+- Set shared listing page sizes to ten initial rows, ten rows per remote load, and ten options per dropdown page.
+- Added independent scrolling for each run group inside collected-volume detail pages.
+- Reduced `static/js/base.js` to the global filter-panel visibility control.
+- Split Browse routing and query work into `catalog/browse_views.py`.
+- Added `catalog/listing.py` for shared listing limits, filter context, option queries, option serialization, and pagination helpers.
+- Added `catalog/presentation.py` for catalog row serialization, credit-display decoration, and tracking decoration.
+- Limited `catalog/views.py` to home and comic detail behavior.
+- Split My Comics routing and query work into `reading/my_comics_views.py`.
+- Added `reading/presentation.py` for My Comics row and status serialization.
+- Added `reading/constants.py` for the shared unfollow sentinel.
+- Limited `reading/views.py` to tracking actions, status propagation, completion offers, and tracking responses.
+- Removed inactive Browse and My Comics implementations from the original view modules.
+- Removed duplicate frontend list implementations from Browse, My Comics, detail pages, and the global script.
+- Removed catalog/My Comics counter and tracking-summary boxes that did not drive the primary workflow.
+- Reduced unnecessary tracking-related database reads tied to removed summary UI.
+- Added volume credit aggregation from direct volume credits, explicitly linked issue credits, and linked-run issue credits when explicit issue links are unavailable.
+- Deduplicated volume credits by role/person pair and sorted them through the standard credit display order.
 
 ### 2026-07-14
 
@@ -217,8 +232,8 @@ Current project areas:
 - Added issue status save/remove actions.
 - Added volume status save/remove actions.
 - Added tracking controls to run, issue, and volume detail pages.
-- Saving issue or volume progress now follows the parent run.
-- Marking a volume Read now marks linked issues in that volume Read for the same user.
+- Saving issue or volume progress follows the parent run.
+- Marking a volume Read marks linked issues in that volume Read for the same user.
 - Added admin support for reading-tracking models.
 
 ### 2026-07-03
@@ -290,15 +305,3 @@ Current project areas:
 - Chose Django as the web framework.
 - Chose PostgreSQL/Neon as the main database.
 - Deferred reading-order algorithms, recommendation logic, character models, event models, and story-arc models until the core catalog and tracking experience are stable.
-
-## Next Major Goals
-
-- Keep production deployment stable through Render, Neon, and Cloudflare.
-- Continue testing official Marvel release and collection ingestion across wider ranges.
-- Continue testing official DC browse/detail ingestion across wider page ranges.
-- Keep fast ingestion commands focused on seed-only passes and existing-source skips.
-- Use deep ingestion commands for discovery and relationship repair.
-- Keep run status maintenance in the dedicated run date/status command.
-- Keep collected-volume issue links conservative unless issues can be safely resolved.
-- Continue verifying reading tracking from Browse, Detail pages, and My Comics.
-- Continue polishing catalog data as real Marvel and DC ranges are backfilled.

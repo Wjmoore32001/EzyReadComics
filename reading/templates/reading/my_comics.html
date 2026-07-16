@@ -25,445 +25,21 @@
         </div>
     </section>
 
-    <section class="card erc-panel">
-        <div class="card-body p-4">
-            <div class="erc-section-header">
-                <h2 class="h3 fw-bold mb-0 erc-section-title">Filters</h2>
-
-                {% if filters_active %}
-                    <a href="{% url 'reading:my_comics' %}" class="btn btn-outline-secondary">
-                        Clear filters
-                    </a>
-                {% endif %}
-            </div>
-
-            <div class="row g-3 align-items-end">
-                <div class="col-12 col-lg-6 col-xxl">
-                    <label class="form-label erc-muted" for="my-comics-publisher-search">Publisher</label>
-
-                    <div
-                        class="dropdown searchable-dropdown"
-                        data-my-comics-filter-dropdown
-                        data-options-kind="publisher"
-                        data-options-url="{% url 'reading:my_comics_options' %}"
-                        data-selected-id="{{ selected_publisher_id|default_if_none:'' }}"
-                        data-selected-status="{{ selected_status }}"
-                    >
-                        <button
-                            class="btn erc-filter-button dropdown-toggle text-start w-100"
-                            type="button"
-                            id="my-comics-publisher-dropdown"
-                            data-bs-toggle="dropdown"
-                            data-bs-auto-close="outside"
-                            aria-expanded="false"
-                        >
-                            {% if selected_publisher %}
-                                {{ selected_publisher.name }}
-                            {% else %}
-                                All publishers
-                            {% endif %}
-                        </button>
-
-                        <div class="dropdown-menu p-2" aria-labelledby="my-comics-publisher-dropdown">
-                            <input
-                                type="search"
-                                id="my-comics-publisher-search"
-                                class="form-control mb-2"
-                                placeholder="Search publishers..."
-                                autocomplete="off"
-                                data-dropdown-search
-                            >
-
-                            <a
-                                href="{{ all_publishers_url }}"
-                                class="dropdown-item rounded {% if not selected_publisher_id %}active{% endif %}"
-                                data-search-label="All publishers"
-                            >
-                                All publishers
-                            </a>
-
-                            <div class="dropdown-divider"></div>
-
-                            <div data-dropdown-options style="max-height: 18rem; overflow-y: auto;"></div>
-
-                            <p class="dropdown-item-text erc-muted mb-0 d-none" data-no-results>
-                                No matching publishers.
-                            </p>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="col-12 col-lg-6 col-xxl">
-                    <div class="form-check form-switch mb-2">
-                        <input
-                            class="form-check-input"
-                            type="checkbox"
-                            id="my-comics-toggle-runs"
-                            data-my-comics-section-toggle
-                            data-target-section="runs"
-                            checked
-                        >
-                        <label class="form-check-label erc-muted" for="my-comics-toggle-runs">
-                            Show runs
-                        </label>
-                    </div>
-
-                    <label class="form-label erc-muted" for="my-comics-run-search">Run</label>
-
-                    <div
-                        class="dropdown searchable-dropdown"
-                        data-my-comics-filter-dropdown
-                        data-options-kind="run"
-                        data-options-url="{% url 'reading:my_comics_options' %}"
-                        data-selected-id="{{ selected_run_id|default_if_none:'' }}"
-                        data-selected-status="{{ selected_status }}"
-                        data-filter-publisher-id="{{ selected_publisher_id|default_if_none:'' }}"
-                    >
-                        <button
-                            class="btn erc-filter-button dropdown-toggle text-start w-100"
-                            type="button"
-                            id="my-comics-run-dropdown"
-                            data-bs-toggle="dropdown"
-                            data-bs-auto-close="outside"
-                            aria-expanded="false"
-                        >
-                            {% if selected_run %}
-                                {% if selected_run.start_year %}{{ selected_run.start_year }} — {% endif %}{{ selected_run.title }}
-                            {% else %}
-                                All runs
-                            {% endif %}
-                        </button>
-
-                        <div class="dropdown-menu p-2" aria-labelledby="my-comics-run-dropdown">
-                            <input
-                                type="search"
-                                id="my-comics-run-search"
-                                class="form-control mb-2"
-                                placeholder="Search runs..."
-                                autocomplete="off"
-                                data-dropdown-search
-                            >
-
-                            <a
-                                href="{{ all_runs_url }}"
-                                class="dropdown-item rounded {% if not selected_run_id %}active{% endif %}"
-                                data-search-label="All runs"
-                            >
-                                All runs
-                            </a>
-
-                            <div class="dropdown-divider"></div>
-
-                            <div data-dropdown-options style="max-height: 22rem; overflow-y: auto;"></div>
-
-                            <p class="dropdown-item-text erc-muted mb-0 d-none" data-no-results>
-                                No matching runs.
-                            </p>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="col-12 col-lg-6 col-xxl">
-                    <div class="form-check form-switch mb-2">
-                        <input
-                            class="form-check-input"
-                            type="checkbox"
-                            id="my-comics-toggle-issues"
-                            data-my-comics-section-toggle
-                            data-target-section="issues"
-                            {% if selected_issue_id %}checked{% endif %}
-                        >
-                        <label class="form-check-label erc-muted" for="my-comics-toggle-issues">
-                            Show issues
-                        </label>
-                    </div>
-
-                    <label class="form-label erc-muted" for="my-comics-issue-search">Issues</label>
-
-                    <div
-                        class="dropdown searchable-dropdown"
-                        data-my-comics-filter-dropdown
-                        data-options-kind="issue"
-                        data-options-url="{% url 'reading:my_comics_options' %}"
-                        data-selected-id="{{ selected_issue_id|default_if_none:'' }}"
-                        data-selected-status="{{ selected_status }}"
-                        data-filter-publisher-id="{{ selected_publisher_id|default_if_none:'' }}"
-                        data-filter-run-id="{{ selected_run_id|default_if_none:'' }}"
-                    >
-                        <button
-                            class="btn erc-filter-button dropdown-toggle text-start w-100"
-                            type="button"
-                            id="my-comics-issue-dropdown"
-                            data-bs-toggle="dropdown"
-                            data-bs-auto-close="outside"
-                            aria-expanded="false"
-                        >
-                            {% if selected_issue %}
-                                {{ selected_issue.run.title }} #{{ selected_issue.issue_number }}
-                            {% elif selected_run %}
-                                All issues in this run
-                            {% else %}
-                                All issues
-                            {% endif %}
-                        </button>
-
-                        <div class="dropdown-menu p-2" aria-labelledby="my-comics-issue-dropdown">
-                            <input
-                                type="search"
-                                id="my-comics-issue-search"
-                                class="form-control mb-2"
-                                placeholder="Search issues..."
-                                autocomplete="off"
-                                data-dropdown-search
-                            >
-
-                            <a
-                                href="{{ all_issues_url }}"
-                                class="dropdown-item rounded {% if not selected_issue_id %}active{% endif %}"
-                                data-search-label="All issues"
-                            >
-                                {% if selected_run %}
-                                    All issues in this run
-                                {% else %}
-                                    All issues
-                                {% endif %}
-                            </a>
-
-                            <div class="dropdown-divider"></div>
-
-                            <div data-dropdown-options style="max-height: 22rem; overflow-y: auto;"></div>
-
-                            <p class="dropdown-item-text erc-muted mb-0 d-none" data-no-results>
-                                No matching issues.
-                            </p>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="col-12 col-lg-6 col-xxl">
-                    <div class="form-check form-switch mb-2">
-                        <input
-                            class="form-check-input"
-                            type="checkbox"
-                            id="my-comics-toggle-volumes"
-                            data-my-comics-section-toggle
-                            data-target-section="volumes"
-                        >
-                        <label class="form-check-label erc-muted" for="my-comics-toggle-volumes">
-                            Show volumes
-                        </label>
-                    </div>
-
-                    <label class="form-label erc-muted" for="my-comics-status-search">Status</label>
-
-                    <div
-                        class="dropdown searchable-dropdown"
-                        data-my-comics-filter-dropdown
-                        data-options-kind="status"
-                        data-options-url="{% url 'reading:my_comics_options' %}"
-                        data-selected-status="{{ selected_status }}"
-                        data-filter-publisher-id="{{ selected_publisher_id|default_if_none:'' }}"
-                        data-filter-run-id="{{ selected_run_id|default_if_none:'' }}"
-                        data-filter-issue-id="{{ selected_issue_id|default_if_none:'' }}"
-                        data-filter-one-shot-id="{{ selected_one_shot_id|default_if_none:'' }}"
-                    >
-                        <button
-                            class="btn erc-filter-button dropdown-toggle text-start w-100"
-                            type="button"
-                            id="my-comics-status-dropdown"
-                            data-bs-toggle="dropdown"
-                            data-bs-auto-close="outside"
-                            aria-expanded="false"
-                        >
-                            {% if selected_status %}
-                                {% for value, label in status_filter_choices %}
-                                    {% if selected_status == value %}{{ label }}{% endif %}
-                                {% endfor %}
-                            {% else %}
-                                All statuses
-                            {% endif %}
-                        </button>
-
-                        <div class="dropdown-menu p-2" aria-labelledby="my-comics-status-dropdown">
-                            <input
-                                type="search"
-                                id="my-comics-status-search"
-                                class="form-control mb-2"
-                                placeholder="Search statuses..."
-                                autocomplete="off"
-                                data-dropdown-search
-                            >
-
-                            <a
-                                href="{{ all_statuses_url }}"
-                                class="dropdown-item rounded {% if not selected_status %}active{% endif %}"
-                                data-search-label="All statuses"
-                            >
-                                All statuses
-                            </a>
-
-                            <div class="dropdown-divider"></div>
-
-                            <div data-dropdown-options style="max-height: 18rem; overflow-y: auto;"></div>
-
-                            <p class="dropdown-item-text erc-muted mb-0 d-none" data-no-results>
-                                No matching statuses.
-                            </p>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="col-12 col-lg-6 col-xxl">
-                    <div class="form-check form-switch mb-2">
-                        <input
-                            class="form-check-input"
-                            type="checkbox"
-                            id="my-comics-toggle-one-shots"
-                            data-my-comics-section-toggle
-                            data-target-section="one_shots"
-                            {% if selected_one_shot_id %}checked{% endif %}
-                        >
-                        <label class="form-check-label erc-muted" for="my-comics-toggle-one-shots">
-                            Show one-shots
-                        </label>
-                    </div>
-
-                    <label class="form-label erc-muted" for="my-comics-one-shot-search">One-shot</label>
-
-                    <div
-                        class="dropdown searchable-dropdown"
-                        data-my-comics-filter-dropdown
-                        data-options-kind="one_shot"
-                        data-options-url="{% url 'reading:my_comics_options' %}"
-                        data-selected-id="{{ selected_one_shot_id|default_if_none:'' }}"
-                        data-selected-status="{{ selected_status }}"
-                        data-filter-publisher-id="{{ selected_publisher_id|default_if_none:'' }}"
-                    >
-                        <button
-                            class="btn erc-filter-button dropdown-toggle text-start w-100"
-                            type="button"
-                            id="my-comics-one-shot-dropdown"
-                            data-bs-toggle="dropdown"
-                            data-bs-auto-close="outside"
-                            aria-expanded="false"
-                        >
-                            {% if selected_one_shot %}
-                                {{ selected_one_shot.title }}
-                            {% elif selected_publisher %}
-                                All {{ selected_publisher.name }} one-shots
-                            {% else %}
-                                All one-shots
-                            {% endif %}
-                        </button>
-
-                        <div class="dropdown-menu p-2" aria-labelledby="my-comics-one-shot-dropdown">
-                            <input
-                                type="search"
-                                id="my-comics-one-shot-search"
-                                class="form-control mb-2"
-                                placeholder="Search one-shots..."
-                                autocomplete="off"
-                                data-dropdown-search
-                            >
-
-                            <a
-                                href="{{ all_one_shots_url }}"
-                                class="dropdown-item rounded {% if not selected_one_shot_id %}active{% endif %}"
-                                data-search-label="All one-shots"
-                            >
-                                {% if selected_publisher %}
-                                    All {{ selected_publisher.name }} one-shots
-                                {% else %}
-                                    All one-shots
-                                {% endif %}
-                            </a>
-
-                            <div class="dropdown-divider"></div>
-
-                            <div data-dropdown-options style="max-height: 22rem; overflow-y: auto;"></div>
-
-                            <p class="dropdown-item-text erc-muted mb-0 d-none" data-no-results>
-                                No matching one-shots.
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            {% if filters_active %}
-                <div class="d-flex flex-wrap gap-2 mt-4">
-                    {% if selected_run_id %}
-                        <a href="{{ clear_run_url }}" class="btn btn-sm btn-outline-secondary">Clear run</a>
-                    {% endif %}
-
-                    {% if selected_issue_id %}
-                        <a href="{{ clear_issue_url }}" class="btn btn-sm btn-outline-secondary">Clear issue</a>
-                    {% endif %}
-
-                    {% if selected_one_shot_id %}
-                        <a href="{{ clear_one_shot_url }}" class="btn btn-sm btn-outline-secondary">Clear one-shot</a>
-                    {% endif %}
-
-                    {% if selected_status %}
-                        <a href="{{ clear_status_url }}" class="btn btn-sm btn-outline-secondary">Clear status</a>
-                    {% endif %}
-
-                    {% if selected_publisher %}
-                        <span class="erc-filter-chip">
-                            <span class="erc-filter-chip-label">Publisher</span>
-                            {{ selected_publisher.name }}
-                        </span>
-                    {% endif %}
-
-                    {% if selected_run %}
-                        <span class="erc-filter-chip">
-                            <span class="erc-filter-chip-label">Run</span>
-                            {{ selected_run }}
-                        </span>
-                    {% endif %}
-
-                    {% if selected_issue %}
-                        <span class="erc-filter-chip">
-                            <span class="erc-filter-chip-label">Issue</span>
-                            {{ selected_issue.run.title }} #{{ selected_issue.issue_number }}
-                        </span>
-                    {% endif %}
-
-                    {% if selected_one_shot %}
-                        <span class="erc-filter-chip">
-                            <span class="erc-filter-chip-label">One-shot</span>
-                            {{ selected_one_shot.title }}
-                        </span>
-                    {% endif %}
-
-                    {% if selected_status %}
-                        {% for value, label in status_filter_choices %}
-                            {% if selected_status == value %}
-                                <span class="erc-filter-chip">
-                                    <span class="erc-filter-chip-label">Status</span>
-                                    {{ label }}
-                                </span>
-                            {% endif %}
-                        {% endfor %}
-                    {% endif %}
-                </div>
-            {% endif %}
-        </div>
-    </section>
+    {% include "catalog/partials/comic_filters.html" %}
 
     <section
         class="card erc-panel erc-data-card"
-        data-my-comics-section="runs"
-        data-my-comics-section-loaded="1"
+        data-comic-section="runs"
+        data-section-loaded="1"
         data-kind="runs"
-        data-items-url="{% url 'reading:my_comics_items' %}"
+        data-items-url="{{ listing_items_url }}"
         data-offset="{{ followed_runs|length }}"
         data-has-more="{% if has_more_runs %}1{% else %}0{% endif %}"
         data-filter-publisher-id="{{ selected_publisher_id|default_if_none:'' }}"
         data-filter-run-id="{{ selected_run_id|default_if_none:'' }}"
         data-filter-issue-id="{{ selected_issue_id|default_if_none:'' }}"
+        data-filter-volume-id="{{ selected_volume_id|default_if_none:'' }}"
         data-filter-one-shot-id="{{ selected_one_shot_id|default_if_none:'' }}"
-        data-filter-status="{{ selected_status }}"
         data-empty-message="{% if filters_active %}No followed runs match these filters.{% else %}You are not following any runs yet.{% endif %}"
     >
         <div class="card-body">
@@ -472,7 +48,7 @@
                 <p class="erc-muted mb-0" data-loaded-count>Showing {{ followed_runs|length }} loaded</p>
             </div>
 
-            <div class="table-responsive erc-section-scroll" data-my-comics-section-scroll style="max-height: 32rem; overflow: auto;">
+            <div class="table-responsive erc-section-scroll" data-comic-section-scroll style="max-height: 32rem; overflow: auto;">
                 <table class="table table-dark table-hover align-middle mb-0 erc-data-table">
                     <thead>
                     <tr>
@@ -482,7 +58,7 @@
                         <th scope="col">Issues</th>
                     </tr>
                     </thead>
-                    <tbody data-my-comics-load-target>
+                    <tbody data-comic-load-target>
                     {% for followed_run in followed_runs %}
                         <tr class="clickable-row" data-row-url="{% url 'catalog:run_details' followed_run.run.id %}" tabindex="0" aria-label="Open run details for {{ followed_run.run }}">
                             <td class="fw-semibold">
@@ -539,20 +115,20 @@
     </section>
 
     <section
-        class="card erc-panel erc-data-card d-none"
-        data-my-comics-section="volumes"
-        data-my-comics-section-loaded="{% if volumes_initially_loaded %}1{% else %}0{% endif %}"
+        class="card erc-panel erc-data-card {% if not selected_volume_id %}d-none{% endif %}"
+        data-comic-section="volumes"
+        data-section-loaded="{% if volumes_initially_loaded %}1{% else %}0{% endif %}"
         data-kind="volumes"
-        data-items-url="{% url 'reading:my_comics_items' %}"
+        data-items-url="{{ listing_items_url }}"
         data-offset="{{ volume_progress|length }}"
         data-has-more="{% if has_more_volumes %}1{% else %}0{% endif %}"
         data-filter-publisher-id="{{ selected_publisher_id|default_if_none:'' }}"
         data-filter-run-id="{{ selected_run_id|default_if_none:'' }}"
         data-filter-issue-id="{{ selected_issue_id|default_if_none:'' }}"
+        data-filter-volume-id="{{ selected_volume_id|default_if_none:'' }}"
         data-filter-one-shot-id="{{ selected_one_shot_id|default_if_none:'' }}"
-        data-filter-status="{{ selected_status }}"
         data-empty-message="{% if filters_active %}No followed volumes match these filters.{% else %}You are not following any volumes yet.{% endif %}"
-        hidden
+        {% if not selected_volume_id %}hidden{% endif %}
     >
         <div class="card-body">
             <div class="erc-section-header">
@@ -560,7 +136,7 @@
                 <p class="erc-muted mb-0" data-loaded-count>Showing {{ volume_progress|length }} loaded</p>
             </div>
 
-            <div class="table-responsive erc-section-scroll" data-my-comics-section-scroll style="max-height: 32rem; overflow: auto;">
+            <div class="table-responsive erc-section-scroll" data-comic-section-scroll style="max-height: 32rem; overflow: auto;">
                 <table class="table table-dark table-hover align-middle mb-0 erc-data-table">
                     <thead>
                     <tr>
@@ -570,7 +146,7 @@
                         <th scope="col" class="text-end">Status</th>
                     </tr>
                     </thead>
-                    <tbody data-my-comics-load-target>
+                    <tbody data-comic-load-target>
                     {% for progress in volume_progress %}
                         <tr class="clickable-row" data-row-url="{% url 'catalog:volume_details' progress.volume.id %}" tabindex="0" aria-label="Open volume details for {{ progress.volume }}">
                             <td class="fw-semibold">
@@ -599,6 +175,14 @@
                                 </form>
                             </td>
                         </tr>
+                    {% empty %}
+                        {% if volumes_initially_loaded %}
+                            <tr data-empty-row>
+                                <td colspan="4" class="text-center erc-muted py-4">
+                                    No followed volumes match these filters.
+                                </td>
+                            </tr>
+                        {% endif %}
                     {% endfor %}
                     </tbody>
                 </table>
@@ -608,17 +192,17 @@
 
     <section
         class="card erc-panel erc-data-card {% if not selected_issue_id %}d-none{% endif %}"
-        data-my-comics-section="issues"
-        data-my-comics-section-loaded="{% if issues_initially_loaded %}1{% else %}0{% endif %}"
+        data-comic-section="issues"
+        data-section-loaded="{% if issues_initially_loaded %}1{% else %}0{% endif %}"
         data-kind="issues"
-        data-items-url="{% url 'reading:my_comics_items' %}"
+        data-items-url="{{ listing_items_url }}"
         data-offset="{{ issue_progress|length }}"
         data-has-more="{% if has_more_issues %}1{% else %}0{% endif %}"
         data-filter-publisher-id="{{ selected_publisher_id|default_if_none:'' }}"
         data-filter-run-id="{{ selected_run_id|default_if_none:'' }}"
         data-filter-issue-id="{{ selected_issue_id|default_if_none:'' }}"
+        data-filter-volume-id="{{ selected_volume_id|default_if_none:'' }}"
         data-filter-one-shot-id="{{ selected_one_shot_id|default_if_none:'' }}"
-        data-filter-status="{{ selected_status }}"
         data-empty-message="{% if filters_active %}No followed issues match these filters.{% else %}You do not have any issue progress yet.{% endif %}"
         {% if not selected_issue_id %}hidden{% endif %}
     >
@@ -628,7 +212,7 @@
                 <p class="erc-muted mb-0" data-loaded-count>Showing {{ issue_progress|length }} loaded</p>
             </div>
 
-            <div class="table-responsive erc-section-scroll" data-my-comics-section-scroll style="max-height: 32rem; overflow: auto;">
+            <div class="table-responsive erc-section-scroll" data-comic-section-scroll style="max-height: 32rem; overflow: auto;">
                 <table class="table table-dark table-hover align-middle mb-0 erc-data-table">
                     <thead>
                     <tr>
@@ -638,11 +222,15 @@
                         <th scope="col" class="text-end">Status</th>
                     </tr>
                     </thead>
-                    <tbody data-my-comics-load-target>
+                    <tbody data-comic-load-target>
                     {% for progress in issue_progress %}
                         <tr class="clickable-row" data-row-url="{% url 'catalog:issue_details' progress.issue.id %}" tabindex="0" aria-label="Open issue details for {{ progress.issue }}">
-                            <td class="fw-semibold"><a href="{% url 'catalog:issue_details' progress.issue.id %}" class="erc-data-link">#{{ progress.issue.issue_number }}</a></td>
-                            <td><a href="{% url 'catalog:run_details' progress.issue.run.id %}" class="erc-data-link">{{ progress.issue.run }}</a></td>
+                            <td class="fw-semibold">
+                                <a href="{% url 'catalog:issue_details' progress.issue.id %}" class="erc-data-link">#{{ progress.issue.issue_number }}</a>
+                            </td>
+                            <td>
+                                <a href="{% url 'catalog:run_details' progress.issue.run.id %}" class="erc-data-link">{{ progress.issue.run }}</a>
+                            </td>
                             <td>
                                 {% if progress.issue.published_date %}
                                     {{ progress.issue.published_date|date:"Y-m-d" }}
@@ -663,6 +251,14 @@
                                 </form>
                             </td>
                         </tr>
+                    {% empty %}
+                        {% if issues_initially_loaded %}
+                            <tr data-empty-row>
+                                <td colspan="4" class="text-center erc-muted py-4">
+                                    No followed issues match these filters.
+                                </td>
+                            </tr>
+                        {% endif %}
                     {% endfor %}
                     </tbody>
                 </table>
@@ -672,17 +268,17 @@
 
     <section
         class="card erc-panel erc-data-card {% if not selected_one_shot_id %}d-none{% endif %}"
-        data-my-comics-section="one_shots"
-        data-my-comics-section-loaded="{% if one_shots_initially_loaded %}1{% else %}0{% endif %}"
+        data-comic-section="one_shots"
+        data-section-loaded="{% if one_shots_initially_loaded %}1{% else %}0{% endif %}"
         data-kind="one_shots"
-        data-items-url="{% url 'reading:my_comics_items' %}"
+        data-items-url="{{ listing_items_url }}"
         data-offset="{{ one_shot_progress|length }}"
         data-has-more="{% if has_more_one_shots %}1{% else %}0{% endif %}"
         data-filter-publisher-id="{{ selected_publisher_id|default_if_none:'' }}"
         data-filter-run-id="{{ selected_run_id|default_if_none:'' }}"
         data-filter-issue-id="{{ selected_issue_id|default_if_none:'' }}"
+        data-filter-volume-id="{{ selected_volume_id|default_if_none:'' }}"
         data-filter-one-shot-id="{{ selected_one_shot_id|default_if_none:'' }}"
-        data-filter-status="{{ selected_status }}"
         data-empty-message="{% if filters_active %}No followed one-shots match these filters.{% else %}You are not following any one-shots yet.{% endif %}"
         {% if not selected_one_shot_id %}hidden{% endif %}
     >
@@ -692,7 +288,7 @@
                 <p class="erc-muted mb-0" data-loaded-count>Showing {{ one_shot_progress|length }} loaded</p>
             </div>
 
-            <div class="table-responsive erc-section-scroll" data-my-comics-section-scroll style="max-height: 32rem; overflow: auto;">
+            <div class="table-responsive erc-section-scroll" data-comic-section-scroll style="max-height: 32rem; overflow: auto;">
                 <table class="table table-dark table-hover align-middle mb-0 erc-data-table">
                     <thead>
                     <tr>
@@ -702,10 +298,12 @@
                         <th scope="col" class="text-end">Status</th>
                     </tr>
                     </thead>
-                    <tbody data-my-comics-load-target>
+                    <tbody data-comic-load-target>
                     {% for progress in one_shot_progress %}
                         <tr class="clickable-row" data-row-url="{% url 'catalog:one_shot_details' progress.one_shot.id %}" tabindex="0" aria-label="Open one-shot details for {{ progress.one_shot.title }}">
-                            <td class="fw-semibold"><a href="{% url 'catalog:one_shot_details' progress.one_shot.id %}" class="erc-data-link">{{ progress.one_shot.title }}</a></td>
+                            <td class="fw-semibold">
+                                <a href="{% url 'catalog:one_shot_details' progress.one_shot.id %}" class="erc-data-link">{{ progress.one_shot.title }}</a>
+                            </td>
                             <td>{{ progress.one_shot.publisher.name }}</td>
                             <td>
                                 {% if progress.one_shot.published_date %}
@@ -729,6 +327,14 @@
                                 </form>
                             </td>
                         </tr>
+                    {% empty %}
+                        {% if one_shots_initially_loaded %}
+                            <tr data-empty-row>
+                                <td colspan="4" class="text-center erc-muted py-4">
+                                    No followed one-shots match these filters.
+                                </td>
+                            </tr>
+                        {% endif %}
                     {% endfor %}
                     </tbody>
                 </table>
@@ -739,5 +345,6 @@
 {% endblock %}
 
 {% block extra_scripts %}
-<script src="{% static 'js/reading/my-comics.js' %}?v=section-scroll-20260715"></script>
+<script src="{% static 'js/comic-lists.js' %}?v=shared-listing-20260715"></script>
+<script src="{% static 'js/reading/my-comics.js' %}?v=shared-listing-20260715"></script>
 {% endblock %}
