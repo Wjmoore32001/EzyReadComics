@@ -4,7 +4,7 @@
 {% block title %}Current Reading Era - EzyReadComics{% endblock %}
 
 {% block extra_styles %}
-<link rel="stylesheet" href="{% static 'css/catalog/current-reading-era.css' %}?v=current-era-filters-20260716" />
+<link rel="stylesheet" href="{% static 'css/catalog/current-reading-era.css' %}?v=current-era-publisher-filters-20260716" />
 {% endblock %}
 
 {% block content %}
@@ -53,25 +53,28 @@
                     </select>
                 </div>
 
-                {% if show_non_marvel_universe_filter %}
+                {% if optional_run_filter %}
                     <div class="erc-current-era-filter-toggle">
                         <div class="form-check form-switch">
                             <input
-                                id="show-non-marvel-universe"
-                                name="show_non_marvel_universe"
+                                id="{{ optional_run_filter.html_id }}"
+                                name="{{ optional_run_filter.parameter }}"
                                 value="1"
                                 type="checkbox"
                                 class="form-check-input"
-                                {% if show_non_marvel_universe_titles %}checked{% endif %}
+                                {% if optional_run_filter.checked %}checked{% endif %}
                             >
-                            <label for="show-non-marvel-universe" class="form-check-label">
-                                {{ non_marvel_universe_filter_label }}
+                            <label
+                                for="{{ optional_run_filter.html_id }}"
+                                class="form-check-label"
+                            >
+                                {{ optional_run_filter.label }}
                             </label>
                         </div>
 
-                        {% if non_marvel_universe_filter_help %}
+                        {% if optional_run_filter.help %}
                             <p class="erc-current-era-filter-help mb-0">
-                                {{ non_marvel_universe_filter_help }}
+                                {{ optional_run_filter.help }}
                             </p>
                         {% endif %}
                     </div>

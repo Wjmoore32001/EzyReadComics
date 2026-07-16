@@ -14,9 +14,9 @@ PUBLISHER_NAME_ALIASES = {
 }
 SORT_ORDER = 0
 
-SUPPORTS_NON_MARVEL_UNIVERSE_FILTER = True
-NON_MARVEL_UNIVERSE_FILTER_LABEL = "Show non-Marvel-universe titles"
-NON_MARVEL_UNIVERSE_FILTER_HELP = (
+OPTIONAL_HIDDEN_RUN_FILTER_PARAMETER = "show_non_marvel_universe"
+OPTIONAL_HIDDEN_RUN_FILTER_LABEL = "Show non-Marvel-universe titles"
+OPTIONAL_HIDDEN_RUN_FILTER_HELP = (
     "Includes external franchise lines such as Star Wars, Alien, Predator, "
     "Godzilla, Planet of the Apes, and Ultraman."
 )
@@ -40,7 +40,7 @@ NON_MARVEL_UNIVERSE_TITLE_PREFIXES = (
 )
 
 
-def non_marvel_universe_run_query():
+def hidden_by_default_run_query():
     query = Q()
 
     for title_prefix in NON_MARVEL_UNIVERSE_TITLE_PREFIXES:

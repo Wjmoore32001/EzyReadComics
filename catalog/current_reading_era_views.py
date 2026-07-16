@@ -59,11 +59,7 @@ def current_reading_era(request):
     selected_publisher = None
     selected_start_year = None
     start_year_options = []
-
-    show_non_marvel_universe_filter = False
-    show_non_marvel_universe_titles = False
-    non_marvel_universe_filter_label = ""
-    non_marvel_universe_filter_help = ""
+    optional_run_filter = None
 
     timeline = {
         "rows": [],
@@ -76,37 +72,19 @@ def current_reading_era(request):
         selected_publisher = selected_option["publisher"]
         selected_handler = selected_option["handler"]
 
-        show_non_marvel_universe_filter = getattr(
-            selected_handler,
-            "SUPPORTS_NON_MARVEL_UNIVERSE_FILTER",
-            False,
-        )
-        show_non_marvel_universe_titles = (
-            show_non_marvel_universe_filter
-            and request.GET.get("show_non_marvel_universe") == "1"
-        )
-        non_marvel_universe_filter_label = getattr(
-            selected_handler,
-            "NON_MARVEL_UNIVERSE_FILTER_LABEL",
-            "",
-        )
-        non_marvel_universe_filter_help = getattr(
-            selected_handler,
-            "NON_MARVEL_UNIVERSE_FILTER_HELP",
-            "",
-        )
-
         visible_runs_queryset = ComicRun.objects.filter(
             publisher=selected_publisher,
             current_reading_era_entries__isnull=False,
         )
 
-        if (
-            show_non_marvel_universe_filter
-            and not show_non_marvel_universe_titles
-        ):
+        optional_run_filter = build_optional_run_filter(
+            request,
+            selected_handler,
+        )
+
+        if optional_run_filter and not optional_run_filter["checked"]:
             visible_runs_queryset = visible_runs_queryset.exclude(
-                selected_handler.non_marvel_universe_run_query()
+                selected_handler.hidden_by_default_run_query()
             )
 
         start_year_options = build_start_year_options(visible_runs_queryset)
@@ -157,14 +135,44 @@ def current_reading_era(request):
         "selected_publisher": selected_publisher,
         "selected_start_year": selected_start_year,
         "start_year_options": start_year_options,
-        "show_non_marvel_universe_filter": show_non_marvel_universe_filter,
-        "show_non_marvel_universe_titles": show_non_marvel_universe_titles,
-        "non_marvel_universe_filter_label": non_marvel_universe_filter_label,
-        "non_marvel_universe_filter_help": non_marvel_universe_filter_help,
+        "optional_run_filter": optional_run_filter,
         "timeline": timeline,
     }
 
     return render(request, "catalog/current_reading_era.html", context)
+
+
+def build_optional_run_filter(request, handler):
+    parameter = getattr(
+        handler,
+        "OPTIONAL_HIDDEN_RUN_FILTER_PARAMETER",
+        "",
+    )
+    label = getattr(
+        handler,
+        "OPTIONAL_HIDDEN_RUN_FILTER_LABEL",
+        "",
+    )
+    query_builder = getattr(
+        handler,
+        "hidden_by_default_run_query",
+        None,
+    )
+
+    if not parameter or not label or not callable(query_builder):
+        return None
+
+    return {
+        "parameter": parameter,
+        "html_id": parameter.replace("_", "-"),
+        "label": label,
+        "help": getattr(
+            handler,
+            "OPTIONAL_HIDDEN_RUN_FILTER_HELP",
+            "",
+        ),
+        "checked": request.GET.get(parameter) == "1",
+    }
 
 
 def build_start_year_options(run_queryset):
